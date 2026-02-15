@@ -195,32 +195,32 @@
 
         .input-with-icon {
             position: relative;
-            display: flex;
-            align-items: center;
         }
 
         .input-icon {
             position: absolute;
-            right: 14px;
-            width: 22px;
-            height: 22px;
-            color: var(--text-secondary);
+            top: 50%;
+            right: 16px;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: #9ca3af;
             pointer-events: none;
             transition: color 0.2s;
         }
 
         [dir="ltr"] .input-icon {
             right: auto;
-            left: 14px;
+            left: 16px;
         }
 
         .input-with-icon .form-input {
-            padding-right: 46px;
+            padding-right: 48px;
         }
 
         [dir="ltr"] .input-with-icon .form-input {
             padding-right: 16px;
-            padding-left: 46px;
+            padding-left: 48px;
         }
 
         .input-with-icon:focus-within .input-icon {
