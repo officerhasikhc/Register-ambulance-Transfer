@@ -1294,14 +1294,46 @@
         async function loadPendingTrip() {
             if (!selectedDriver) return;
 
-            // Single fetch that updates both pending trip and trip history
-            await DataCache.fetchWithCache(
+            // === INSTANT LOCAL LOAD FIRST ===
+            // Load from localStorage immediately (no waiting)
+            const pendingKey = `pending_trip_${selectedDriver.staffNumber}`;
+            const historyKey = `trip_history_${selectedDriver.staffNumber}`;
+            
+            // Check for locally saved pending trip
+            const localPending = localStorage.getItem(pendingKey);
+            if (localPending) {
+                try {
+                    pendingTrip = JSON.parse(localPending);
+                    // Show pending trip card immediately
+                    const pendingDiv = document.getElementById('pendingTrip');
+                    if (pendingDiv && pendingTrip.departureDate) {
+                        pendingDiv.style.display = 'block';
+                        document.getElementById('pendingDate').textContent = pendingTrip.departureDate;
+                        document.getElementById('pendingTime').textContent = pendingTrip.departureTime || '';
+                    }
+                    updateButtons();
+                } catch (e) {}
+            }
+            
+            // Load local history immediately
+            const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
+            if (localHistory.length > 0) {
+                allDriverHistory = localHistory;
+                renderDriverHistoryPage();
+            }
+
+            // === BACKGROUND SERVER SYNC (non-blocking) ===
+            // Fetch from server to sync/update - don't wait for it
+            DataCache.fetchWithCache(
                 `${WEB_APP_URL}?action=getPendingTrips`,
                 DataCache.KEYS.PENDING_TRIPS,
                 DataCache.EXPIRY.PENDING_TRIPS,
                 (trips) => {
-                    processPendingTripsData(trips);
-                    renderTripHistoryFromData(trips);
+                    // Only update if not currently submitting
+                    if (!isSubmittingDeparture && !isSubmittingReturn) {
+                        processPendingTripsData(trips);
+                        renderTripHistoryFromData(trips);
+                    }
                 },
                 (result) => (result.success && Array.isArray(result.trips)) ? result.trips : null
             );
@@ -1449,14 +1481,12 @@
             // Debounce check - prevent rapid clicks
             const clickTime = Date.now();
             if (clickTime - lastDepartureClick < DEBOUNCE_MS) {
-                console.log('⚠️ Debounce: Ignoring rapid click on departure button');
                 return;
             }
             lastDepartureClick = clickTime;
 
             // Prevent duplicate submissions
             if (isSubmittingDeparture) {
-                console.log('⚠️ Departure already in progress, ignoring duplicate click');
                 return;
             }
 
@@ -1560,21 +1590,10 @@
                 queueOfflineData(tripData);
             }
 
-            // Wait for DOM to actually paint the trip list with 'قيد التنفيذ'
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            // === INSTANT UI UPDATE - NO DELAYS ===
             
-            // Extra delay so user clearly sees the transition and the "قيد التنفيذ" status
-            await new Promise(r => setTimeout(r, 1200));
-
-            // Show official success toast
-            showOfficialToast('تم تسجيل رحلة الذهاب', 'يرجى تسجيل العودة عند الوصول');
-
-            // Wait a bit for user to see the toast
-            await new Promise(r => setTimeout(r, 800));
-
-            // Done processing - switch to registered state
+            // Done processing - switch to registered state IMMEDIATELY
             btn.classList.remove('btn-processing');
-            btn.classList.remove('btn-locked');
             actionButtons.classList.remove('processing');
             
             // Update button to show registered state
@@ -1593,8 +1612,13 @@
             document.getElementById('departureHint').style.display = 'none';
             document.getElementById('returnHint').style.display = 'block';
             
-            // Clear flag AFTER all UI updates
+            // Clear flag IMMEDIATELY
             isSubmittingDeparture = false;
+            
+            // Show success toast (non-blocking, appears after UI is ready)
+            requestAnimationFrame(() => {
+                showOfficialToast('تم تسجيل رحلة الذهاب', 'يرجى تسجيل العودة عند الوصول');
+            });
         }
 
         async function recordReturn() {
@@ -1612,14 +1636,12 @@
             // Debounce check - prevent rapid clicks
             const clickTime = Date.now();
             if (clickTime - lastReturnClick < DEBOUNCE_MS) {
-                console.log('⚠️ Debounce: Ignoring rapid click on return button');
                 return;
             }
             lastReturnClick = clickTime;
 
             // Prevent duplicate submissions
             if (isSubmittingReturn) {
-                console.log('⚠️ Return already in progress, ignoring duplicate click');
                 return;
             }
 
@@ -1726,33 +1748,21 @@
                 queueOfflineData(returnData);
             }
 
-            // === STEP 6: UPDATE BUTTON TO "DONE" STATE ===
+            // === INSTANT UI UPDATE - NO DELAYS ===
+            
+            // Clear pending trip IMMEDIATELY
+            pendingTrip = null;
+            
+            // Remove processing class from container
+            actionButtons.classList.remove('processing');
+            
+            // Update return button to show done state briefly
             btn.classList.remove('btn-processing');
             btn.classList.remove('btn-locked');
             btn.classList.add('btn-registered');
             btn.innerHTML = '<span>✓ تم تسجيل العودة</span>';
-
-            // === STEP 7: SHOW SUCCESS TOAST ===
-            showOfficialToast('تم الحفظ بنجاح', 'الرحلة مكتملة وجاهزة للاعتماد');
-
-            // Keep "done" visible while toast is showing
-            await new Promise(r => setTimeout(r, 2000));
-
-            // === STEP 8: CLEAR PENDING TRIP AND RESET BUTTONS ===
-            pendingTrip = null;
-
-            // Remove processing class from container
-            actionButtons.classList.remove('processing');
             
-            // Reset return button
-            btn.classList.remove('btn-registered');
-            btn.classList.remove('btn-locked');
-            btn.innerHTML = '<span>← تسجيل وقت العودة</span>';
-            btn.disabled = true;
-            btn.classList.remove('pulse-attention');
-            btn.style.pointerEvents = '';
-            
-            // Reset departure button for new trip
+            // Reset departure button for new trip IMMEDIATELY
             unlockButton(btnDep);
             btnDep.classList.remove('btn-registered');
             btnDep.classList.remove('btn-locked');
@@ -1765,8 +1775,22 @@
             document.getElementById('departureHint').style.display = 'block';
             document.getElementById('returnHint').style.display = 'none';
             
-            // Clear flag AFTER all UI updates
+            // Clear flag IMMEDIATELY
             isSubmittingReturn = false;
+            
+            // Show success toast (non-blocking)
+            requestAnimationFrame(() => {
+                showOfficialToast('تم الحفظ بنجاح', 'الرحلة مكتملة وجاهزة للاعتماد');
+            });
+            
+            // Reset return button after a short visual feedback
+            setTimeout(() => {
+                btn.classList.remove('btn-registered');
+                btn.innerHTML = '<span>← تسجيل وقت العودة</span>';
+                btn.disabled = true;
+                btn.classList.remove('pulse-attention');
+                btn.style.pointerEvents = '';
+            }, 1500);
         }
         
         // Update the pending trip for nurse with return data
