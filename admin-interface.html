@@ -12,6 +12,7 @@
     <script src="data-cache.js"></script>
     
     <script src="session-manager.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
     <link rel="stylesheet" href="responsive-ui.css">
@@ -1865,6 +1866,7 @@
                             </select>
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
+                            <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
                         </div>
                     </div>
 
@@ -1959,6 +1961,9 @@
         // CONFIGURATION - UPDATE THIS URL
         // ============================================
         const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+        /** مسار ملف PDF القالب (كشف حركة الإسعاف). ضع الملف في مجلد assets وسمّ الحقول كما في PDF-FIELD-NAMES.md */
+        const PDF_TEMPLATE_URL = 'assets/ambulance-form-template.pdf';
+        const PDF_CENTER_NAME = 'مركز حاسك الصحي';
         
         // Start fetching data immediately (before DOM ready) for faster loading
         DataCache.preload(WEB_APP_URL, 'admin');
@@ -2448,6 +2453,84 @@
                 </html>
             `);
             printWindow.document.close();
+        }
+
+        /** تنسيق التاريخ للعرض في PDF (مثلاً من 2025-01-15 إلى 15/01/2025) */
+        function formatDateForPdf(value) {
+            if (!value) return '';
+            const s = value.toString().trim();
+            const t = s.split('T')[0];
+            const parts = t.split(/[-/]/);
+            if (parts.length === 3) {
+                const y = parts[0], m = parts[1], d = parts[2];
+                if (y.length === 4) return `${d}/${m}/${y}`;
+            }
+            return s;
+        }
+
+        /**
+         * تنزيل كشف حركة الإسعاف PDF معبأ من الرحلات المكتملة للفترة المعروضة (حتى 10 رحلات).
+         * يتطلب وجود ملف قالب في المسار PDF_TEMPLATE_URL وأسماء حقول كما في PDF-FIELD-NAMES.md
+         */
+        async function downloadPdfForm() {
+            const completed = (allRecords || []).filter(function (r) {
+                return r['Return Date'] && r['Return Time'];
+            });
+            if (completed.length === 0) {
+                showToast('لا توجد رحلات مكتملة في الفترة المحددة لملء كشف PDF', 'warning');
+                return;
+            }
+            const records = completed.slice(0, 10);
+            const btn = document.getElementById('btnDownloadPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التحميل...'; }
+            try {
+                const res = await fetch(PDF_TEMPLATE_URL);
+                if (!res.ok) {
+                    showToast('لم يتم العثور على ملف قالب PDF. ضع الملف في ' + PDF_TEMPLATE_URL, 'error');
+                    return;
+                }
+                const buf = await res.arrayBuffer();
+                const lib = window.PDFLib || window.pdfLib;
+                if (!lib || !lib.PDFDocument) {
+                    showToast('مكتبة PDF غير محملة. تحقق من الاتصال بالإنترنت.', 'error');
+                    return;
+                }
+                const pdfDoc = await lib.PDFDocument.load(buf);
+                const form = pdfDoc.getForm();
+                function setText(name, value) {
+                    try {
+                        const v = (value != null && value !== undefined) ? String(value).trim() : '';
+                        form.getTextField(name).setText(v);
+                    } catch (e) { /* حقل غير موجود في القالب */ }
+                }
+                setText('center_hospital_name', PDF_CENTER_NAME);
+                for (let i = 0; i < records.length; i++) {
+                    const r = records[i];
+                    const n = i + 1;
+                    setText('Vehicle_Number_' + n, r['Vehicle Number']);
+                    setText('Driver_Name_' + n, r['Driver Name']);
+                    setText('Staff_Number_' + n, r['Staff Number']);
+                    setText('Departure_Time_' + n, r['Departure Time']);
+                    setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']));
+                    setText('Return_Time_' + n, r['Return Time']);
+                    setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
+                }
+                // الوجهة حقل واحد فقط (جميع الرحلات لنفس المستشفى)
+                setText('Destination', records[0]['Destination'] || '');
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'كشف-حركة-سيارات-الاسعاف_' + new Date().toISOString().slice(0, 10) + '.pdf';
+                link.click();
+                URL.revokeObjectURL(link.href);
+                showToast('تم تنزيل كشف PDF بنجاح (' + records.length + ' رحلة)', 'success');
+            } catch (err) {
+                console.error('downloadPdfForm error', err);
+                showToast('حدث خطأ أثناء إنشاء PDF. تأكد من وجود القالب وأسماء الحقول.', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'تنزيل كشف PDF'; }
+            }
         }
 
         async function executeExport() {
