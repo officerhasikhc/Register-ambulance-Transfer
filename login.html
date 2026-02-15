@@ -193,6 +193,40 @@
             font-size: 14px;
         }
 
+        .input-with-icon {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
+            position: absolute;
+            right: 14px;
+            width: 22px;
+            height: 22px;
+            color: var(--text-secondary);
+            pointer-events: none;
+            transition: color 0.2s;
+        }
+
+        [dir="ltr"] .input-icon {
+            right: auto;
+            left: 14px;
+        }
+
+        .input-with-icon .form-input {
+            padding-right: 46px;
+        }
+
+        [dir="ltr"] .input-with-icon .form-input {
+            padding-right: 16px;
+            padding-left: 46px;
+        }
+
+        .input-with-icon:focus-within .input-icon {
+            color: var(--primary-blue);
+        }
+
         .form-input {
             width: 100%;
             padding: 14px 16px;
@@ -460,11 +494,16 @@
         <form id="loginForm" onsubmit="handleLogin(event)">
             <div class="form-group">
                 <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number or Civil ID">الرقم الوظيفي أو المدني</label>
-                <input type="text" class="form-input" id="staffNumber" 
-                       placeholder="أدخل الرقم الوظيفي أو المدني" 
-                       data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
-                       data-placeholder-en="Enter Staff Number or Civil ID"
-                       required autocomplete="off">
+                <div class="input-with-icon">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                    <input type="text" class="form-input" id="staffNumber" 
+                           placeholder="أدخل الرقم الوظيفي أو المدني" 
+                           data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
+                           data-placeholder-en="Enter Staff Number or Civil ID"
+                           required autocomplete="off">
+                </div>
             </div>
 
             <div class="remember-me">
