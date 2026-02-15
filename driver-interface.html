@@ -612,6 +612,9 @@
             border-radius: 12px;
             font-size: 11px;
             font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .status-complete {
@@ -622,6 +625,31 @@
         .status-pending {
             background: var(--warning-light);
             color: #92400e;
+        }
+
+        /* Sync spinner */
+        .sync-spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin-sync 0.8s linear infinite;
+        }
+
+        @keyframes spin-sync {
+            to { transform: rotate(360deg); }
+        }
+
+        .trip-item.trip-syncing {
+            animation: pulse-sync 1s ease-in-out;
+        }
+
+        @keyframes pulse-sync {
+            0% { background-color: rgba(16, 185, 129, 0.1); }
+            50% { background-color: rgba(16, 185, 129, 0.2); }
+            100% { background-color: transparent; }
         }
         
         .status-approved {
@@ -1545,7 +1573,7 @@
             document.getElementById('pendingDate').textContent = date;
             document.getElementById('pendingTime').textContent = time;
             
-            // Add trip to history list
+            // Add trip to history list with sync indicator
             const newTripEntry = {
                 tripId: '',
                 driverName: selectedDriver.nameEn,
@@ -1556,7 +1584,8 @@
                 returnDate: '',
                 returnTime: '',
                 status: 'pending',
-                offlineSaved: !isOnline
+                offlineSaved: !isOnline,
+                syncing: isOnline // Show sync indicator if online
             };
             
             const existsInHistory = allDriverHistory.some(t => 
@@ -1567,27 +1596,36 @@
                 driverHistoryPage = 1;
                 renderDriverHistoryPage();
             }
-            
-            // Invalidate cache after adding to local history to prevent interference
-            setTimeout(() => {
-                if (!isSubmittingDeparture) {
-                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                }
-            }, 2000);
 
             // === SEND TO SERVER IN BACKGROUND (non-blocking) ===
+            const syncCompleteDeparture = () => {
+                // Remove syncing indicator
+                allDriverHistory = allDriverHistory.map(t => {
+                    if (t.departureDate === date && t.departureTime === time) {
+                        return { ...t, syncing: false };
+                    }
+                    return t;
+                });
+                renderDriverHistoryPage();
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            };
+            
             if (isOnline) {
                 fetch(WEB_APP_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify(tripData)
+                }).then(() => {
+                    setTimeout(syncCompleteDeparture, 500);
                 }).catch(error => {
                     console.error('Background fetch failed, queuing offline:', error);
                     queueOfflineData(tripData);
+                    syncCompleteDeparture();
                 });
             } else {
                 queueOfflineData(tripData);
+                syncCompleteDeparture();
             }
 
             // === INSTANT UI UPDATE - NO DELAYS ===
@@ -1686,7 +1724,9 @@
                 returnTime: time
             };
 
-            // === STEP 1: IMMEDIATELY UPDATE TRIP TO COMPLETE STATUS ===
+            // === STEP 1: HIDE PENDING TRIP CARD FIRST ===
+            document.getElementById('pendingTrip').style.display = 'none';
+            
             const tripDepartureDate = pendingTrip.departureDate;
             const tripDepartureTime = pendingTrip.departureTime;
             const key = `pending_trip_${selectedDriver.staffNumber}`;
@@ -1696,8 +1736,9 @@
             pendingTrip.returnTime = time;
             pendingTrip.returnTimestamp = now.getTime();
             pendingTrip.status = 'complete';
+            pendingTrip.syncing = true; // Mark as syncing
 
-            // === STEP 2: UPDATE HISTORY LIST IMMEDIATELY TO "COMPLETE" ===
+            // === STEP 2: UPDATE HISTORY LIST TO "COMPLETE" WITH SYNC INDICATOR ===
             allDriverHistory = allDriverHistory.map(t => {
                 if (t.staffNumber === selectedDriver.staffNumber && 
                     t.departureDate === tripDepartureDate && 
@@ -1708,44 +1749,51 @@
                         returnDate: date, 
                         returnTime: time, 
                         status: 'complete',
-                        statusText: 'مكتملة ✓'
+                        statusText: 'مكتملة ✓',
+                        syncing: true
                     };
                 }
                 return t;
             });
             
-            // Render the updated list IMMEDIATELY
+            // Render the updated list IMMEDIATELY (with sync indicator)
             renderDriverHistoryPage();
             
-            // Force browser to paint the complete status
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-            // === STEP 3: HIDE PENDING TRIP CARD IMMEDIATELY ===
-            document.getElementById('pendingTrip').style.display = 'none';
-            
-            // === STEP 4: SAVE TO LOCAL STORAGE (without re-rendering) ===
+            // === STEP 3: SAVE TO LOCAL STORAGE ===
             saveTripToHistoryQuiet(pendingTrip);
             updatePendingTripForNurseWithReturn(selectedDriver.staffNumber, date, time);
-            
-            // Clear pending trip from localStorage
             localStorage.removeItem(key);
-            
-            // Invalidate cache
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
 
-            // === STEP 5: SEND TO SERVER IN BACKGROUND (non-blocking) ===
+            // === STEP 4: SEND TO SERVER IN BACKGROUND ===
+            const syncComplete = () => {
+                // Remove syncing indicator after successful sync
+                allDriverHistory = allDriverHistory.map(t => {
+                    if (t.departureDate === tripDepartureDate && 
+                        t.departureTime === tripDepartureTime) {
+                        return { ...t, syncing: false };
+                    }
+                    return t;
+                });
+                renderDriverHistoryPage();
+            };
+            
             if (isOnline) {
                 fetch(WEB_APP_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify(returnData)
+                }).then(() => {
+                    setTimeout(syncComplete, 500);
                 }).catch(error => {
                     console.error('Background fetch failed, queuing offline:', error);
                     queueOfflineData(returnData);
+                    syncComplete();
                 });
             } else {
                 queueOfflineData(returnData);
+                syncComplete();
             }
 
             // === INSTANT UI UPDATE - NO DELAYS ===
@@ -2049,28 +2097,27 @@
                 const isComplete = trip.status === 'complete' || trip.status === 'submitted';
                 const isApproved = trip.status === 'submitted';
                 const isOffline = !trip.tripId && trip.offlineSaved !== false;
+                const isSyncing = trip.syncing === true;
                 
                 let statusText = 'قيد التنفيذ';
                 let statusClass = 'status-pending';
-                let statusIcon = '⏳';
                 
                 if (trip.status === 'saving' || trip.statusText === 'جاري الحفظ...') {
                     statusText = 'جاري الحفظ...';
                     statusClass = 'status-pending';
-                    statusIcon = '⏳';
                 } else if (trip.statusText === 'تم تسجيل الرحلة بنجاح') {
                     statusText = 'مكتملة ✓';
                     statusClass = 'status-complete';
-                    statusIcon = '✓';
                 } else if (isApproved) {
                     statusText = 'تم الاعتماد';
                     statusClass = 'status-approved';
-                    statusIcon = '✅';
                 } else if (isComplete) {
                     statusText = 'مكتملة - بانتظار الاعتماد';
                     statusClass = 'status-complete';
-                    statusIcon = '✓';
                 }
+                
+                // Sync indicator (small spinner)
+                const syncIndicator = isSyncing ? '<span class="sync-spinner"></span>' : '';
                 
                 // Show trip ID or descriptive status text
                 let tripIdDisplay;
@@ -2078,17 +2125,15 @@
                     tripIdDisplay = '<span style="font-size:11px;color:#f59e0b;font-weight:500;">سيتم الحفظ عند توفر الإنترنت</span>';
                 } else if (trip.tripId) {
                     tripIdDisplay = `<span class="trip-id">${trip.tripId}</span>`;
-                } else if (!isComplete) {
-                    tripIdDisplay = '';
                 } else {
                     tripIdDisplay = '';
                 }
                 
                 return `
-                    <div class="trip-item ${isApproved ? 'trip-approved' : ''} ${isOffline ? 'trip-offline' : ''}">
+                    <div class="trip-item ${isApproved ? 'trip-approved' : ''} ${isOffline ? 'trip-offline' : ''} ${isSyncing ? 'trip-syncing' : ''}">
                         <div class="trip-item-header">
                             ${tripIdDisplay}
-                            <span class="trip-item-status ${statusClass}">${statusText}</span>
+                            <span class="trip-item-status ${statusClass}">${syncIndicator}${statusText}</span>
                         </div>
                         <div class="trip-item-date">${(trip.departureDate || '').toString().split('T')[0]}</div>
                         <div class="trip-item-times">
