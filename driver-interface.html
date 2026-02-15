@@ -1321,7 +1321,7 @@
 
         let _lastHistoryRender = 0;
         const _MIN_RENDER_INTERVAL = 5000; // Minimum 5 seconds between renders from server
-        
+
         async function loadPendingTrip() {
             if (!selectedDriver) return;
 
@@ -1368,8 +1368,8 @@
                     
                     if (shouldRender && !meta?.fromCache) {
                         _lastHistoryRender = now;
-                        processPendingTripsData(trips);
-                        renderTripHistoryFromData(trips);
+                    processPendingTripsData(trips);
+                    renderTripHistoryFromData(trips);
                     }
                 },
                 (result) => (result.success && Array.isArray(result.trips)) ? result.trips : null
@@ -1605,7 +1605,7 @@
                 driverHistoryPage = 1;
                 renderDriverHistoryPage();
             }
-
+            
             // === SEND TO SERVER IN BACKGROUND (non-blocking) ===
             const syncCompleteDeparture = () => {
                 // Remove syncing indicator
@@ -1638,7 +1638,7 @@
             }
 
             // === INSTANT UI UPDATE - NO DELAYS ===
-            
+
             // Done processing - switch to registered state IMMEDIATELY
             btn.classList.remove('btn-processing');
             actionButtons.classList.remove('processing');
@@ -1767,7 +1767,7 @@
             
             // Render the updated list IMMEDIATELY (with sync indicator)
             renderDriverHistoryPage();
-            
+
             // === STEP 3: SAVE TO LOCAL STORAGE ===
             saveTripToHistoryQuiet(pendingTrip);
             updatePendingTripForNurseWithReturn(selectedDriver.staffNumber, date, time);
@@ -1818,7 +1818,7 @@
             btn.classList.remove('btn-locked');
             btn.classList.add('btn-registered');
             btn.innerHTML = '<span>✓ تم تسجيل العودة</span>';
-            
+
             // Reset departure button for new trip IMMEDIATELY
             unlockButton(btnDep);
             btnDep.classList.remove('btn-registered');
@@ -1842,10 +1842,10 @@
             
             // Reset return button after a short visual feedback
             setTimeout(() => {
-                btn.classList.remove('btn-registered');
-                btn.innerHTML = '<span>← تسجيل وقت العودة</span>';
-                btn.disabled = true;
-                btn.classList.remove('pulse-attention');
+            btn.classList.remove('btn-registered');
+            btn.innerHTML = '<span>← تسجيل وقت العودة</span>';
+            btn.disabled = true;
+            btn.classList.remove('pulse-attention');
                 btn.style.pointerEvents = '';
             }, 1500);
         }

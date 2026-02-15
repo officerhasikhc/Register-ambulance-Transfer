@@ -2330,7 +2330,7 @@
                                 <td>${(record['Departure Date'] || '').toString().split('T')[0]}</td>
                                 <td><strong>${record['Vehicle Number']}</strong></td>
                                 <td>${record['Driver Name']}</td>
-                                <td>${record['Destination']}</td>
+                                <td>${mapDestinationToAr(record['Destination'])}</td>
                                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                                 <td>
                                     <div class="action-btns">
@@ -2383,7 +2383,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">الجهة المحول إليها</div>
-                        <div class="detail-value">${currentRecord['Destination']}</div>
+                        <div class="detail-value">${mapDestinationToAr(currentRecord['Destination'])}</div>
                     </div>
                     <div class="detail-item full-width">
                         <div class="detail-label">حالة المريض / التشخيص</div>
@@ -2443,7 +2443,7 @@
                         <div class="item"><div class="label">ساعة المغادرة</div><div class="value">${currentRecord['Departure Time']}</div></div>
                         <div class="item"><div class="label">تاريخ العودة</div><div class="value">${(currentRecord['Return Date'] || '').toString().split('T')[0]}</div></div>
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${currentRecord['Return Time']}</div></div>
-                        <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${currentRecord['Destination']}</div></div>
+                        <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item full"><div class="label">حالة المريض / التشخيص</div><div class="value">${currentRecord['Patient Condition / Diagnosis']}</div></div>
                         <div class="item"><div class="label">المسجل</div><div class="value">${currentRecord['Nurse Name']}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${new Date(currentRecord['Timestamp']).toLocaleString('ar-SA')}</div></div>
@@ -2466,6 +2466,32 @@
                 if (y.length === 4) return `${d}/${m}/${y}`;
             }
             return s;
+        }
+
+        /** ربط اسم السائق الإنجليزي بالعربي من بيانات الإعدادات المحلية */
+        function getDriverNameArMap() {
+            const map = {};
+            try {
+                const drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
+                drivers.forEach(function (d) {
+                    if (d.nameEn) map[d.nameEn.toUpperCase().trim()] = d.nameAr || d.nameEn;
+                    if (d.nameAr) map[d.nameAr.trim()] = d.nameAr;
+                });
+            } catch (e) { /* لا توجد بيانات سائقين محلية */ }
+            return map;
+        }
+
+        /** ربط الوجهة الإنجليزية بالعربية */
+        const DESTINATION_MAP = {
+            'SQH': 'السلطان قابوس',
+            'SULTAN QABOOS HOSPITAL': 'السلطان قابوس',
+            'Sultan Qaboos Hospital': 'السلطان قابوس'
+        };
+
+        function mapDestinationToAr(val) {
+            if (!val) return '';
+            const v = val.toString().trim();
+            return DESTINATION_MAP[v] || DESTINATION_MAP[v.toUpperCase()] || v;
         }
 
         /**
@@ -2497,27 +2523,43 @@
                 }
                 const pdfDoc = await lib.PDFDocument.load(buf);
                 const form = pdfDoc.getForm();
+
+                // تعيين NeedAppearances حتى يعرض عارض PDF النصوص العربية بشكل صحيح
+                const acroForm = form.acroForm;
+                acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
+
                 function setText(name, value) {
                     try {
                         const v = (value != null && value !== undefined) ? String(value).trim() : '';
                         form.getTextField(name).setText(v);
                     } catch (e) { /* حقل غير موجود في القالب */ }
                 }
+
+                // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
+                const driverMap = getDriverNameArMap();
+
                 setText('center_hospital_name', PDF_CENTER_NAME);
                 for (let i = 0; i < records.length; i++) {
                     const r = records[i];
                     const n = i + 1;
                     setText('Vehicle_Number_' + n, r['Vehicle Number']);
-                    setText('Driver_Name_' + n, r['Driver Name']);
+
+                    // اسم السائق بالعربي (ابحث في الخريطة، إن لم يوجد استخدم الاسم الأصلي)
+                    const driverEn = (r['Driver Name'] || '').trim();
+                    const driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
+                    setText('Driver_Name_' + n, driverAr);
+
                     setText('Staff_Number_' + n, r['Staff Number']);
                     setText('Departure_Time_' + n, r['Departure Time']);
                     setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']));
                     setText('Return_Time_' + n, r['Return Time']);
                     setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
                 }
-                // الوجهة حقل واحد فقط (جميع الرحلات لنفس المستشفى)
-                setText('Destination', records[0]['Destination'] || '');
-                const pdfBytes = await pdfDoc.save();
+                // الوجهة حقل واحد فقط (جميع الرحلات لنفس المستشفى) — يُحوَّل للعربي
+                setText('Destination', mapDestinationToAr(records[0]['Destination']));
+
+                // حفظ PDF بدون تحديث المظهر (لتجنب خطأ WinAnsi مع النصوص العربية)
+                const pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
