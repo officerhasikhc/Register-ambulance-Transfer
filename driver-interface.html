@@ -1319,11 +1319,13 @@
             updateButtons();
         }
 
+        let _lastHistoryRender = 0;
+        const _MIN_RENDER_INTERVAL = 5000; // Minimum 5 seconds between renders from server
+        
         async function loadPendingTrip() {
             if (!selectedDriver) return;
 
             // === INSTANT LOCAL LOAD FIRST ===
-            // Load from localStorage immediately (no waiting)
             const pendingKey = `pending_trip_${selectedDriver.staffNumber}`;
             const historyKey = `trip_history_${selectedDriver.staffNumber}`;
             
@@ -1332,7 +1334,6 @@
             if (localPending) {
                 try {
                     pendingTrip = JSON.parse(localPending);
-                    // Show pending trip card immediately
                     const pendingDiv = document.getElementById('pendingTrip');
                     if (pendingDiv && pendingTrip.departureDate) {
                         pendingDiv.style.display = 'block';
@@ -1343,22 +1344,30 @@
                 } catch (e) {}
             }
             
-            // Load local history immediately
+            // Load local history immediately (only if not recently rendered)
             const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
-            if (localHistory.length > 0) {
+            if (localHistory.length > 0 && allDriverHistory.length === 0) {
                 allDriverHistory = localHistory;
                 renderDriverHistoryPage();
             }
 
-            // === BACKGROUND SERVER SYNC (non-blocking) ===
-            // Fetch from server to sync/update - don't wait for it
+            // === BACKGROUND SERVER SYNC (throttled) ===
             DataCache.fetchWithCache(
                 `${WEB_APP_URL}?action=getPendingTrips`,
                 DataCache.KEYS.PENDING_TRIPS,
                 DataCache.EXPIRY.PENDING_TRIPS,
-                (trips) => {
-                    // Only update if not currently submitting
-                    if (!isSubmittingDeparture && !isSubmittingReturn) {
+                (trips, meta) => {
+                    // Only update if:
+                    // 1. Not currently submitting
+                    // 2. Enough time has passed since last render
+                    // 3. Data is fresh (not from cache) OR this is initial load
+                    const now = Date.now();
+                    const shouldRender = !isSubmittingDeparture && 
+                                        !isSubmittingReturn && 
+                                        (now - _lastHistoryRender > _MIN_RENDER_INTERVAL || allDriverHistory.length === 0);
+                    
+                    if (shouldRender && !meta?.fromCache) {
+                        _lastHistoryRender = now;
                         processPendingTripsData(trips);
                         renderTripHistoryFromData(trips);
                     }
@@ -2269,13 +2278,18 @@
                 return;
             }
             
+            // Check if minimum time has passed since last render
+            if (Date.now() - _lastHistoryRender < _MIN_RENDER_INTERVAL) {
+                return;
+            }
+            
             // Invalidate cache to force fresh fetch
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
             loadPendingTrip();
         }
         
-        // Check for updates every 20 seconds (increased from 15 to reduce interference)
-        setInterval(autoRefreshHistory, 20000);
+        // Check for updates every 30 seconds (reduced frequency)
+        setInterval(autoRefreshHistory, 30000);
 
         // ============================================
         // OFFLINE SUPPORT | دعم العمل بدون إنترنت
