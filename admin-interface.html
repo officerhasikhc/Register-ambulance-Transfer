@@ -13,7 +13,6 @@
     
     <script src="session-manager.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
     <link rel="stylesheet" href="responsive-ui.css">
@@ -1868,7 +1867,6 @@
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
-                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة مع عرض الطابعات" style="background: #059669; color: white;">🖨️ طباعة كشف PDF</button>
                         </div>
                     </div>
 
@@ -2497,253 +2495,95 @@
             return DESTINATION_MAP[v] || DESTINATION_MAP[v.toUpperCase()] || v;
         }
 
-        /** الحصول على لاحقة اسم الملف بناءً على فلتر الشهر والسنة */
-        function getPdfFilenameSuffix() {
-            var month = document.getElementById('monthFilter').value;
-            var year = document.getElementById('yearFilter').value;
-            var monthNames = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-            if (month !== 'all' && year !== 'all') return monthNames[parseInt(month)] + '_' + year;
-            if (month !== 'all') return monthNames[parseInt(month)];
-            if (year !== 'all') return year;
-            return new Date().toISOString().slice(0, 10);
-        }
-
         /**
-         * تحميل خط عربي من ملف محلي أو CDN
+         * تنزيل كشف حركة الإسعاف PDF معبأ من الرحلات المكتملة للفترة المعروضة (حتى 10 رحلات).
+         * يتطلب وجود ملف قالب في المسار PDF_TEMPLATE_URL وأسماء حقول كما في PDF-FIELD-NAMES.md
          */
-        async function _loadArabicFont() {
-            var urls = [
-                'assets/Amiri-Regular.ttf',
-                'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiri/Amiri-Regular.ttf'
-            ];
-            for (var k = 0; k < urls.length; k++) {
-                try {
-                    var r = await fetch(urls[k]);
-                    if (r.ok) {
-                        console.log('[PDF] Arabic font loaded from: ' + urls[k]);
-                        return await r.arrayBuffer();
-                    }
-                } catch (e) { /* try next */ }
-            }
-            console.warn('[PDF] Could not load Arabic font from any source');
-            return null;
-        }
-
-        /**
-         * إنشاء بايتات PDF من القالب الرسمي مع ملء الحقول بالرحلات المكتملة (حتى 10 رحلات).
-         *
-         * الطريقة الجديدة: رسم النص مباشرة على الصفحة (page.drawText) بدلاً من حقول النموذج
-         * لأن حقول النماذج (form fields) لا تدعم العربية بشكل صحيح في pdf-lib.
-         * إن فشل تحميل الخط، يعود للطريقة القديمة (NeedAppearances) للأكروبات.
-         */
-        async function generatePdfBytes() {
-            var completed = (allRecords || []).filter(function (r) {
+        async function downloadPdfForm() {
+            const completed = (allRecords || []).filter(function (r) {
                 return r['Return Date'] && r['Return Time'];
             });
             if (completed.length === 0) {
                 showToast('لا توجد رحلات مكتملة في الفترة المحددة لملء كشف PDF', 'warning');
-                return null;
+                return;
             }
-            var records = completed.slice(0, 10);
-
-            var res = await fetch(PDF_TEMPLATE_URL);
-            if (!res.ok) {
-                showToast('لم يتم العثور على ملف قالب PDF. ضع الملف في ' + PDF_TEMPLATE_URL, 'error');
-                return null;
-            }
-            var buf = await res.arrayBuffer();
-            var lib = window.PDFLib || window.pdfLib;
-            if (!lib || !lib.PDFDocument) {
-                showToast('مكتبة PDF غير محملة. تحقق من الاتصال بالإنترنت.', 'error');
-                return null;
-            }
-            var pdfDoc = await lib.PDFDocument.load(buf);
-            var form = pdfDoc.getForm();
-
-            // ========= محاولة تضمين الخط العربي =========
-            var arabicFont = null;
+            const records = completed.slice(0, 10);
+            const btn = document.getElementById('btnDownloadPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التحميل...'; }
             try {
-                if (window.fontkit) {
-                    pdfDoc.registerFontkit(window.fontkit);
-                    var fontBuf = await _loadArabicFont();
-                    if (fontBuf) {
-                        arabicFont = await pdfDoc.embedFont(fontBuf, { subset: false });
-                        console.log('[PDF] Arabic font embedded successfully');
-                    }
-                } else {
-                    console.warn('[PDF] fontkit library not loaded');
+                const res = await fetch(PDF_TEMPLATE_URL);
+                if (!res.ok) {
+                    showToast('لم يتم العثور على ملف قالب PDF. ضع الملف في ' + PDF_TEMPLATE_URL, 'error');
+                    return;
                 }
-            } catch (e) {
-                console.warn('[PDF] Font embedding failed:', e);
-                arabicFont = null;
-            }
-
-            var driverMap = getDriverNameArMap();
-
-            if (arabicFont) {
-                // ===== الطريقة الجديدة: رسم النص مباشرة على الصفحة =====
-                var page = pdfDoc.getPages()[0];
-                var black = lib.rgb(0, 0, 0);
-
-                // 1) قراءة مواقع جميع الحقول من القالب (قبل حذفها)
-                var pending = [];
-
-                function queueDraw(fieldName, text, fontSize) {
-                    if (!text) return;
-                    var v = String(text).trim();
-                    if (!v) return;
-                    try {
-                        var field = form.getTextField(fieldName);
-                        var widgets = field.acroField.getWidgets();
-                        if (widgets.length > 0) {
-                            var rect = widgets[0].getRectangle();
-                            pending.push({ rect: rect, text: v, fontSize: fontSize });
-                        }
-                    } catch (e) { /* field not found */ }
+                const buf = await res.arrayBuffer();
+                const lib = window.PDFLib || window.pdfLib;
+                if (!lib || !lib.PDFDocument) {
+                    showToast('مكتبة PDF غير محملة. تحقق من الاتصال بالإنترنت.', 'error');
+                    return;
                 }
+                const pdfDoc = await lib.PDFDocument.load(buf);
+                const form = pdfDoc.getForm();
 
-                // اسم المركز — حجم 20
-                queueDraw('center_hospital_name', PDF_CENTER_NAME, 18);
-
-                for (var i = 0; i < records.length; i++) {
-                    var r = records[i];
-                    var n = i + 1;
-                    queueDraw('Vehicle_Number_' + n, r['Vehicle Number'], 14);
-
-                    var driverEn = (r['Driver Name'] || '').trim();
-                    var driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
-                    queueDraw('Driver_Name_' + n, driverAr, 14);
-
-                    queueDraw('Staff_Number_' + n, r['Staff Number'], 14);
-                    queueDraw('Departure_Time_' + n, r['Departure Time'], 12);
-                    queueDraw('Departure_Date_' + n, formatDateForPdf(r['Departure Date']), 12);
-                    queueDraw('Return_Time_' + n, r['Return Time'], 12);
-                    queueDraw('Return_Date_' + n, formatDateForPdf(r['Return Date']), 12);
-                }
-                queueDraw('Destination', mapDestinationToAr(records[0]['Destination']), 18);
-
-                // 2) حذف حقول النموذج (تسطيح) — يزيل الحقول التفاعلية ويبقي خلفية القالب
-                form.flatten();
-
-                // 3) رسم النصوص فوق القالب المسطّح
-                for (var d = 0; d < pending.length; d++) {
-                    var item = pending[d];
-                    var ry = item.rect.y + (item.rect.height - item.fontSize) / 2 + item.fontSize * 0.15;
-                    var rx;
-
-                    if (/[\u0600-\u06FF]/.test(item.text)) {
-                        // نص عربي — محاذاة لليمين
-                        var tw = arabicFont.widthOfTextAtSize(item.text, item.fontSize);
-                        rx = item.rect.x + item.rect.width - tw - 3;
-                    } else {
-                        // أرقام/تواريخ — محاذاة للمنتصف
-                        var tw2 = arabicFont.widthOfTextAtSize(item.text, item.fontSize);
-                        rx = item.rect.x + (item.rect.width - tw2) / 2;
-                    }
-
-                    page.drawText(item.text, {
-                        x: rx, y: ry,
-                        size: item.fontSize,
-                        font: arabicFont,
-                        color: black
-                    });
-                }
-
-                console.log('[PDF] Drew ' + pending.length + ' fields directly on page');
-                var pdfBytes = await pdfDoc.save();
-                return { pdfBytes: pdfBytes, recordCount: records.length };
-
-            } else {
-                // ===== الطريقة البديلة: NeedAppearances (تعمل في أكروبات فقط) =====
-                console.log('[PDF] Using NeedAppearances fallback (Acrobat only)');
-                var acroForm = form.acroForm;
+                // تعيين NeedAppearances حتى يعرض عارض PDF النصوص العربية بشكل صحيح
+                const acroForm = form.acroForm;
                 acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
 
                 function setText(name, value) {
                     try {
-                        var v = (value != null && value !== undefined) ? String(value).trim() : '';
+                        const v = (value != null && value !== undefined) ? String(value).trim() : '';
                         form.getTextField(name).setText(v);
-                    } catch (e) { /* field not found */ }
+                    } catch (e) { /* حقل غير موجود في القالب */ }
                 }
+
+                // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
+                const driverMap = getDriverNameArMap();
 
                 setText('center_hospital_name', PDF_CENTER_NAME);
-                for (var i2 = 0; i2 < records.length; i2++) {
-                    var r2 = records[i2];
-                    var n2 = i2 + 1;
-                    setText('Vehicle_Number_' + n2, r2['Vehicle Number']);
-                    var drEn = (r2['Driver Name'] || '').trim();
-                    var drAr = driverMap[drEn.toUpperCase()] || drEn;
-                    setText('Driver_Name_' + n2, drAr);
-                    setText('Staff_Number_' + n2, r2['Staff Number']);
-                    setText('Departure_Time_' + n2, r2['Departure Time']);
-                    setText('Departure_Date_' + n2, formatDateForPdf(r2['Departure Date']));
-                    setText('Return_Time_' + n2, r2['Return Time']);
-                    setText('Return_Date_' + n2, formatDateForPdf(r2['Return Date']));
+                for (let i = 0; i < records.length; i++) {
+                    const r = records[i];
+                    const n = i + 1;
+                    setText('Vehicle_Number_' + n, r['Vehicle Number']);
+
+                    // اسم السائق بالعربي (ابحث في الخريطة، إن لم يوجد استخدم الاسم الأصلي)
+                    const driverEn = (r['Driver Name'] || '').trim();
+                    const driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
+                    setText('Driver_Name_' + n, driverAr);
+
+                    setText('Staff_Number_' + n, r['Staff Number']);
+                    setText('Departure_Time_' + n, r['Departure Time']);
+                    setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']));
+                    setText('Return_Time_' + n, r['Return Time']);
+                    setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
                 }
+                // الوجهة حقل واحد فقط (جميع الرحلات لنفس المستشفى) — يُحوَّل للعربي
                 setText('Destination', mapDestinationToAr(records[0]['Destination']));
 
-                var pdfBytes2 = await pdfDoc.save({ updateFieldAppearances: false });
-                return { pdfBytes: pdfBytes2, recordCount: records.length };
-            }
-        }
-
-        /**
-         * تنزيل كشف حركة الإسعاف PDF
-         */
-        async function downloadPdfForm() {
-            var btn = document.getElementById('btnDownloadPdf');
-            if (btn) { btn.disabled = true; btn.textContent = 'جاري التحميل...'; }
-            try {
-                var result = await generatePdfBytes();
-                if (!result) return;
-
-                var blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
-                var link = document.createElement('a');
+                // حفظ PDF بدون تحديث المظهر (لتجنب خطأ WinAnsi مع النصوص العربية)
+                const pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'كشف-حركة-سيارات-الاسعاف_' + getPdfFilenameSuffix() + '.pdf';
+
+                // اسم الملف يتضمن الشهر والسنة من الفلتر
+                const month = document.getElementById('monthFilter').value;
+                const year = document.getElementById('yearFilter').value;
+                const monthNames = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+                let fileSuffix;
+                if (month !== 'all' && year !== 'all') fileSuffix = monthNames[parseInt(month)] + '_' + year;
+                else if (month !== 'all') fileSuffix = monthNames[parseInt(month)];
+                else if (year !== 'all') fileSuffix = year;
+                else fileSuffix = new Date().toISOString().slice(0, 10);
+
+                link.download = 'كشف-حركة-سيارات-الاسعاف_' + fileSuffix + '.pdf';
                 link.click();
                 URL.revokeObjectURL(link.href);
-                showToast('تم تنزيل كشف PDF بنجاح (' + result.recordCount + ' رحلة)', 'success');
+                showToast('تم تنزيل كشف PDF بنجاح (' + records.length + ' رحلة)', 'success');
             } catch (err) {
                 console.error('downloadPdfForm error', err);
                 showToast('حدث خطأ أثناء إنشاء PDF. تأكد من وجود القالب وأسماء الحقول.', 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = 'تنزيل كشف PDF'; }
-            }
-        }
-
-        /**
-         * طباعة كشف حركة الإسعاف — يولّد PDF من القالب الرسمي ويفتحه للطباعة
-         */
-        async function printPdfForm() {
-            var btn = document.getElementById('btnPrintPdf');
-            if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
-            try {
-                var result = await generatePdfBytes();
-                if (!result) return;
-
-                var blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
-                var url = URL.createObjectURL(blob);
-
-                // فتح PDF في نافذة جديدة وطلب الطباعة
-                var printWin = window.open(url, '_blank');
-                if (printWin) {
-                    showToast('تم فتح الكشف — اضغط Ctrl+P للطباعة، أو افتحه في أدوبي أكروبات لعرض أفضل للعربية', 'success');
-                } else {
-                    // إذا تم حظر النافذة المنبثقة، نزّل الملف مباشرة
-                    var link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'كشف-حركة-سيارات-الاسعاف_طباعة_' + getPdfFilenameSuffix() + '.pdf';
-                    link.click();
-                    showToast('تم تنزيل الملف — افتحه في Adobe Acrobat ثم اطبعه لعرض صحيح للعربية', 'info');
-                }
-
-                setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
-            } catch (err) {
-                console.error('printPdfForm error', err);
-                showToast('حدث خطأ أثناء تجهيز PDF للطباعة.', 'error');
-            } finally {
-                if (btn) { btn.disabled = false; btn.textContent = '🖨️ طباعة كشف PDF'; }
             }
         }
 
