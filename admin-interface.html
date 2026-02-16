@@ -13,6 +13,7 @@
     
     <script src="session-manager.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
     <link rel="stylesheet" href="responsive-ui.css">
@@ -2509,7 +2510,8 @@
 
         /**
          * إنشاء بايتات PDF من القالب الرسمي مع ملء الحقول بالرحلات المكتملة (حتى 10 رحلات).
-         * يعتمد على NeedAppearances لعرض النصوص العربية بشكل صحيح في أدوبي أكروبات.
+         * يحاول تضمين خط عربي لعرض صحيح في جميع العارضات.
+         * إن فشل التضمين يعود للطريقة القديمة (NeedAppearances) التي تعمل في أكروبات فقط.
          */
         async function generatePdfBytes() {
             var completed = (allRecords || []).filter(function (r) {
@@ -2535,39 +2537,69 @@
             var pdfDoc = await lib.PDFDocument.load(buf);
             var form = pdfDoc.getForm();
 
-            // تعيين NeedAppearances حتى يعرض عارض PDF النصوص العربية بشكل صحيح
-            var acroForm = form.acroForm;
-            acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
+            // محاولة تضمين خط عربي (Amiri) بدون تقسيم subset لتجنب تلف الخط
+            var arabicFont = null;
+            try {
+                if (window.fontkit) {
+                    pdfDoc.registerFontkit(window.fontkit);
+                    var fontRes = await fetch('assets/Amiri-Regular.ttf');
+                    if (fontRes.ok) {
+                        var fontBuf = await fontRes.arrayBuffer();
+                        arabicFont = await pdfDoc.embedFont(fontBuf, { subset: false });
+                    }
+                }
+            } catch (e) {
+                console.warn('فشل تحميل الخط العربي، سيُستخدم NeedAppearances', e);
+                arabicFont = null;
+            }
 
-            function setText(name, value) {
+            // إن فشل تضمين الخط، نعود للطريقة القديمة
+            if (!arabicFont) {
+                var acroForm = form.acroForm;
+                acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
+            }
+
+            function setText(name, value, fontSize) {
                 try {
                     var v = (value != null && value !== undefined) ? String(value).trim() : '';
-                    form.getTextField(name).setText(v);
+                    var field = form.getTextField(name);
+                    field.setText(v);
+                    if (arabicFont) {
+                        if (fontSize) field.setFontSize(fontSize);
+                        field.updateAppearances(arabicFont);
+                    }
                 } catch (e) { /* حقل غير موجود في القالب */ }
             }
 
             var driverMap = getDriverNameArMap();
-            setText('center_hospital_name', PDF_CENTER_NAME);
+
+            // اسم المركز — حجم 20 (Andalus في القالب)
+            setText('center_hospital_name', PDF_CENTER_NAME, 20);
 
             for (var i = 0; i < records.length; i++) {
                 var r = records[i];
                 var n = i + 1;
-                setText('Vehicle_Number_' + n, r['Vehicle Number']);
 
+                // رقم السيارة — حجم 16
+                setText('Vehicle_Number_' + n, r['Vehicle Number'], 16);
+
+                // اسم السائق — حجم 16 (Times Roman في القالب)
                 var driverEn = (r['Driver Name'] || '').trim();
                 var driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
-                setText('Driver_Name_' + n, driverAr);
+                setText('Driver_Name_' + n, driverAr, 16);
 
-                setText('Staff_Number_' + n, r['Staff Number']);
-                setText('Departure_Time_' + n, r['Departure Time']);
-                setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']));
-                setText('Return_Time_' + n, r['Return Time']);
-                setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
+                setText('Staff_Number_' + n, r['Staff Number'], 16);
+                setText('Departure_Time_' + n, r['Departure Time'], 16);
+                setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']), 16);
+                setText('Return_Time_' + n, r['Return Time'], 16);
+                setText('Return_Date_' + n, formatDateForPdf(r['Return Date']), 16);
             }
-            setText('Destination', mapDestinationToAr(records[0]['Destination']));
 
-            // حفظ PDF بدون تحديث المظهر (لتجنب خطأ WinAnsi مع النصوص العربية)
-            var pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
+            // الوجهة — حجم 20 (Andalus في القالب)
+            setText('Destination', mapDestinationToAr(records[0]['Destination']), 20);
+
+            var saveOpts = arabicFont ? {} : { updateFieldAppearances: false };
+            var pdfBytes = await pdfDoc.save(saveOpts);
             return { pdfBytes: pdfBytes, recordCount: records.length };
         }
 
