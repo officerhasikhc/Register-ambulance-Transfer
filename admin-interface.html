@@ -1868,7 +1868,7 @@
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
-                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة" style="background: #059669; color: white;">🖨️ طباعة كشف PDF</button>
+                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة مع عرض الطابعات" style="background: #059669; color: white;">🖨️ طباعة كشف PDF</button>
                         </div>
                     </div>
 
@@ -2778,35 +2778,132 @@
             var btn = document.getElementById('btnPrintPdf');
             if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
             try {
-                var result = await generatePdfBytes({ flatten: true });
-                if (!result) return;
+                var completed = (allRecords || []).filter(function (r) {
+                    return r['Return Date'] && r['Return Time'];
+                });
+                if (completed.length === 0) {
+                    showToast('لا توجد رحلات مكتملة للطباعة', 'warning');
+                    return;
+                }
+                var records = completed.slice(0, 10);
+                var driverMap = getDriverNameArMap();
+                var dest = mapDestinationToAr(records[0]['Destination']);
 
-                var blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
-                var url = URL.createObjectURL(blob);
+                var rows = '';
+                for (var i = 0; i < records.length; i++) {
+                    var r = records[i];
+                    var driverEn = (r['Driver Name'] || '').trim();
+                    var driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
+                    rows += '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (r['Vehicle Number'] || '') + '</td>'
+                        + '<td>' + driverAr + '</td>'
+                        + '<td>' + (r['Staff Number'] || '') + '</td>'
+                        + '<td>' + (r['Departure Time'] || '') + '</td>'
+                        + '<td>' + formatDateForPdf(r['Departure Date']) + '</td>'
+                        + '<td>' + (r['Return Time'] || '') + '</td>'
+                        + '<td>' + formatDateForPdf(r['Return Date']) + '</td>'
+                        + '</tr>';
+                }
+                for (var j = records.length; j < 10; j++) {
+                    rows += '<tr><td>' + (j + 1) + '</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+                }
 
-                var iframe = document.createElement('iframe');
-                iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
-                iframe.src = url;
-                document.body.appendChild(iframe);
+                var monthNames = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+                var month = document.getElementById('monthFilter').value;
+                var year = document.getElementById('yearFilter').value;
+                var periodText = '';
+                if (month !== 'all' && year !== 'all') periodText = monthNames[parseInt(month)] + ' ' + year;
+                else if (month !== 'all') periodText = monthNames[parseInt(month)];
+                else if (year !== 'all') periodText = year;
+                else periodText = new Date().toLocaleDateString('ar-SA');
 
-                iframe.onload = function () {
-                    try {
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                    } catch (e) {
-                        window.open(url, '_blank');
-                    }
-                    setTimeout(function () {
-                        try { document.body.removeChild(iframe); } catch (x) {}
-                        URL.revokeObjectURL(url);
-                    }, 120000);
-                };
+                var printWindow = window.open('', '_blank');
+                printWindow.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">'
+                    + '<title>كشف حركة سيارات الإسعاف - ' + periodText + '</title>'
+                    + '<style>'
+                    + '@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap");'
+                    + '*{margin:0;padding:0;box-sizing:border-box}'
+                    + 'body{font-family:"Cairo","Segoe UI",Tahoma,sans-serif;padding:15px 25px;direction:rtl;color:#1a1a1a;font-size:11px}'
+                    + '.header{text-align:center;margin-bottom:10px;position:relative}'
+                    + '.header-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}'
+                    + '.header-side{font-size:9px;line-height:1.6;text-align:center;width:200px}'
+                    + '.header-center{flex:1;text-align:center}'
+                    + '.header-center img{width:60px;height:60px}'
+                    + '.title-main{color:#c0392b;font-size:16px;font-weight:700;margin:6px 0 2px}'
+                    + '.title-en{color:#c0392b;font-size:11px;font-weight:600;margin-bottom:6px}'
+                    + '.center-name{font-size:12px;margin-bottom:8px}'
+                    + '.center-name span{font-weight:700}'
+                    + '.period-label{font-size:11px;color:#555;margin-bottom:8px}'
+                    + 'table{width:100%;border-collapse:collapse;margin-bottom:10px}'
+                    + 'th,td{border:1.5px solid #333;padding:4px 6px;text-align:center;font-size:10.5px}'
+                    + 'th{background:#f0f0f0;font-weight:700;font-size:9.5px}'
+                    + 'thead th{vertical-align:middle}'
+                    + '.th-group{font-size:9px}'
+                    + 'td{height:22px}'
+                    + '.dest-row{margin:8px 0;font-size:12px}'
+                    + '.dest-row span{font-weight:700}'
+                    + '.approval{margin-top:20px;display:flex;justify-content:space-between;font-size:11px}'
+                    + '.approval-item{text-align:center;width:45%}'
+                    + '.approval-item .label{font-weight:700;margin-bottom:30px}'
+                    + '.approval-item .line{border-bottom:1px solid #333;margin-bottom:4px;min-height:25px}'
+                    + '.footer-note{margin-top:15px;font-size:9px;color:#666;text-align:center}'
+                    + '@media print{body{padding:10px 15px}button,.no-print{display:none!important}@page{size:A4 landscape;margin:8mm}}'
+                    + '.print-btn{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 30px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:"Cairo",sans-serif;cursor:pointer;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,0.2)}'
+                    + '.print-btn:hover{background:#1e3a8a}'
+                    + '</style></head><body>'
+                    + '<div class="header">'
+                    + '<div class="header-row">'
+                    + '<div class="header-side">سلطنة عمان<br>وزارة الصحة<br>المديرية العامة للخدمات الصحية<br>محافظة الظاهرة<br>قسم الشؤون الإدارية</div>'
+                    + '<div class="header-center"><div style="font-size:40px">🏥</div></div>'
+                    + '<div class="header-side">Sultanate Of Oman<br>Ministry Of Health<br>Directorate General of Health Services<br>Governorate of Dhahira<br>Department of Administrative Affairs</div>'
+                    + '</div>'
+                    + '<div class="title-main">كشف حركة سيارات الإسعاف</div>'
+                    + '<div class="title-en">Ambulance Traffic Detection</div>'
+                    + '<div class="center-name">اسم المركز / المستشفى: <span>' + PDF_CENTER_NAME + '</span></div>'
+                    + '<div class="period-label">الفترة: <strong>' + periodText + '</strong></div>'
+                    + '</div>'
+                    + '<table>'
+                    + '<thead>'
+                    + '<tr>'
+                    + '<th rowspan="2" style="width:30px">م</th>'
+                    + '<th rowspan="2" style="width:70px">رقم السيارة<br><span class="th-group">Vehicle No.</span></th>'
+                    + '<th rowspan="2">اسم السائق<br><span class="th-group">Driver Name</span></th>'
+                    + '<th rowspan="2" style="width:70px">الرقم الوظيفي<br><span class="th-group">Staff No.</span></th>'
+                    + '<th colspan="2">الجهة المحول إليها (المستشفى/المركز)<br><span class="th-group">Transfer to (center/hospital)</span></th>'
+                    + '<th colspan="2">وقت العودة إلى مستشفى/مركز العمل<br><span class="th-group">Time To Return To The Workplace</span></th>'
+                    + '</tr>'
+                    + '<tr>'
+                    + '<th>الوقت<br><span class="th-group">Time</span></th>'
+                    + '<th>التاريخ<br><span class="th-group">Date</span></th>'
+                    + '<th>الوقت<br><span class="th-group">Time</span></th>'
+                    + '<th>التاريخ<br><span class="th-group">Date</span></th>'
+                    + '</tr>'
+                    + '</thead>'
+                    + '<tbody>' + rows + '</tbody>'
+                    + '</table>'
+                    + '<div class="dest-row">الجهة المحول إليها (المستشفى / المركز): <span>' + dest + '</span></div>'
+                    + '<div class="approval">'
+                    + '<div class="approval-item"><div class="label">المسئول المباشر</div><div class="line"></div><div>Direct Responsible</div></div>'
+                    + '<div class="approval-item"><div class="label">مسئول التمريض</div><div class="line"></div><div>Nursing Incharge</div></div>'
+                    + '</div>'
+                    + '<div class="footer-note">* ترسل الاستمارة في مدير الشؤون الإدارية/المالية نهاية كل أسبوع</div>'
+                    + '<div class="footer-note">* The form shall be sent to Director of administrative affairs at the end of each week.</div>'
+                    + '<button class="print-btn no-print" onclick="window.print()">🖨️ طباعة</button>'
+                    + '</body></html>');
+                printWindow.document.close();
+
+                setTimeout(function () {
+                    printWindow.focus();
+                    printWindow.print();
+                }, 500);
+
                 showToast('جاري فتح نافذة الطباعة...', 'success');
             } catch (err) {
                 console.error('printPdfForm error', err);
-                showToast('حدث خطأ أثناء تجهيز PDF للطباعة.', 'error');
+                showToast('حدث خطأ أثناء تجهيز الكشف للطباعة.', 'error');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = 'طباعة كشف PDF'; }
+                if (btn) { btn.disabled = false; btn.textContent = '🖨️ طباعة كشف PDF'; }
             }
         }
 
