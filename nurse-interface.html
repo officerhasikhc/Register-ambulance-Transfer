@@ -434,6 +434,15 @@
             direction: ltr;
             text-align: left;
         }
+        /* Date picker - ensure visible and LTR for yyyy/mm/dd format */
+        input[type="date"].date-input {
+            min-width: 160px;
+            cursor: pointer;
+        }
+        [dir="rtl"] input[type="date"].date-input {
+            direction: ltr;
+            unicode-bidi: embed;
+        }
 
         .form-group textarea {
             resize: vertical;
@@ -1107,7 +1116,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Departure Date</label>
-                                <input type="text" id="departureDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd">
+                                <input type="date" id="departureDate" class="date-input" required onchange="validateDates()" lang="en" title="yyyy/mm/dd">
                             </div>
                             <div class="form-group">
                                 <label>Departure Time</label>
@@ -1135,7 +1144,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Return Date</label>
-                                <input type="text" id="returnDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd">
+                                <input type="date" id="returnDate" class="date-input" required onchange="validateDates()" lang="en" title="yyyy/mm/dd">
                             </div>
                             <div class="form-group">
                                 <label>Return Time</label>
@@ -1999,8 +2008,8 @@
                 }
             }
 
-            // Fill departure date - yyyy/mm/dd format
-            const depDate = DateTimeFormatter.formatDateForDisplay(trip.departureDate);
+            // Fill departure date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            const depDate = DateTimeFormatter.formatDate(trip.departureDate);
             if (depDate) {
                 document.getElementById('departureDate').value = depDate;
             }
@@ -2016,8 +2025,8 @@
                 }
             }
 
-            // Fill return date - yyyy/mm/dd format
-            const retDate = DateTimeFormatter.formatDateForDisplay(trip.returnDate);
+            // Fill return date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            const retDate = DateTimeFormatter.formatDate(trip.returnDate);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
@@ -2666,9 +2675,9 @@
                 }
             }
             
-            // Fill departure date - yyyy/mm/dd format
+            // Fill departure date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
             if (record['Departure Date']) {
-                const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']);
+                const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
                 if (depDate) {
                     document.getElementById('departureDate').value = depDate;
                 }
@@ -2685,8 +2694,8 @@
                 }
             }
             
-            // Fill return date - yyyy/mm/dd format
-            const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']);
+            // Fill return date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            const retDate = DateTimeFormatter.formatDate(record['Return Date']);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
