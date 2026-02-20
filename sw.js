@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Log PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v27-force-update';
+const CACHE_NAME = 'ambulance-log-v28';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -23,17 +23,18 @@ const urlsToCache = [
   './manifest-ar.json',
   './manifest-en.json',
   './browserconfig.xml',
-  // New optimization files
   './request-optimizer.js',
   './ui-optimizer.js',
   './connection-monitor.js',
   './data-cache.js',
-  './session-manager.js'
+  './session-manager.js',
+  './date-time-formatter.js',
+  './responsive-ui.css'
 ];
 
 // Install event - Skip waiting to activate immediately
 self.addEventListener('install', event => {
-  console.log('[SW] Installing Service Worker v27-force-update...');
+  console.log('[SW] Installing Service Worker v28...');
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -211,7 +212,7 @@ function getAllFromStore(store) {
 
 // Activate event - Take control immediately and clean old caches
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating Service Worker v27-force-update...');
+  console.log('[SW] Activating Service Worker v28...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
