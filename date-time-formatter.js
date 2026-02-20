@@ -20,15 +20,20 @@ const DateTimeFormatter = {
         } 
         // Handle string dates
         else {
-            const str = dateValue.toString().trim();
+            const str = this.ensureEnglishNumerals(dateValue.toString().trim());
             
             // Already in YYYY-MM-DD format
             if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                // Extract and convert each part to ensure English numerals
                 const parts = str.split('-');
-                const year = this.ensureEnglishNumerals(parts[0]);
-                const month = this.ensureEnglishNumerals(parts[1]);
-                const day = this.ensureEnglishNumerals(parts[2]);
+                return `${parts[0]}-${parts[1]}-${parts[2]}`;
+            }
+            
+            // DD/MM/YYYY or DD-MM-YYYY - parse and convert to YYYY-MM-DD
+            const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (ddmmyyyy) {
+                const day = ddmmyyyy[1].padStart(2, '0');
+                const month = ddmmyyyy[2].padStart(2, '0');
+                const year = ddmmyyyy[3];
                 return `${year}-${month}-${day}`;
             }
             
@@ -36,10 +41,10 @@ const DateTimeFormatter = {
             try {
                 date = new Date(str);
                 if (isNaN(date.getTime())) {
-                    return str; // Return as-is if can't parse
+                    return str;
                 }
             } catch (e) {
-                return str; // Return as-is if error
+                return str;
             }
         }
         
@@ -109,12 +114,13 @@ const DateTimeFormatter = {
     },
 
     /**
-     * Format date for display in tables (e.g., "2026-02-20")
+     * Format date for display in tables (e.g., "2026/02/20" - yyyy/mm/dd)
      * @param {string|Date} dateValue - Date value
-     * @returns {string} Formatted date string
+     * @returns {string} Formatted date string in yyyy/mm/dd
      */
     formatDateForDisplay(dateValue) {
-        return this.formatDate(dateValue);
+        const yyyyMmDd = this.formatDate(dateValue);
+        return yyyyMmDd ? yyyyMmDd.replace(/-/g, '/') : '';
     },
 
     /**
