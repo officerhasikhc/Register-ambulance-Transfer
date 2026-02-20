@@ -1196,9 +1196,7 @@
                 <h2 data-en="📋 Previous Records" data-ar="📋 السجلات السابقة">📋 Previous Records</h2>
                 <div class="filter-group">
                     <select id="yearFilter">
-                        <option value="2026">2026</option>
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
+                        <!-- Populated by initializeYearFilter() -->
                     </select>
                     <select id="monthFilter">
                         <option value="all" data-en="All Months" data-ar="كل الشهور">All Months</option>
@@ -1223,7 +1221,7 @@
                         <div style="width:1px;height:28px;background:#e5e7eb;"></div>
                         <div style="text-align:center;line-height:1.2;">
                             <strong id="yearlyTotalCount" style="font-size:18px;color:#059669;">0</strong>
-                            <div style="font-size:10px;color:#6b7280;">year total</div>
+                            <div id="yearlyTotalLabel" style="font-size:10px;color:#6b7280;">2026 total</div>
                         </div>
                         <span style="font-size:12px;color:#6b7280;font-weight:500;">cases</span>
                     </div>
@@ -1779,6 +1777,7 @@
             const msgDiv = document.getElementById('validationMessage');
             document.getElementById('validationText').textContent = message;
             msgDiv.classList.add('show');
+            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function hideValidation() {
@@ -1830,18 +1829,11 @@
                 }
             });
             
-            // Show validation message with all field names
-            // Check if patient name is missing - show specific message
             const patientNameMissing = fieldNames.some(name => name === 'Patient Name');
             const message = patientNameMissing 
                 ? 'Patient name is required' 
                 : `Please fill in: ${fieldNames.join(', ')}`;
             showValidation(message);
-            
-            // Scroll to first empty field
-            if (emptyFields.length > 0) {
-                scrollToField(emptyFields[0].element.id);
-            }
             
             // Remove error classes after animation
             setTimeout(() => {
@@ -2271,16 +2263,8 @@
                 }
             }
             
-            // If there are empty fields, highlight all of them
             if (emptyFields.length > 0) {
-                // Check if patient name is missing - show specific message
-                const patientNameField = emptyFields.find(f => f.element.id === 'patientName');
-                if (patientNameField) {
-                    showValidation('Patient name is required');
-                    scrollToField('patientName');
-                } else {
-                    showAllFieldErrors(emptyFields);
-                }
+                showAllFieldErrors(emptyFields);
                 return;
             }
 
@@ -2457,8 +2441,15 @@
         let nurseRecordsPage = 1;
         const NURSE_RECORDS_PER_PAGE = 5;
 
+        function updateYearlyTotalLabel() {
+            const year = document.getElementById('yearFilter').value;
+            const el = document.getElementById('yearlyTotalLabel');
+            if (el) el.textContent = year + ' total';
+        }
+
         async function loadYearlyTotal() {
             const year = document.getElementById('yearFilter').value;
+            updateYearlyTotalLabel();
             const cacheKey = DataCache.KEYS.RECORDS + '_yearly_' + year;
             const url = `${WEB_APP_URL}?action=getAllRecords&year=${year}`;
             
@@ -2499,10 +2490,10 @@
                             allRecords = [];
                             displayRecords([]);
                         }
-                        // If viewing all months, this IS the yearly data
                         if (month === 'all') {
                             allYearRecords = allRecords;
                             document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
+                            updateYearlyTotalLabel();
                         }
                     },
                     (result) => (result.success && result.data) ? result.data : null
@@ -2988,6 +2979,7 @@
                 monthFilter.value = 'all';
             }
             
+            updateYearlyTotalLabel();
             loadRecords();
         });
         document.getElementById('monthFilter').addEventListener('change', loadRecords);
@@ -3030,11 +3022,22 @@
             }
         }
 
+        function initializeYearFilter() {
+            const select = document.getElementById('yearFilter');
+            const currentYear = new Date().getFullYear();
+            select.innerHTML = '';
+            for (let y = currentYear; y >= currentYear - 5; y--) {
+                select.innerHTML += `<option value="${y}">${y}</option>`;
+            }
+        }
+
         // Set current year and month as default
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
+        initializeYearFilter();
         document.getElementById('yearFilter').value = currentYear;
         document.getElementById('monthFilter').value = currentMonth;
+        updateYearlyTotalLabel();
 
         initializeTimePickers();
         initializeDropdowns();
