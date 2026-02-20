@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Language" content="en-US">
     <title>Ambulance Activity Log - Hasik Health Center</title>
     
     <!-- Performance Optimization Scripts - Load First -->
@@ -289,6 +290,49 @@
             margin-bottom: 20px;
         }
 
+        /* Separate frames for departure and return */
+        .date-time-frame {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .date-time-frame.departure {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .date-time-frame.return {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .date-time-frame h3 {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .date-time-frame.departure h3 {
+            color: #1e40af;
+        }
+
+        .date-time-frame.return h3 {
+            color: #059669;
+        }
+
+        .date-time-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
         .form-group {
             display: flex;
             flex-direction: column;
@@ -311,6 +355,20 @@
             font-size: 15px;
             transition: all 0.2s;
             background: var(--white);
+        }
+
+        /* Force English locale for date inputs and time selects */
+        input[type="date"],
+        .time-select,
+        .ampm-select {
+            direction: ltr;
+            text-align: left;
+            font-variant-numeric: normal;
+            font-feature-settings: normal;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: none;
         }
 
         .form-group input:focus,
@@ -977,51 +1035,67 @@
                         <label data-en="Staff Number" data-ar="الرقم الوظيفي">Staff Number</label>
                         <input type="text" id="staffNumber" required readonly style="background: #f3f4f6; cursor: not-allowed;">
                     </div>
-                    <div class="form-group">
-                        <label data-en="Departure Date" data-ar="تاريخ المغادرة">Departure Date</label>
-                        <input type="date" id="departureDate" required onchange="validateDates()">
-                    </div>
-                    <div class="form-group">
-                        <label data-en="Departure Time" data-ar="ساعة المغادرة">Departure Time</label>
-                        <div class="time-picker-container">
-                            <select id="departureTimeHour" class="time-select" required onchange="validateTimes()">
-                                <option value="">--</option>
-                            </select>
-                            <span class="time-separator">:</span>
-                            <select id="departureTimeMinute" class="time-select" required onchange="validateTimes()">
-                                <option value="">--</option>
-                            </select>
-                            <select id="departureTimeAmPm" class="ampm-select" onchange="validateTimes()">
-                                <option value="AM">AM</option>
-                                <option value="PM">PM</option>
-                            </select>
-                            <input type="hidden" id="departureTime">
+                    <!-- Departure Date & Time Frame -->
+                    <div class="date-time-frame departure">
+                        <h3>🚗 Departure</h3>
+                        <div class="date-time-grid">
+                            <div class="form-group">
+                                <label>Departure Date</label>
+                                <input type="date" id="departureDate" required onchange="validateDates()" lang="en" data-locale="en-US">
+                            </div>
+                            <div class="form-group">
+                                <label>Departure Time</label>
+                                <div class="time-picker-container">
+                                    <select id="departureTimeHour" class="time-select" required onchange="validateTimes()" lang="en">
+                                        <option value="">--</option>
+                                    </select>
+                                    <span class="time-separator">:</span>
+                                    <select id="departureTimeMinute" class="time-select" required onchange="validateTimes()" lang="en">
+                                        <option value="">--</option>
+                                    </select>
+                                    <select id="departureTimeAmPm" class="ampm-select" onchange="validateTimes()" lang="en">
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                    </select>
+                                    <input type="hidden" id="departureTime">
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label data-en="Return Date" data-ar="تاريخ العودة">Return Date</label>
-                        <input type="date" id="returnDate" required onchange="validateDates()">
-                    </div>
-                    <div class="form-group">
-                        <label data-en="Return Time" data-ar="ساعة العودة">Return Time</label>
-                        <div class="time-picker-container">
-                            <select id="returnTimeHour" class="time-select" required onchange="validateTimes()">
-                                <option value="">--</option>
-                            </select>
-                            <span class="time-separator">:</span>
-                            <select id="returnTimeMinute" class="time-select" required onchange="validateTimes()">
-                                <option value="">--</option>
-                            </select>
-                            <select id="returnTimeAmPm" class="ampm-select" onchange="validateTimes()">
-                                <option value="AM">AM</option>
-                                <option value="PM">PM</option>
-                            </select>
-                            <input type="hidden" id="returnTime">
+
+                    <!-- Return Date & Time Frame -->
+                    <div class="date-time-frame return">
+                        <h3>🏥 Return</h3>
+                        <div class="date-time-grid">
+                            <div class="form-group">
+                                <label>Return Date</label>
+                                <input type="date" id="returnDate" required onchange="validateDates()" lang="en" data-locale="en-US">
+                            </div>
+                            <div class="form-group">
+                                <label>Return Time</label>
+                                <div class="time-picker-container">
+                                    <select id="returnTimeHour" class="time-select" required onchange="validateTimes()" lang="en">
+                                        <option value="">--</option>
+                                    </select>
+                                    <span class="time-separator">:</span>
+                                    <select id="returnTimeMinute" class="time-select" required onchange="validateTimes()" lang="en">
+                                        <option value="">--</option>
+                                    </select>
+                                    <select id="returnTimeAmPm" class="ampm-select" onchange="validateTimes()" lang="en">
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                    </select>
+                                    <input type="hidden" id="returnTime">
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="form-group">
                         <label data-en="Transfer Destination" data-ar="الجهة المحول إليها">Transfer Destination</label>
-                        <input type="text" id="destination" required data-placeholder-en="e.g., Hospital/Center name" data-placeholder-ar="مثال: اسم المستشفى/المركز">
+                        <select id="destination" required>
+                            <option value="" data-en="Select Destination" data-ar="اختر الوجهة">Select Destination</option>
+                            <option value="SQH" data-en="SQH" data-ar="السلطان قابوس">SQH</option>
+                        </select>
                     </div>
                     <div class="form-group full-width">
                         <label data-en="Patient Condition / Diagnosis (Optional)" data-ar="حالة المريض / التشخيص (اختياري)">Patient Condition / Diagnosis (Optional)</label>
@@ -1484,6 +1558,18 @@
                 el.placeholder = el.dataset[`placeholder${currentLang === 'en' ? 'En' : 'Ar'}`] || '';
             });
 
+            // Force English locale for date and time inputs regardless of language
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            dateInputs.forEach(input => {
+                input.setAttribute('lang', 'en');
+                input.setAttribute('data-locale', 'en-US');
+            });
+
+            const timeSelects = document.querySelectorAll('.time-select, .ampm-select');
+            timeSelects.forEach(select => {
+                select.setAttribute('lang', 'en');
+            });
+
             initializeDropdowns();
             loadRecords();
             loadPendingTrips();
@@ -1496,22 +1582,38 @@
             const hourSelects = ['departureTimeHour', 'returnTimeHour'];
             const minuteSelects = ['departureTimeMinute', 'returnTimeMinute'];
 
-            // Hours 1-12
+            // Hours 1-12 - Force English numerals
             hourSelects.forEach(id => {
                 const select = document.getElementById(id);
                 select.innerHTML = '<option value="">--</option>';
                 for (let h = 1; h <= 12; h++) {
-                    select.innerHTML += `<option value="${h}">${h}</option>`;
+                    // Force English numerals by converting to string
+                    const englishNum = String(h);
+                    select.innerHTML += `<option value="${englishNum}">${englishNum}</option>`;
                 }
             });
 
-            // Minutes 00-59 (all minutes, not just 5-minute intervals)
+            // Minutes 00-59 - Force English numerals
             minuteSelects.forEach(id => {
                 const select = document.getElementById(id);
                 select.innerHTML = '<option value="">--</option>';
                 for (let m = 0; m < 60; m++) {
-                    const minute = m.toString().padStart(2, '0');
+                    const minute = String(m).padStart(2, '0');
                     select.innerHTML += `<option value="${minute}">${minute}</option>`;
+                }
+            });
+
+            // Force English locale for date inputs
+            const dateInputs = ['departureDate', 'returnDate'];
+            dateInputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.setAttribute('lang', 'en');
+                    input.setAttribute('data-locale', 'en-US');
+                    // Ensure date picker shows English
+                    input.addEventListener('focus', function() {
+                        this.setAttribute('lang', 'en');
+                    });
                 }
             });
         }
@@ -2048,7 +2150,8 @@
             updateTimeInputs();
 
             const formData = {
-                action: 'submitCase',
+                action: editingRecordId ? 'updateRecord' : 'submitCase',
+                id: editingRecordId || undefined,
                 vehicleNumber: document.getElementById('vehicleNumber').value,
                 driverName: document.getElementById('driverName').value,
                 staffNumber: document.getElementById('staffNumber').value,
@@ -2097,7 +2200,22 @@
                     selectedTripIndex = null;
                 }
                 
-                document.getElementById('successModal').classList.add('active');
+                // Show success message
+                if (editingRecordId) {
+                    alert('Record updated successfully!');
+                    editingRecordId = null;
+                    // Reset form header
+                    const formHeader = document.querySelector('.form-header h2');
+                    formHeader.textContent = currentLang === 'en' ? 'Register New Ambulance Case' : 'تسجيل حالة إسعاف جديدة';
+                    formHeader.style.color = '';
+                    // Reset submit button
+                    const submitBtn = document.getElementById('submitBtn');
+                    submitBtn.textContent = currentLang === 'en' ? 'Submit Record' : 'إرسال السجل';
+                    submitBtn.style.background = '';
+                } else {
+                    document.getElementById('successModal').classList.add('active');
+                }
+                
                 resetForm();
                 
                 // Refresh pending trips and records, then scroll appropriately
@@ -2129,6 +2247,18 @@
             document.getElementById('ambulanceForm').reset();
             document.getElementById('staffNumber').style.background = '#f3f4f6';
             hideValidation();
+            editingRecordId = null;
+            
+            // Reset form header
+            const formHeader = document.querySelector('.form-header h2');
+            formHeader.textContent = currentLang === 'en' ? 'Register New Ambulance Case' : 'تسجيل حالة إسعاف جديدة';
+            formHeader.style.color = '';
+            
+            // Reset submit button
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.textContent = currentLang === 'en' ? 'Submit Record' : 'إرسال السجل';
+            submitBtn.style.background = '';
+            
             // Restore default vehicle after reset
             const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
             if (defaultVehicle) {
@@ -2260,13 +2390,149 @@
         let currentReportPage = 1;
         const RECORDS_PER_PAGE = 15;
 
+        let editingRecordId = null; // Track which record is being edited
+
         function viewRecord(record) {
-            // Show single record in printable format
+            // Show single record in printable format with edit button
             reportRecords = [record];
             currentReportPage = 1;
             generateReportContent();
+            
+            // Add edit button to report header
+            const reportHeader = document.querySelector('.report-header');
+            const existingEditBtn = document.getElementById('editRecordBtn');
+            if (!existingEditBtn) {
+                const editBtn = document.createElement('button');
+                editBtn.id = 'editRecordBtn';
+                editBtn.className = 'btn-print';
+                editBtn.style.background = '#10b981';
+                editBtn.style.marginRight = '10px';
+                editBtn.textContent = 'Edit Record';
+                editBtn.onclick = () => editRecord(record);
+                reportHeader.querySelector('.report-actions').insertBefore(editBtn, reportHeader.querySelector('.btn-print'));
+            } else {
+                existingEditBtn.onclick = () => editRecord(record);
+            }
+            
             document.getElementById('reportModal').classList.add('show');
             document.getElementById('reportPagination').style.display = 'none';
+        }
+
+        function editRecord(record) {
+            // Close the modal
+            document.getElementById('reportModal').classList.remove('show');
+            
+            // Set editing mode
+            editingRecordId = record.ID;
+            
+            // Load record data into form
+            loadRecordIntoForm(record);
+            
+            // Scroll to form
+            setTimeout(() => {
+                document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        }
+
+        function loadRecordIntoForm(record) {
+            // Update form header to show edit mode
+            const formHeader = document.querySelector('.form-header h2');
+            formHeader.textContent = 'Edit Ambulance Case';
+            formHeader.style.color = '#10b981';
+            
+            // Fill vehicle number
+            if (record['Vehicle Number']) {
+                const vehicleSelect = document.getElementById('vehicleNumber');
+                vehicleSelect.value = record['Vehicle Number'];
+            }
+            
+            // Fill driver name
+            if (record['Driver Name']) {
+                const driverSelect = document.getElementById('driverName');
+                // Find driver by name
+                const driverOption = Array.from(driverSelect.options).find(opt => opt.text.includes(record['Driver Name']));
+                if (driverOption) {
+                    driverSelect.value = driverOption.value;
+                    updateStaffNumber();
+                }
+            }
+            
+            // Fill departure date - force English format
+            if (record['Departure Date']) {
+                const depDate = parseDate(record['Departure Date']);
+                if (depDate) {
+                    document.getElementById('departureDate').value = depDate;
+                }
+            }
+            
+            // Parse departure time
+            if (record['Departure Time']) {
+                const timeParts = record['Departure Time'].toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                if (timeParts) {
+                    document.getElementById('departureTimeHour').value = timeParts[1];
+                    document.getElementById('departureTimeMinute').value = timeParts[2];
+                    document.getElementById('departureTimeAmPm').value = timeParts[3].toUpperCase();
+                }
+            }
+            
+            // Fill return date - force English format
+            const retDate = parseDate(record['Return Date']);
+            if (retDate) {
+                document.getElementById('returnDate').value = retDate;
+            }
+            
+            // Parse return time
+            if (record['Return Time'] && record['Return Time'].toString().trim() !== '') {
+                const timeParts = record['Return Time'].toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                if (timeParts) {
+                    document.getElementById('returnTimeHour').value = timeParts[1];
+                    document.getElementById('returnTimeMinute').value = timeParts[2];
+                    document.getElementById('returnTimeAmPm').value = timeParts[3].toUpperCase();
+                }
+            }
+            
+            // Fill destination
+            if (record['Destination']) {
+                document.getElementById('destination').value = record['Destination'];
+            }
+            
+            // Fill diagnosis
+            if (record['Patient Condition / Diagnosis']) {
+                document.getElementById('diagnosis').value = record['Patient Condition / Diagnosis'];
+            }
+            
+            // Fill nurse name
+            if (record['Nurse Name']) {
+                document.getElementById('nurseName').value = record['Nurse Name'];
+            }
+            
+            updateTimeInputs();
+            
+            // Update submit button text
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.textContent = 'Update Record';
+            submitBtn.style.background = '#10b981';
+        }
+
+        function parseDate(dateValue) {
+            if (!dateValue) return '';
+            if (dateValue instanceof Date) {
+                return dateValue.toISOString().split('T')[0];
+            }
+            const str = dateValue.toString().trim();
+            // Handle YYYY-MM-DD format
+            if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+            // Handle other date formats
+            try {
+                const date = new Date(str);
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            } catch (e) {}
+            return str.split('T')[0];
         }
 
         function viewAllRecords() {
@@ -2476,6 +2742,26 @@
 
         initializeTimePickers();
         initializeDropdowns();
+        
+        // Force English locale for date and time inputs on page load
+        setTimeout(() => {
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            dateInputs.forEach(input => {
+                input.setAttribute('lang', 'en');
+                input.setAttribute('data-locale', 'en-US');
+                // Force English locale for date picker
+                input.addEventListener('focus', function() {
+                    this.setAttribute('lang', 'en');
+                    this.setAttribute('data-locale', 'en-US');
+                });
+            });
+
+            const timeSelects = document.querySelectorAll('.time-select, .ampm-select');
+            timeSelects.forEach(select => {
+                select.setAttribute('lang', 'en');
+            });
+        }, 100);
+        
         loadUserSession();
         loadRecords();
         loadPendingTrips();
