@@ -617,6 +617,43 @@
             border-radius: 16px;
             padding: 24px;
             box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        .loading-spinner.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #1e40af;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .records-section.loading {
+            min-height: 200px;
+        }
+
+        .records-section.loading #recordsContainer {
+            opacity: 0.5;
+            pointer-events: none;
         }
 
         .records-header {
@@ -1114,10 +1151,6 @@
                         <label>Patient Name</label>
                         <input type="text" id="patientName" required placeholder="Enter patient name (English)" lang="en">
                     </div>
-                    <div class="form-group full-width">
-                        <label data-en="Patient Condition / Diagnosis (Optional)" data-ar="حالة المريض / التشخيص (اختياري)">Patient Condition / Diagnosis (Optional)</label>
-                        <textarea id="diagnosis" rows="2" style="min-height: 50px; max-height: 80px; font-size: 13px;" data-placeholder-en="Optional - Enter patient condition..." data-placeholder-ar="اختياري - أدخل حالة المريض..."></textarea>
-                    </div>
                     <div class="form-group">
                         <label data-en="Registered By (Nurse Name)" data-ar="المسجل (اسم الممرضة)">Registered By (Nurse Name)</label>
                         <input type="text" id="nurseName" required>
@@ -1163,6 +1196,9 @@
                         Print Report
                     </button>
                 </div>
+            </div>
+            <div class="loading-spinner" id="recordsLoadingSpinner">
+                <div class="spinner"></div>
             </div>
             <div id="recordsContainer"></div>
         </div>
@@ -2027,7 +2063,6 @@
             }
             
             document.getElementById('patientName').value = '';
-            document.getElementById('diagnosis').value = '';
             
             // Clear time fields
             document.getElementById('departureTimeHour').value = '';
@@ -2268,7 +2303,6 @@
                 returnTime: document.getElementById('returnTime').value,
                 destination: destinationValue,
                 patientName: document.getElementById('patientName').value,
-                diagnosis: document.getElementById('diagnosis').value,
                 nurseName: document.getElementById('nurseName').value
             };
 
@@ -2410,27 +2444,43 @@
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
 
+            // Show loading spinner
+            const recordsSection = document.querySelector('.records-section');
+            const loadingSpinner = document.getElementById('recordsLoadingSpinner');
+            if (recordsSection && loadingSpinner) {
+                recordsSection.classList.add('loading');
+                loadingSpinner.classList.add('active');
+            }
+
             let url = `${WEB_APP_URL}?action=getAllRecords&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
 
-            // Use DataCache: show cached records instantly, fetch fresh in background
-            const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month;
-            await DataCache.fetchWithCache(
-                url,
-                cacheKey,
-                DataCache.EXPIRY.RECORDS,
-                (records) => {
-                    if (records) {
-                        allRecords = records;
-                        nurseRecordsPage = 1;
-                        displayRecords(records);
-                    } else {
-                        allRecords = [];
-                        displayRecords([]);
-                    }
-                },
-                (result) => (result.success && result.data) ? result.data : null
-            );
+            try {
+                // Use DataCache: show cached records instantly, fetch fresh in background
+                const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month;
+                await DataCache.fetchWithCache(
+                    url,
+                    cacheKey,
+                    DataCache.EXPIRY.RECORDS,
+                    (records) => {
+                        if (records) {
+                            allRecords = records;
+                            nurseRecordsPage = 1;
+                            displayRecords(records);
+                        } else {
+                            allRecords = [];
+                            displayRecords([]);
+                        }
+                    },
+                    (result) => (result.success && result.data) ? result.data : null
+                );
+            } finally {
+                // Hide loading spinner
+                if (recordsSection && loadingSpinner) {
+                    recordsSection.classList.remove('loading');
+                    loadingSpinner.classList.remove('active');
+                }
+            }
         }
 
         function displayRecords(records) {
@@ -2665,11 +2715,6 @@
                 document.getElementById('patientName').value = record['Patient Name'];
             }
             
-            // Fill diagnosis
-            if (record['Patient Condition / Diagnosis']) {
-                document.getElementById('diagnosis').value = record['Patient Condition / Diagnosis'];
-            }
-            
             // Fill nurse name
             if (record['Nurse Name']) {
                 document.getElementById('nurseName').value = record['Nurse Name'];
@@ -2779,8 +2824,7 @@
                             <th style="width: 10%;">Departure</th>
                             <th style="width: 10%;">Return</th>
                             <th style="width: 15%;">Destination</th>
-                            <th style="width: 12%;">Patient Name</th>
-                            <th style="width: 12%;">Diagnosis</th>
+                            <th style="width: 15%;">Patient Name</th>
                             <th style="width: 10%;">Nurse</th>
                         </tr>
                     </thead>
@@ -2798,7 +2842,6 @@
                         <td>${record['Return Time'] || '-'}</td>
                         <td>${record['Destination'] || '-'}</td>
                         <td>${record['Patient Name'] || '-'}</td>
-                        <td>${record['Patient Condition / Diagnosis'] || '-'}</td>
                         <td>${record['Nurse Name'] || '-'}</td>
                     </tr>
                 `;

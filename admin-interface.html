@@ -490,6 +490,40 @@
 
         .table-container {
             overflow-x: auto;
+            position: relative;
+            min-height: 200px;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        .loading-spinner.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #1e40af;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .table-container.loading #recordsContainer {
+            opacity: 0.5;
+            pointer-events: none;
         }
 
         .records-table {
@@ -1871,6 +1905,9 @@
                     </div>
 
                     <div class="table-container">
+                        <div class="loading-spinner" id="recordsLoadingSpinner">
+                            <div class="spinner"></div>
+                        </div>
                         <div id="recordsContainer"></div>
                     </div>
 
@@ -2224,26 +2261,42 @@
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
 
+            // Show loading spinner
+            const tableContainer = document.querySelector('.table-container');
+            const loadingSpinner = document.getElementById('recordsLoadingSpinner');
+            if (tableContainer && loadingSpinner) {
+                tableContainer.classList.add('loading');
+                loadingSpinner.classList.add('active');
+            }
+
             let url = `${WEB_APP_URL}?action=getAllRecords`;
             if (year !== 'all') url += `&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
             if (search) url += `&search=${encodeURIComponent(search)}`;
 
-            // Use DataCache: show cached records instantly, fetch fresh in background
-            const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
-            await DataCache.fetchWithCache(
-                url,
-                cacheKey,
-                DataCache.EXPIRY.RECORDS,
-                (records) => {
-                    allRecords = records || [];
-                    const totalPages = Math.ceil(allRecords.length / recordsPerPage);
-                    if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-                    if (currentPage < 1) currentPage = 1;
-                    displayRecordsWithPagination();
-                },
-                (result) => (result.success && result.data) ? result.data : null
-            );
+            try {
+                // Use DataCache: show cached records instantly, fetch fresh in background
+                const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
+                await DataCache.fetchWithCache(
+                    url,
+                    cacheKey,
+                    DataCache.EXPIRY.RECORDS,
+                    (records) => {
+                        allRecords = records || [];
+                        const totalPages = Math.ceil(allRecords.length / recordsPerPage);
+                        if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+                        if (currentPage < 1) currentPage = 1;
+                        displayRecordsWithPagination();
+                    },
+                    (result) => (result.success && result.data) ? result.data : null
+                );
+            } finally {
+                // Hide loading spinner
+                if (tableContainer && loadingSpinner) {
+                    tableContainer.classList.remove('loading');
+                    loadingSpinner.classList.remove('active');
+                }
+            }
         }
 
         function displayRecordsWithPagination() {
