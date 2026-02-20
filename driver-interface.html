@@ -1651,7 +1651,7 @@
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify(tripData)
                 }).then(() => {
-                    setTimeout(syncCompleteDeparture, 500);
+                    setTimeout(syncCompleteDeparture, 800);
                 }).catch(error => {
                     console.error('Background fetch failed, queuing offline:', error);
                     queueOfflineData(tripData);
@@ -1843,7 +1843,7 @@
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify(returnData)
                 }).then(() => {
-                    setTimeout(syncComplete, 500);
+                    setTimeout(syncComplete, 1200);
                 }).catch(error => {
                     console.error('Background fetch failed, queuing offline:', error);
                     queueOfflineData(returnData);
@@ -2164,6 +2164,9 @@
                 if (trip.status === 'saving' || trip.statusText === 'جاري الحفظ...') {
                     statusText = 'جاري الحفظ...';
                     statusClass = 'status-pending';
+                } else if (isSyncing && isComplete) {
+                    statusText = 'جاري الحفظ...';
+                    statusClass = 'status-pending';
                 } else if (trip.statusText === 'تم تسجيل الرحلة بنجاح') {
                     statusText = 'مكتملة ✓';
                     statusClass = 'status-complete';
@@ -2338,8 +2341,8 @@
             loadPendingTrip();
         }
         
-        // Check for updates every 30 seconds (reduced frequency)
-        setInterval(autoRefreshHistory, 30000);
+        // Check for updates every 12 seconds (faster sync with nurse page)
+        setInterval(autoRefreshHistory, 12000);
 
         // ============================================
         // OFFLINE SUPPORT | دعم العمل بدون إنترنت
