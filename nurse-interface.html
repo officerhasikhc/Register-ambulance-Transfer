@@ -12,6 +12,9 @@
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     
+    <!-- Date and Time Formatter - English Locale Enforcer -->
+    <script src="date-time-formatter.js"></script>
+    
     <script src="session-manager.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
@@ -365,6 +368,25 @@
             text-align: left;
             font-variant-numeric: normal;
             font-feature-settings: normal;
+        }
+
+        /* Force English numerals in all date/time displays */
+        .record-table td,
+        .record-table th,
+        .report-content td,
+        .report-content th,
+        #recordsContainer,
+        #reportContent {
+            font-variant-numeric: normal;
+            font-feature-settings: normal;
+            unicode-bidi: embed;
+            direction: ltr;
+        }
+
+        /* Ensure date/time values display in English */
+        input[type="date"]::before,
+        input[type="date"]::after {
+            font-variant-numeric: normal;
         }
 
         input[type="date"]::-webkit-calendar-picker-indicator {
@@ -1528,12 +1550,13 @@
             
             addDiagMessage('info', `========== TESTING DRIVER RETURN FOR ${staffNumber} ==========`);
             
-            const now = new Date();
-            const date = now.toISOString().split('T')[0];
-            let hours = now.getHours();
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12 || 12;
+            // Use DateTimeFormatter for English format
+            const date = DateTimeFormatter.getCurrentDate();
+            const timeStr = DateTimeFormatter.getCurrentTime();
+            const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            let hours = timeMatch ? parseInt(timeMatch[1]) : 12;
+            const minutes = timeMatch ? timeMatch[2] : '00';
+            const ampm = timeMatch ? timeMatch[3] : 'AM';
             const time = `${hours}:${minutes} ${ampm}`;
             
             const returnData = {
@@ -1888,8 +1911,8 @@
                 const hasReturn = trip.status === 'complete' || (returnDateExists && returnTimeExists);
                 
                 const tripIdDisplay = trip.tripId || '-';
-                const depDateClean = (trip.departureDate || '').toString().split('T')[0];
-                const retDateClean = (trip.returnDate || '').toString().split('T')[0];
+                const depDateClean = DateTimeFormatter.formatDateForDisplay(trip.departureDate);
+                const retDateClean = DateTimeFormatter.formatDateForDisplay(trip.returnDate);
                 
                 return `
                 <div class="pending-trip-card" id="trip-card-${index}" data-trip-id="${trip.tripId}" style="border-right: 4px solid ${hasReturn ? '#10b981' : '#f59e0b'}; transition: all 0.4s ease-out;">
@@ -1979,57 +2002,36 @@
                 }
             }
 
-            // Helper function to parse date from various formats
-            function parseDate(dateValue) {
-                if (!dateValue) return '';
-                const dateStr = dateValue.toString().trim();
-                if (!dateStr) return '';
-                
-                // Already in YYYY-MM-DD format
-                if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                    return dateStr;
-                }
-                
-                // Try to parse as Date object string (e.g., "Sat Feb 08 2026...")
-                try {
-                    const date = new Date(dateStr);
-                    if (!isNaN(date.getTime())) {
-                        return date.toISOString().split('T')[0];
-                    }
-                } catch (e) {}
-                
-                // Return as-is if can't parse
-                return dateStr;
-            }
-            
-            // Fill departure date
-            const depDate = parseDate(trip.departureDate);
+            // Fill departure date - use DateTimeFormatter for English format
+            const depDate = DateTimeFormatter.formatDate(trip.departureDate);
             if (depDate) {
                 document.getElementById('departureDate').value = depDate;
             }
             
-            // Parse departure time
+            // Parse departure time - use DateTimeFormatter for English format
             if (trip.departureTime) {
-                const timeParts = trip.departureTime.toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                const formattedTime = DateTimeFormatter.formatTime(trip.departureTime);
+                const timeParts = formattedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
                 if (timeParts) {
-                    document.getElementById('departureTimeHour').value = timeParts[1];
-                    document.getElementById('departureTimeMinute').value = timeParts[2];
+                    document.getElementById('departureTimeHour').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[1]);
+                    document.getElementById('departureTimeMinute').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[2]);
                     document.getElementById('departureTimeAmPm').value = timeParts[3].toUpperCase();
                 }
             }
 
-            // Fill return date
-            const retDate = parseDate(trip.returnDate);
+            // Fill return date - use DateTimeFormatter for English format
+            const retDate = DateTimeFormatter.formatDate(trip.returnDate);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
 
-            // Parse return time
+            // Parse return time - use DateTimeFormatter for English format
             if (trip.returnTime && trip.returnTime.toString().trim() !== '') {
-                const timeParts = trip.returnTime.toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                const formattedTime = DateTimeFormatter.formatTime(trip.returnTime);
+                const timeParts = formattedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
                 if (timeParts) {
-                    document.getElementById('returnTimeHour').value = timeParts[1];
-                    document.getElementById('returnTimeMinute').value = timeParts[2];
+                    document.getElementById('returnTimeHour').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[1]);
+                    document.getElementById('returnTimeMinute').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[2]);
                     document.getElementById('returnTimeAmPm').value = timeParts[3].toUpperCase();
                 }
             }
@@ -2518,7 +2520,7 @@
                     <tbody>
                         ${pageRecords.map(record => {
                             const recordId = record.ID || '-';
-                            const depDate = (record['Departure Date'] || '').toString().split('T')[0];
+                            const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']);
                             return `
                             <tr>
                                 <td><span style="background:#e0e7ff;color:#1e40af;padding:4px 10px;border-radius:8px;font-size:13px;font-weight:700;">${recordId}</span></td>
@@ -2649,7 +2651,7 @@
             
             // Fill departure date - force English format
             if (record['Departure Date']) {
-                const depDate = parseDate(record['Departure Date']);
+                const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
                 if (depDate) {
                     document.getElementById('departureDate').value = depDate;
                 }
@@ -2657,26 +2659,28 @@
             
             // Parse departure time
             if (record['Departure Time']) {
-                const timeParts = record['Departure Time'].toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                const formattedTime = DateTimeFormatter.formatTime(record['Departure Time']);
+                const timeParts = formattedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
                 if (timeParts) {
-                    document.getElementById('departureTimeHour').value = timeParts[1];
-                    document.getElementById('departureTimeMinute').value = timeParts[2];
+                    document.getElementById('departureTimeHour').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[1]);
+                    document.getElementById('departureTimeMinute').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[2]);
                     document.getElementById('departureTimeAmPm').value = timeParts[3].toUpperCase();
                 }
             }
             
             // Fill return date - force English format
-            const retDate = parseDate(record['Return Date']);
+            const retDate = DateTimeFormatter.formatDate(record['Return Date']);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
             
             // Parse return time
             if (record['Return Time'] && record['Return Time'].toString().trim() !== '') {
-                const timeParts = record['Return Time'].toString().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                const formattedTime = DateTimeFormatter.formatTime(record['Return Time']);
+                const timeParts = formattedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
                 if (timeParts) {
-                    document.getElementById('returnTimeHour').value = timeParts[1];
-                    document.getElementById('returnTimeMinute').value = timeParts[2];
+                    document.getElementById('returnTimeHour').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[1]);
+                    document.getElementById('returnTimeMinute').value = DateTimeFormatter.ensureEnglishNumerals(timeParts[2]);
                     document.getElementById('returnTimeAmPm').value = timeParts[3].toUpperCase();
                 }
             }
@@ -2729,24 +2733,8 @@
         }
 
         function parseDate(dateValue) {
-            if (!dateValue) return '';
-            if (dateValue instanceof Date) {
-                return dateValue.toISOString().split('T')[0];
-            }
-            const str = dateValue.toString().trim();
-            // Handle YYYY-MM-DD format
-            if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-            // Handle other date formats
-            try {
-                const date = new Date(str);
-                if (!isNaN(date.getTime())) {
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                }
-            } catch (e) {}
-            return str.split('T')[0];
+            // Use DateTimeFormatter for consistent English formatting
+            return DateTimeFormatter.formatDate(dateValue);
         }
 
         function viewAllRecords() {
@@ -2792,8 +2780,7 @@
             const pageRecords = reportRecords.slice(startIdx, endIdx);
             
             const now = new Date();
-            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                               'July', 'August', 'September', 'October', 'November', 'December'];
+            // monthNames are already in English, no need to change
             
             const yearFilter = document.getElementById('yearFilter').value;
             const monthFilter = document.getElementById('monthFilter').value;
@@ -2835,11 +2822,11 @@
                 html += `
                     <tr>
                         <td>${startIdx + idx + 1}</td>
-                        <td>${(record['Departure Date'] || '-').toString().split('T')[0]}</td>
+                        <td>${DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-'}</td>
                         <td>${record['Vehicle Number'] || '-'}</td>
                         <td>${record['Driver Name'] || '-'}</td>
-                        <td>${record['Departure Time'] || '-'}</td>
-                        <td>${record['Return Time'] || '-'}</td>
+                        <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
+                        <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
                         <td>${record['Destination'] || '-'}</td>
                         <td>${record['Patient Name'] || '-'}</td>
                         <td>${record['Nurse Name'] || '-'}</td>
@@ -2852,7 +2839,7 @@
                 </table>
                 
                 <div class="report-footer">
-                    <p>Generated on ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p>Generated on ${DateTimeFormatter.formatDateForReport(now)} at ${DateTimeFormatter.formatTimeForReport(DateTimeFormatter.getCurrentTime())}</p>
                     ${totalPages > 1 ? `<p>Page ${currentReportPage} of ${totalPages}</p>` : ''}
                 </div>
             `;
