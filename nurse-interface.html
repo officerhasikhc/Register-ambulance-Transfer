@@ -361,7 +361,7 @@
         }
 
         /* Force English locale for date inputs and time selects */
-        input[type="date"],
+        .date-input,
         .time-select,
         .ampm-select {
             direction: ltr;
@@ -383,15 +383,6 @@
             direction: ltr;
         }
 
-        /* Ensure date/time values display in English */
-        input[type="date"]::before,
-        input[type="date"]::after {
-            font-variant-numeric: normal;
-        }
-
-        input[type="date"]::-webkit-calendar-picker-indicator {
-            filter: none;
-        }
 
         .form-group input:focus,
         .form-group textarea:focus,
@@ -439,7 +430,7 @@
             animation: shake 0.3s ease-in-out;
         }
 
-        input[type="date"] {
+        .date-input {
             direction: ltr;
             text-align: left;
         }
@@ -1116,7 +1107,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Departure Date</label>
-                                <input type="date" id="departureDate" required onchange="validateDates()" lang="en" data-locale="en-US">
+                                <input type="text" id="departureDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd">
                             </div>
                             <div class="form-group">
                                 <label>Departure Time</label>
@@ -1144,7 +1135,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Return Date</label>
-                                <input type="date" id="returnDate" required onchange="validateDates()" lang="en" data-locale="en-US">
+                                <input type="text" id="returnDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd">
                             </div>
                             <div class="form-group">
                                 <label>Return Time</label>
@@ -1647,7 +1638,7 @@
             });
 
             // Force English locale for date and time inputs regardless of language
-            const dateInputs = document.querySelectorAll('input[type="date"]');
+            const dateInputs = document.querySelectorAll('.date-input');
             dateInputs.forEach(input => {
                 input.setAttribute('lang', 'en');
                 input.setAttribute('data-locale', 'en-US');
@@ -2008,8 +1999,8 @@
                 }
             }
 
-            // Fill departure date - use DateTimeFormatter for English format
-            const depDate = DateTimeFormatter.formatDate(trip.departureDate);
+            // Fill departure date - yyyy/mm/dd format
+            const depDate = DateTimeFormatter.formatDateForDisplay(trip.departureDate);
             if (depDate) {
                 document.getElementById('departureDate').value = depDate;
             }
@@ -2025,8 +2016,8 @@
                 }
             }
 
-            // Fill return date - use DateTimeFormatter for English format
-            const retDate = DateTimeFormatter.formatDate(trip.returnDate);
+            // Fill return date - yyyy/mm/dd format
+            const retDate = DateTimeFormatter.formatDateForDisplay(trip.returnDate);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
@@ -2297,9 +2288,9 @@
                 vehicleNumber: document.getElementById('vehicleNumber').value,
                 driverName: document.getElementById('driverName').value,
                 staffNumber: document.getElementById('staffNumber').value,
-                departureDate: document.getElementById('departureDate').value,
+                departureDate: DateTimeFormatter.formatDateForApi(document.getElementById('departureDate').value),
                 departureTime: document.getElementById('departureTime').value,
-                returnDate: document.getElementById('returnDate').value,
+                returnDate: DateTimeFormatter.formatDateForApi(document.getElementById('returnDate').value),
                 returnTime: document.getElementById('returnTime').value,
                 destination: destinationValue,
                 patientName: document.getElementById('patientName').value,
@@ -2675,9 +2666,9 @@
                 }
             }
             
-            // Fill departure date - force English format
+            // Fill departure date - yyyy/mm/dd format
             if (record['Departure Date']) {
-                const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
+                const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']);
                 if (depDate) {
                     document.getElementById('departureDate').value = depDate;
                 }
@@ -2694,8 +2685,8 @@
                 }
             }
             
-            // Fill return date - force English format
-            const retDate = DateTimeFormatter.formatDate(record['Return Date']);
+            // Fill return date - yyyy/mm/dd format
+            const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']);
             if (retDate) {
                 document.getElementById('returnDate').value = retDate;
             }
@@ -3044,7 +3035,7 @@
         
         // Force English locale for date and time inputs on page load
         setTimeout(() => {
-            const dateInputs = document.querySelectorAll('input[type="date"]');
+            const dateInputs = document.querySelectorAll('.date-input');
             dateInputs.forEach(input => {
                 input.setAttribute('lang', 'en');
                 input.setAttribute('data-locale', 'en-US');
