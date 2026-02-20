@@ -2814,6 +2814,8 @@
             updatePaginationButtons();
         }
 
+        const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
         function generateReportContent() {
             const container = document.getElementById('reportContent');
             const totalPages = Math.ceil(reportRecords.length / RECORDS_PER_PAGE);
@@ -2822,7 +2824,6 @@
             const pageRecords = reportRecords.slice(startIdx, endIdx);
             
             const now = new Date();
-            // monthNames are already in English, no need to change
             
             const yearFilter = document.getElementById('yearFilter').value;
             const monthFilter = document.getElementById('monthFilter').value;
@@ -2926,7 +2927,6 @@
             
             const yearFilter = document.getElementById('yearFilter').value;
             const monthFilter = document.getElementById('monthFilter').value;
-            const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
             
             let periodText = 'All Records';
             if (monthFilter !== 'all' && yearFilter !== 'all') {
