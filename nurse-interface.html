@@ -718,6 +718,15 @@
             color: var(--primary-blue);
         }
 
+        .action-btn.edit {
+            background: #10b981;
+            color: white;
+        }
+
+        .action-btn.edit:hover {
+            background: #059669;
+        }
+
         .action-btn:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow);
@@ -1037,7 +1046,7 @@
                     </div>
                     <!-- Departure Date & Time Frame -->
                     <div class="date-time-frame departure">
-                        <h3>🚗 Departure</h3>
+                        <h3>Departure</h3>
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Departure Date</label>
@@ -1065,7 +1074,7 @@
 
                     <!-- Return Date & Time Frame -->
                     <div class="date-time-frame return">
-                        <h3>🏥 Return</h3>
+                        <h3>Return</h3>
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Return Date</label>
@@ -2035,6 +2044,13 @@
                         }));
                         localStorage.setItem('ambulance_vehicles', JSON.stringify(VEHICLES_DATA));
                         populateVehicleDropdown();
+                        
+                        // Force select default vehicle after loading from server
+                        const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
+                        if (defaultVehicle) {
+                            const vehicleSelect = document.getElementById('vehicleNumber');
+                            vehicleSelect.value = defaultVehicle.number;
+                        }
                     }
                 },
                 (result) => (result.success && result.vehicles) ? result.vehicles : null
@@ -2043,6 +2059,8 @@
 
         function populateVehicleDropdown() {
             const vehicleSelect = document.getElementById('vehicleNumber');
+            if (!vehicleSelect) return;
+            
             const currentValue = vehicleSelect.value;
             const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
             
@@ -2054,10 +2072,11 @@
                 vehicleSelect.innerHTML += `<option value="${vehicle.number}">${vehicle.number}</option>`;
             });
 
-            // Always select default vehicle if one is set by admin
+            // Always select default vehicle if one is set by admin (priority)
             if (defaultVehicle) {
                 vehicleSelect.value = defaultVehicle.number;
             } else if (currentValue) {
+                // Keep current selection if no default
                 vehicleSelect.value = currentValue;
             }
         }
@@ -2073,8 +2092,17 @@
                 driverSelect.innerHTML += `<option value="${driver.nameEn}" data-staff="${driver.staffNumber}" data-type="${driver.type}">${displayName}${typeLabel}</option>`;
             });
 
-            // Load vehicles from server in background
-            loadVehiclesFromServer();
+            // Load vehicles from server in background and ensure default is selected
+            loadVehiclesFromServer().then(() => {
+                // Double-check default vehicle is selected after server load
+                const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
+                if (defaultVehicle) {
+                    const vehicleSelect = document.getElementById('vehicleNumber');
+                    if (vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
+                        vehicleSelect.value = defaultVehicle.number;
+                    }
+                }
+            });
         }
 
         function updateStaffNumber() {
@@ -2352,6 +2380,9 @@
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
                                             ${currentLang === 'en' ? 'View' : 'عرض'}
                                         </button>
+                                        <button class="action-btn edit" onclick='editRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="background: #10b981; margin-left: 8px;">
+                                            ${currentLang === 'en' ? 'Edit' : 'تعديل'}
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -2419,8 +2450,11 @@
         }
 
         function editRecord(record) {
-            // Close the modal
-            document.getElementById('reportModal').classList.remove('show');
+            // Close the modal if open
+            const reportModal = document.getElementById('reportModal');
+            if (reportModal && reportModal.classList.contains('show')) {
+                reportModal.classList.remove('show');
+            }
             
             // Set editing mode
             editingRecordId = record.ID;
@@ -2430,7 +2464,10 @@
             
             // Scroll to form
             setTimeout(() => {
-                document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const formCard = document.querySelector('.form-card');
+                if (formCard) {
+                    formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             }, 300);
         }
 
@@ -2761,6 +2798,18 @@
                 select.setAttribute('lang', 'en');
             });
         }, 100);
+        
+        // Ensure default vehicle is selected after vehicles load from server
+        setTimeout(async () => {
+            await loadVehiclesFromServer();
+            const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
+            if (defaultVehicle) {
+                const vehicleSelect = document.getElementById('vehicleNumber');
+                if (vehicleSelect) {
+                    vehicleSelect.value = defaultVehicle.number;
+                }
+            }
+        }, 500);
         
         loadUserSession();
         loadRecords();
