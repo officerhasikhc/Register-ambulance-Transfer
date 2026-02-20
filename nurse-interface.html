@@ -439,7 +439,7 @@
         }
         .field-attention input,
         .field-attention select {
-            animation: pulse-attention 1.2s ease-in-out 2;
+            animation: pulse-attention 1.2s ease-in-out 5;
         }
         
         /* Ensure validation message is visible */
@@ -2127,7 +2127,7 @@
                 });
                 setTimeout(() => {
                     [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
-                }, 2500);
+                }, 6000);
             }, 400);
         }
 
