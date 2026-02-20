@@ -1283,10 +1283,13 @@
             if (trips !== null && trips !== undefined) {
                 // Server data is available — treat it as authoritative
                 if (trips.length > 0) {
-                    const serverTrip = trips.find(t => 
-                        t.staffNumber && t.staffNumber.toString() === selectedDriver.staffNumber.toString() && 
-                        t.status === 'pending'
-                    );
+                    const staffStr = selectedDriver.staffNumber ? selectedDriver.staffNumber.toString().trim() : '';
+                    const serverTrip = trips.find(t => {
+                        const tStaff = t.staffNumber ? t.staffNumber.toString().trim() : '';
+                        const status = (t.status || 'pending').toString().trim().toLowerCase();
+                        const hasNoReturn = !t.returnDate || !t.returnDate.toString().trim();
+                        return tStaff === staffStr && (status === 'pending' || (status !== 'complete' && hasNoReturn));
+                    });
                     
                     if (serverTrip) {
                         pendingTrip = {
@@ -1295,21 +1298,21 @@
                             departureTime: serverTrip.departureTime
                         };
                         localStorage.setItem(key, JSON.stringify(pendingTrip));
-                    } else if (localTrip && localTrip.status === 'pending' && localTrip.offlineSaved) {
-                        // Keep local offline trip even if not on server yet
+                    } else if (localTrip && localTrip.status === 'pending' && localTrip.departureDate && localTrip.departureTime) {
+                        // Keep local trip - driver must be able to record return (server sync delay or format mismatch)
                         pendingTrip = localTrip;
-                        console.log('🔄 Keeping offline pending trip:', pendingTrip);
+                        localStorage.setItem(key, JSON.stringify(pendingTrip));
                     } else {
-                        // Trip not found on server and no offline trip — clear local
+                        // Trip not found on server and no valid local trip — clear
                         localStorage.removeItem(key);
                         pendingTrip = null;
                     }
-                } else if (localTrip && localTrip.status === 'pending' && localTrip.offlineSaved) {
-                    // Server returned empty but we have offline trip — keep it
+                } else if (localTrip && localTrip.status === 'pending' && localTrip.departureDate && localTrip.departureTime) {
+                    // Server returned empty but we have local pending trip — keep it so driver can record return
                     pendingTrip = localTrip;
-                    console.log('🔄 Keeping offline pending trip (empty server):', pendingTrip);
+                    localStorage.setItem(key, JSON.stringify(pendingTrip));
                 } else {
-                    // Server returned empty list and no offline trip — clear local
+                    // Server returned empty list and no valid local trip — clear
                     localStorage.removeItem(key);
                     pendingTrip = null;
                 }
@@ -1695,6 +1698,20 @@
             if (!selectedDriver) {
                 alert('الرجاء اختيار اسمك أولاً');
                 return;
+            }
+
+            // Fallback: reload from localStorage if variable was cleared (e.g. by server sync race)
+            if (!pendingTrip) {
+                const key = `pending_trip_${selectedDriver.staffNumber}`;
+                const localPending = localStorage.getItem(key);
+                if (localPending) {
+                    try {
+                        const restored = JSON.parse(localPending);
+                        if (restored.status === 'pending' && restored.departureDate && restored.departureTime) {
+                            pendingTrip = restored;
+                        }
+                    } catch (e) {}
+                }
             }
 
             if (!pendingTrip) {
