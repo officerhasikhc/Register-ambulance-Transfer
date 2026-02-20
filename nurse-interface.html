@@ -1616,7 +1616,8 @@
         function updateLanguage() {
             const dir = currentLang === 'ar' ? 'rtl' : 'ltr';
             document.documentElement.setAttribute('dir', dir);
-            document.documentElement.setAttribute('lang', currentLang);
+            document.documentElement.setAttribute('lang', 'en');
+            document.documentElement.setAttribute('data-page-lang', currentLang);
 
             document.querySelectorAll('[data-en]').forEach(el => {
                 const text = el.dataset[currentLang];
