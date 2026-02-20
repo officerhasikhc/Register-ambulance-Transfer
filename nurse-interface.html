@@ -2336,9 +2336,43 @@
                 nurseName: document.getElementById('nurseName').value
             };
 
+            // Optimistic UI: slide out and remove card immediately (in sync with save)
+            if (selectedTripId) {
+                const tripIndex = currentPendingTrips.findIndex(t => t.tripId === selectedTripId);
+                if (tripIndex !== -1) {
+                    const card = document.getElementById(`trip-card-${tripIndex}`);
+                    if (card) {
+                        card.style.transition = 'all 0.2s ease-out';
+                        card.style.transform = 'translateX(-100%)';
+                        card.style.opacity = '0';
+                        card.style.maxHeight = card.offsetHeight + 'px';
+                        card.style.marginBottom = '0';
+                        card.style.pointerEvents = 'none';
+                        setTimeout(() => {
+                            card.style.maxHeight = '0';
+                            card.style.padding = '0';
+                            card.style.margin = '0';
+                            card.style.overflow = 'hidden';
+                            card.style.border = 'none';
+                            // Remove from list and re-render immediately
+                            currentPendingTrips.splice(tripIndex, 1);
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+                            // Adjust page if current page becomes empty
+                            const totalPages = Math.ceil(currentPendingTrips.length / NURSE_PENDING_PER_PAGE);
+                            if (nursePendingPage > totalPages && totalPages > 0) nursePendingPage = totalPages;
+                            renderNursePendingPage();
+                        }, 180);
+                    } else {
+                        currentPendingTrips.splice(tripIndex, 1);
+                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+                        renderNursePendingPage();
+                    }
+                }
+                selectedTripId = null;
+                selectedTripIndex = null;
+            }
+
             try {
-                let submitSuccess = false;
-                
                 // Single fetch with no-cors to prevent duplicate requests
                 await fetch(WEB_APP_URL, {
                     method: 'POST',
@@ -2346,31 +2380,6 @@
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify(formData)
                 });
-                submitSuccess = true;
-
-                // Animate the selected trip card sliding out after successful submit
-                if (selectedTripId) {
-                    const tripIndex = currentPendingTrips.findIndex(t => t.tripId === selectedTripId);
-                    if (tripIndex !== -1) {
-                        const card = document.getElementById(`trip-card-${tripIndex}`);
-                        if (card) {
-                            card.style.transform = 'translateX(-100%)';
-                            card.style.opacity = '0';
-                            card.style.maxHeight = card.offsetHeight + 'px';
-                            setTimeout(() => {
-                                card.style.maxHeight = '0';
-                                card.style.padding = '0';
-                                card.style.margin = '0';
-                                card.style.overflow = 'hidden';
-                            }, 300);
-                        }
-                        // Remove from pending list
-                        currentPendingTrips.splice(tripIndex, 1);
-                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
-                    }
-                    selectedTripId = null;
-                    selectedTripIndex = null;
-                }
                 
                 // Show success message
                 if (editingRecordId) {
@@ -2585,7 +2594,7 @@
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
                                 <td>${record['Destination'] || ''}</td>
-                                <td>${record['Patient Name'] || ''}</td>
+                                <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                                 <td>${record['Nurse Name'] || ''}</td>
                                 <td>
                                     <div class="action-btns">
@@ -2774,8 +2783,8 @@
             }
             
             // Fill patient name
-            if (record['Patient Name']) {
-                document.getElementById('patientName').value = record['Patient Name'];
+            if (record['Patient Name'] || record['patientName']) {
+                document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
             
             // Fill nurse name
@@ -2887,7 +2896,7 @@
                         <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
                         <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
                         <td>${record['Destination'] || '-'}</td>
-                        <td>${record['Patient Name'] || '-'}</td>
+                        <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                         <td>${record['Nurse Name'] || '-'}</td>
                     </tr>
                 `;
@@ -2984,7 +2993,7 @@
                     <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
                     <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
                     <td>${record['Destination'] || '-'}</td>
-                    <td>${record['Patient Name'] || '-'}</td>
+                    <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                     <td>${record['Nurse Name'] || '-'}</td>
                 </tr>`;
             });
