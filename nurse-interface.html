@@ -595,6 +595,8 @@
             align-items: center;
             justify-content: center;
             font-size: 36px;
+            color: var(--success);
+            font-weight: bold;
         }
 
         .modal h3 {
@@ -1101,10 +1103,16 @@
                     </div>
                     <div class="form-group">
                         <label data-en="Transfer Destination" data-ar="الجهة المحول إليها">Transfer Destination</label>
-                        <select id="destination" required>
+                        <select id="destination" required onchange="handleDestinationChange()">
                             <option value="" data-en="Select Destination" data-ar="اختر الوجهة">Select Destination</option>
                             <option value="SQH" data-en="SQH" data-ar="السلطان قابوس">SQH</option>
+                            <option value="OTHER" data-en="Other" data-ar="أخرى">Other</option>
                         </select>
+                        <input type="text" id="destinationOther" placeholder="Enter other destination (English)" style="display: none; margin-top: 8px; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-family: inherit; font-size: 15px; width: 100%;" lang="en">
+                    </div>
+                    <div class="form-group">
+                        <label>Patient Name</label>
+                        <input type="text" id="patientName" required placeholder="Enter patient name (English)" lang="en">
                     </div>
                     <div class="form-group full-width">
                         <label data-en="Patient Condition / Diagnosis (Optional)" data-ar="حالة المريض / التشخيص (اختياري)">Patient Condition / Diagnosis (Optional)</label>
@@ -1164,9 +1172,9 @@
     <div id="successModal" class="modal">
         <div class="modal-content">
             <div class="modal-icon">✓</div>
-            <h3 data-en="Record Submitted Successfully" data-ar="تم إرسال السجل بنجاح">Record Submitted Successfully</h3>
-            <p data-en="The ambulance case has been registered and notification sent to the administration." data-ar="تم تسجيل حالة الإسعاف وإرسال الإشعار إلى الإدارة.">The ambulance case has been registered and notification sent to the administration.</p>
-            <button class="btn btn-primary" onclick="closeModal()" data-en="Close" data-ar="إغلاق">Close</button>
+            <h3 id="successModalTitle">Record Submitted Successfully</h3>
+            <p id="successModalMessage">The ambulance case has been registered and notification sent to the administration.</p>
+            <button class="btn btn-primary" onclick="closeModal()">Close</button>
         </div>
     </div>
 
@@ -1678,6 +1686,22 @@
             return true;
         }
 
+        // Handle destination change - show/hide "Other" input field
+        function handleDestinationChange() {
+            const destinationSelect = document.getElementById('destination');
+            const destinationOtherInput = document.getElementById('destinationOther');
+            
+            if (destinationSelect.value === 'OTHER') {
+                destinationOtherInput.style.display = 'block';
+                destinationOtherInput.required = true;
+                destinationOtherInput.focus();
+            } else {
+                destinationOtherInput.style.display = 'none';
+                destinationOtherInput.required = false;
+                destinationOtherInput.value = '';
+            }
+        }
+
         function showValidation(message) {
             const msgDiv = document.getElementById('validationMessage');
             document.getElementById('validationText').textContent = message;
@@ -1734,7 +1758,11 @@
             });
             
             // Show validation message with all field names
-            const message = `Please fill in: ${fieldNames.join(', ')}`;
+            // Check if patient name is missing - show specific message
+            const patientNameMissing = fieldNames.some(name => name === 'Patient Name');
+            const message = patientNameMissing 
+                ? 'Patient name is required' 
+                : `Please fill in: ${fieldNames.join(', ')}`;
             showValidation(message);
             
             // Scroll to first empty field
@@ -1989,6 +2017,16 @@
             document.getElementById('departureDate').value = '';
             document.getElementById('returnDate').value = '';
             document.getElementById('destination').value = '';
+            
+            // Hide and clear "Other" destination input
+            const destinationOtherInput = document.getElementById('destinationOther');
+            if (destinationOtherInput) {
+                destinationOtherInput.style.display = 'none';
+                destinationOtherInput.required = false;
+                destinationOtherInput.value = '';
+            }
+            
+            document.getElementById('patientName').value = '';
             document.getElementById('diagnosis').value = '';
             
             // Clear time fields
@@ -2150,23 +2188,48 @@
                 { id: 'returnTimeHour', name: 'Return Time' },
                 { id: 'returnTimeMinute', name: 'Return Time' },
                 { id: 'destination', name: 'Destination' },
+                { id: 'patientName', name: 'Patient Name', requiredMessage: 'Patient name is required' },
                 { id: 'nurseName', name: 'Nurse Name' }
             ];
             
             // Find all empty fields
             const emptyFields = [];
             for (const field of requiredFields) {
-                const element = document.getElementById(field.id);
-                if (!element.value || element.value.trim() === '') {
-                    emptyFields.push({ element, name: field.name });
+                // Special handling for destination - check "Other" input if "OTHER" is selected
+                if (field.id === 'destination') {
+                    const destinationSelect = document.getElementById('destination');
+                    if (destinationSelect.value === 'OTHER') {
+                        const otherInput = document.getElementById('destinationOther');
+                        if (!otherInput.value || otherInput.value.trim() === '') {
+                            emptyFields.push({ element: otherInput, name: 'Other Destination' });
+                        } else {
+                            otherInput.classList.remove('error', 'field-error');
+                        }
+                    } else if (!destinationSelect.value || destinationSelect.value.trim() === '') {
+                        emptyFields.push({ element: destinationSelect, name: field.name });
+                    } else {
+                        destinationSelect.classList.remove('error', 'field-error');
+                    }
                 } else {
-                    element.classList.remove('error', 'field-error');
+                    const element = document.getElementById(field.id);
+                    if (!element.value || element.value.trim() === '') {
+                        emptyFields.push({ element, name: field.name });
+                    } else {
+                        element.classList.remove('error', 'field-error');
+                    }
                 }
             }
             
             // If there are empty fields, highlight all of them
             if (emptyFields.length > 0) {
-                showAllFieldErrors(emptyFields);
+                // Check if patient name is missing - show specific message
+                const patientNameField = emptyFields.find(f => f.element.id === 'patientName');
+                if (patientNameField) {
+                    showValidation('Patient name is required');
+                    scrollToField('patientName');
+                } else {
+                    showAllFieldErrors(emptyFields);
+                }
                 return;
             }
 
@@ -2176,6 +2239,22 @@
             submitBtn.textContent = currentLang === 'en' ? 'Submitting...' : 'جاري الإرسال...';
 
             updateTimeInputs();
+
+            // Get destination value - use "Other" input if selected
+            let destinationValue = document.getElementById('destination').value;
+            if (destinationValue === 'OTHER') {
+                const otherInput = document.getElementById('destinationOther');
+                destinationValue = otherInput.value.trim();
+                if (!destinationValue) {
+                    showValidation(currentLang === 'en' 
+                        ? 'Please enter the other destination!' 
+                        : 'يرجى إدخال الوجهة الأخرى!');
+                    otherInput.classList.add('error');
+                    otherInput.focus();
+                    scrollToField('destinationOther');
+                    return;
+                }
+            }
 
             const formData = {
                 action: editingRecordId ? 'updateRecord' : 'submitCase',
@@ -2187,7 +2266,8 @@
                 departureTime: document.getElementById('departureTime').value,
                 returnDate: document.getElementById('returnDate').value,
                 returnTime: document.getElementById('returnTime').value,
-                destination: document.getElementById('destination').value,
+                destination: destinationValue,
+                patientName: document.getElementById('patientName').value,
                 diagnosis: document.getElementById('diagnosis').value,
                 nurseName: document.getElementById('nurseName').value
             };
@@ -2230,17 +2310,24 @@
                 
                 // Show success message
                 if (editingRecordId) {
-                    alert('Record updated successfully!');
+                    // Update modal content for edit success
+                    document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
+                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
+                    document.getElementById('successModal').classList.add('active');
+                    
                     editingRecordId = null;
                     // Reset form header
                     const formHeader = document.querySelector('.form-header h2');
-                    formHeader.textContent = currentLang === 'en' ? 'Register New Ambulance Case' : 'تسجيل حالة إسعاف جديدة';
+                    formHeader.textContent = 'Register New Ambulance Case';
                     formHeader.style.color = '';
                     // Reset submit button
                     const submitBtn = document.getElementById('submitBtn');
-                    submitBtn.textContent = currentLang === 'en' ? 'Submit Record' : 'إرسال السجل';
+                    submitBtn.textContent = 'Submit Record';
                     submitBtn.style.background = '';
                 } else {
+                    // Update modal content for new record
+                    document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
+                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
                     document.getElementById('successModal').classList.add('active');
                 }
                 
@@ -2276,6 +2363,20 @@
             document.getElementById('staffNumber').style.background = '#f3f4f6';
             hideValidation();
             editingRecordId = null;
+            
+            // Hide "Other" destination input
+            const destinationOtherInput = document.getElementById('destinationOther');
+            if (destinationOtherInput) {
+                destinationOtherInput.style.display = 'none';
+                destinationOtherInput.required = false;
+                destinationOtherInput.value = '';
+            }
+            
+            // Clear patient name
+            const patientNameField = document.getElementById('patientName');
+            if (patientNameField) {
+                patientNameField.value = '';
+            }
             
             // Reset form header
             const formHeader = document.querySelector('.form-header h2');
@@ -2359,6 +2460,7 @@
                             <th>${currentLang === 'en' ? 'Vehicle' : 'السيارة'}</th>
                             <th>${currentLang === 'en' ? 'Driver' : 'السائق'}</th>
                             <th>${currentLang === 'en' ? 'Destination' : 'الوجهة'}</th>
+                            <th>${currentLang === 'en' ? 'Patient Name' : 'اسم المريض'}</th>
                             <th>${currentLang === 'en' ? 'Nurse' : 'الممرضة'}</th>
                             <th>${currentLang === 'en' ? 'Actions' : 'الإجراءات'}</th>
                         </tr>
@@ -2374,6 +2476,7 @@
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
                                 <td>${record['Destination'] || ''}</td>
+                                <td>${record['Patient Name'] || ''}</td>
                                 <td>${record['Nurse Name'] || ''}</td>
                                 <td>
                                     <div class="action-btns">
@@ -2528,9 +2631,38 @@
                 }
             }
             
-            // Fill destination
+            // Fill destination - check if it's "Other" or a predefined value
             if (record['Destination']) {
-                document.getElementById('destination').value = record['Destination'];
+                const destinationSelect = document.getElementById('destination');
+                const destinationOtherInput = document.getElementById('destinationOther');
+                const destValue = record['Destination'].toString().trim();
+                
+                // Check if destination is in the predefined list (SQH)
+                const predefinedDestinations = ['SQH'];
+                if (predefinedDestinations.includes(destValue.toUpperCase())) {
+                    destinationSelect.value = destValue.toUpperCase();
+                    destinationOtherInput.style.display = 'none';
+                    destinationOtherInput.required = false;
+                    destinationOtherInput.value = '';
+                } else {
+                    // It's an "Other" destination
+                    destinationSelect.value = 'OTHER';
+                    destinationOtherInput.style.display = 'block';
+                    destinationOtherInput.value = destValue;
+                    destinationOtherInput.required = true;
+                }
+            } else {
+                // No destination - hide "Other" input
+                const destinationOtherInput = document.getElementById('destinationOther');
+                if (destinationOtherInput) {
+                    destinationOtherInput.style.display = 'none';
+                    destinationOtherInput.required = false;
+                }
+            }
+            
+            // Fill patient name
+            if (record['Patient Name']) {
+                document.getElementById('patientName').value = record['Patient Name'];
             }
             
             // Fill diagnosis
@@ -2646,7 +2778,8 @@
                             <th style="width: 14%;">Driver</th>
                             <th style="width: 10%;">Departure</th>
                             <th style="width: 10%;">Return</th>
-                            <th style="width: 18%;">Destination</th>
+                            <th style="width: 15%;">Destination</th>
+                            <th style="width: 12%;">Patient Name</th>
                             <th style="width: 12%;">Diagnosis</th>
                             <th style="width: 10%;">Nurse</th>
                         </tr>
@@ -2664,6 +2797,7 @@
                         <td>${record['Departure Time'] || '-'}</td>
                         <td>${record['Return Time'] || '-'}</td>
                         <td>${record['Destination'] || '-'}</td>
+                        <td>${record['Patient Name'] || '-'}</td>
                         <td>${record['Patient Condition / Diagnosis'] || '-'}</td>
                         <td>${record['Nurse Name'] || '-'}</td>
                     </tr>
@@ -2825,13 +2959,16 @@
             loadPendingTrips(false, true);
         }
         
-        // Check for updates every 15 seconds
-        setInterval(smartRefreshPendingTrips, 15000);
+        // Check for updates every 15 seconds - store reference to stop it on logout
+        window.smartRefreshInterval = setInterval(smartRefreshPendingTrips, 15000);
+
+        // Track if logout is in progress to prevent spinner issues
+        let isLoggingOut = false;
 
         // Nurse logout confirmation
         function showNurseLogoutConfirm(event) {
-            event.preventDefault();
-            const currentLang = document.documentElement.getAttribute('lang') || 'en';
+            if (event) event.preventDefault();
+            if (isLoggingOut) return;
             
             // Create custom confirm dialog
             const dialog = document.createElement('div');
@@ -2853,20 +2990,19 @@
             content.style.cssText = `
                 background: white;
                 border-radius: 8px;
-                padding: 16px;
-                max-width: 280px;
+                padding: 20px;
+                max-width: 300px;
                 width: 90%;
                 text-align: center;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             `;
 
-            const isEnglish = currentLang === 'en';
             content.innerHTML = `
-                <h3 style="margin: 0 0 12px 0; color: #1f2937; font-size: 16px;">${isEnglish ? 'Logout' : 'تسجيل الخروج'}</h3>
-                <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 13px;">${isEnglish ? 'Do you want to logout from the system?' : 'هل تريد تسجيل الخروج من النظام؟'}</p>
+                <h3 style="margin: 0 0 12px 0; color: #1f2937; font-size: 16px; font-weight: 600;">Logout</h3>
+                <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 13px;">Do you want to logout?</p>
                 <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button onclick="cancelNurseLogout()" style="padding: 6px 16px; border: 1px solid #d1d5db; background: white; color: #6b7280; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit;">${isEnglish ? 'Cancel' : 'إلغاء'}</button>
-                    <button onclick="confirmNurseLogout()" style="padding: 6px 16px; border: none; background: #ef4444; color: white; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit;">${isEnglish ? 'Logout' : 'تسجيل الخروج'}</button>
+                    <button onclick="cancelNurseLogout()" style="padding: 8px 20px; border: 1px solid #d1d5db; background: white; color: #6b7280; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit; font-weight: 500;">Cancel</button>
+                    <button onclick="confirmNurseLogout()" style="padding: 8px 20px; border: none; background: #ef4444; color: white; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit; font-weight: 500;">Logout</button>
                 </div>
             `;
 
@@ -2885,10 +3021,94 @@
         }
 
         function confirmNurseLogout() {
+            if (isLoggingOut) return;
+            isLoggingOut = true;
+            
             cancelNurseLogout();
+            
+            // Stop all intervals and timers
+            stopAllTimers();
+            
+            // Clear session
             localStorage.removeItem('userSession');
-            window.location.href = 'login.html';
+            
+            // Use replace instead of href to prevent back button issues
+            window.location.replace('login.html');
         }
+
+        // Stop all timers and intervals to prevent spinner issues
+        function stopAllTimers() {
+            // Clear known intervals
+            if (window.smartRefreshInterval) {
+                clearInterval(window.smartRefreshInterval);
+                window.smartRefreshInterval = null;
+            }
+            
+            // Clear session manager timers if accessible
+            if (window.sessionManagerTimers) {
+                if (window.sessionManagerTimers.inactivityTimer) {
+                    clearTimeout(window.sessionManagerTimers.inactivityTimer);
+                }
+                if (window.sessionManagerTimers.warningTimer) {
+                    clearTimeout(window.sessionManagerTimers.warningTimer);
+                }
+                if (window.sessionManagerTimers.countdownInterval) {
+                    clearInterval(window.sessionManagerTimers.countdownInterval);
+                }
+            }
+            
+            // Clear any other known intervals/timeouts
+            const highestIntervalId = setTimeout(() => {}, 0);
+            for (let i = 1; i < highestIntervalId; i++) {
+                clearInterval(i);
+                clearTimeout(i);
+            }
+        }
+
+        // Handle browser back button
+        let isBackButtonHandled = false;
+        
+        // Push initial state to track back button
+        window.history.pushState({ page: 'nurse' }, '', window.location.href);
+        
+        window.addEventListener('popstate', function(event) {
+            if (isLoggingOut) return;
+            
+            // Show logout confirmation instead of navigating back
+            if (!window.nurseLogoutDialog && !isBackButtonHandled) {
+                isBackButtonHandled = true;
+                
+                // Push state back to prevent navigation
+                window.history.pushState({ page: 'nurse' }, '', window.location.href);
+                
+                // Show logout confirmation
+                showNurseLogoutConfirm(null);
+                
+                // Reset flag after dialog closes
+                setTimeout(() => {
+                    isBackButtonHandled = false;
+                }, 1000);
+            } else {
+                // Push state back to prevent navigation
+                window.history.pushState({ page: 'nurse' }, '', window.location.href);
+            }
+        });
+
+        // Handle beforeunload to warn before leaving
+        window.addEventListener('beforeunload', function(event) {
+            if (isLoggingOut) return;
+            
+            // Only show warning if there's unsaved data or user is actively working
+            const form = document.getElementById('ambulanceForm');
+            if (form) {
+                const hasData = form.querySelectorAll('input[value], select[value], textarea[value]').length > 0;
+                if (hasData) {
+                    event.preventDefault();
+                    event.returnValue = 'Do you want to logout?';
+                    return event.returnValue;
+                }
+            }
+        });
 
         // Add time select listeners
         ['departureTimeHour', 'departureTimeMinute', 'departureTimeAmPm', 
