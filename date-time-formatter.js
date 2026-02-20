@@ -124,6 +124,17 @@ const DateTimeFormatter = {
     },
 
     /**
+     * Convert user input (yyyy/mm/dd or yyyy-mm-dd) to API format YYYY-MM-DD
+     * @param {string} dateStr - Date string from input
+     * @returns {string} YYYY-MM-DD for API
+     */
+    formatDateForApi(dateStr) {
+        if (!dateStr || !dateStr.trim()) return '';
+        const parsed = this.parseDate(dateStr.trim());
+        return parsed ? this.formatDate(parsed) : dateStr.replace(/\//g, '-');
+    },
+
+    /**
      * Format time for display in tables (e.g., "02:30 PM")
      * @param {string} timeValue - Time value
      * @returns {string} Formatted time string
@@ -170,6 +181,12 @@ const DateTimeFormatter = {
         // Try YYYY-MM-DD format first
         if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
             const parts = str.split('-');
+            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        }
+        
+        // Try YYYY/MM/DD format
+        if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) {
+            const parts = str.split('/');
             return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
         }
         
