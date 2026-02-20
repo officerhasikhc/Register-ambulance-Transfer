@@ -712,20 +712,17 @@
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
-            padding: 12px 20px;
+            background: #f0f4ff;
+            border: 2px solid #dbeafe;
+            padding: 8px 16px;
             border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
         }
 
         .stats-card strong {
-            color: var(--white);
-            font-size: 28px;
             font-weight: 700;
         }
 
         .stats-card span {
-            color: rgba(255, 255, 255, 0.9);
             font-size: 13px;
         }
 
@@ -962,28 +959,36 @@
         }
 
         @media print {
-            body * {
-                visibility: hidden;
-            }
-            .report-modal, .report-modal * {
-                visibility: visible;
-            }
-            .report-modal {
-                position: absolute;
-                left: 0;
-                top: 0;
-                background: white;
-            }
-            .report-header, .report-pagination {
+            body > *:not(.report-modal) {
                 display: none !important;
             }
-            .report-container {
-                box-shadow: none;
-                max-height: none;
-                overflow: visible;
+            .report-modal {
+                display: block !important;
+                position: static !important;
+                background: none !important;
+                padding: 0 !important;
+                overflow: visible !important;
             }
-            .report-content {
-                padding: 10mm;
+            .report-modal .report-container {
+                box-shadow: none !important;
+                max-height: none !important;
+                overflow: visible !important;
+                width: 100% !important;
+                border-radius: 0 !important;
+            }
+            .report-modal .report-header,
+            .report-modal .report-pagination {
+                display: none !important;
+            }
+            .report-modal .report-content {
+                padding: 5mm !important;
+                overflow: visible !important;
+            }
+            .report-table {
+                page-break-inside: auto;
+            }
+            .report-table tr {
+                page-break-inside: avoid;
             }
             @page {
                 size: A4;
@@ -1167,11 +1172,11 @@
                             <option value="SQH" data-en="SQH" data-ar="السلطان قابوس">SQH</option>
                             <option value="OTHER" data-en="Other" data-ar="أخرى">Other</option>
                         </select>
-                        <input type="text" id="destinationOther" placeholder="Enter other destination (English)" style="display: none; margin-top: 8px; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-family: inherit; font-size: 15px; width: 100%;" lang="en">
+                        <input type="text" id="destinationOther" placeholder="Enter other destination" style="display: none; margin-top: 8px; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-family: inherit; font-size: 15px; width: 100%;" lang="en">
                     </div>
                     <div class="form-group">
                         <label>Patient Name</label>
-                        <input type="text" id="patientName" required placeholder="Enter patient name (English)" lang="en">
+                        <input type="text" id="patientName" required placeholder="Enter patient name" lang="en">
                     </div>
                     <div class="form-group">
                         <label data-en="Registered By (Nurse Name)" data-ar="المسجل (اسم الممرضة)">Registered By (Nurse Name)</label>
@@ -1210,12 +1215,23 @@
                         <option value="11" data-en="November" data-ar="نوفمبر">November</option>
                         <option value="12" data-en="December" data-ar="ديسمبر">December</option>
                     </select>
-                    <div class="stats-card">
-                        <strong id="totalCount">0</strong>
-                        <span data-en="cases" data-ar="حالة">cases</span>
+                    <div class="stats-card" style="display:flex;gap:12px;align-items:center;">
+                        <div style="text-align:center;line-height:1.2;">
+                            <strong id="totalCount" style="font-size:18px;color:#1e40af;">0</strong>
+                            <div style="font-size:10px;color:#6b7280;">month</div>
+                        </div>
+                        <div style="width:1px;height:28px;background:#e5e7eb;"></div>
+                        <div style="text-align:center;line-height:1.2;">
+                            <strong id="yearlyTotalCount" style="font-size:18px;color:#059669;">0</strong>
+                            <div style="font-size:10px;color:#6b7280;">year total</div>
+                        </div>
+                        <span style="font-size:12px;color:#6b7280;font-weight:500;">cases</span>
                     </div>
-                    <button onclick="viewAllRecords()" style="padding: 8px 16px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
+                    <button onclick="quickPrintReport()" style="padding: 8px 16px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;" title="Print current month report">
                         Print Report
+                    </button>
+                    <button onclick="viewAllRecords()" style="padding: 8px 14px; background: #059669; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;" title="View report in modal">
+                        View Report
                     </button>
                 </div>
             </div>
@@ -2440,14 +2456,29 @@
         // LOAD RECORDS
         // ============================================
         let allRecords = [];
+        let allYearRecords = [];
         let nurseRecordsPage = 1;
         const NURSE_RECORDS_PER_PAGE = 5;
+
+        async function loadYearlyTotal() {
+            const year = document.getElementById('yearFilter').value;
+            const cacheKey = DataCache.KEYS.RECORDS + '_yearly_' + year;
+            const url = `${WEB_APP_URL}?action=getAllRecords&year=${year}`;
+            
+            await DataCache.fetchWithCache(
+                url, cacheKey, DataCache.EXPIRY.RECORDS,
+                (records) => {
+                    allYearRecords = records || [];
+                    document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
+                },
+                (result) => (result.success && result.data) ? result.data : null
+            );
+        }
 
         async function loadRecords() {
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
 
-            // Show loading spinner
             const recordsSection = document.querySelector('.records-section');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
             if (recordsSection && loadingSpinner) {
@@ -2459,12 +2490,9 @@
             if (month !== 'all') url += `&month=${month}`;
 
             try {
-                // Use DataCache: show cached records instantly, fetch fresh in background
                 const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month;
                 await DataCache.fetchWithCache(
-                    url,
-                    cacheKey,
-                    DataCache.EXPIRY.RECORDS,
+                    url, cacheKey, DataCache.EXPIRY.RECORDS,
                     (records) => {
                         if (records) {
                             allRecords = records;
@@ -2474,11 +2502,20 @@
                             allRecords = [];
                             displayRecords([]);
                         }
+                        // If viewing all months, this IS the yearly data
+                        if (month === 'all') {
+                            allYearRecords = allRecords;
+                            document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
+                        }
                     },
                     (result) => (result.success && result.data) ? result.data : null
                 );
+                
+                // If a specific month is selected, also load yearly total
+                if (month !== 'all') {
+                    loadYearlyTotal();
+                }
             } finally {
-                // Hide loading spinner
                 if (recordsSection && loadingSpinner) {
                     recordsSection.classList.remove('loading');
                     loadingSpinner.classList.remove('active');
@@ -2738,8 +2775,12 @@
             return DateTimeFormatter.formatDate(dateValue);
         }
 
+        function quickPrintReport() {
+            viewAllRecords();
+            setTimeout(() => printReport(), 200);
+        }
+
         function viewAllRecords() {
-            // Get all filtered records for report
             const yearFilter = document.getElementById('yearFilter').value;
             const monthFilter = document.getElementById('monthFilter').value;
             
@@ -2879,7 +2920,68 @@
         }
 
         function printReport() {
-            window.print();
+            // Generate ALL records (no pagination) for printing
+            const container = document.getElementById('reportContent');
+            const now = new Date();
+            
+            const yearFilter = document.getElementById('yearFilter').value;
+            const monthFilter = document.getElementById('monthFilter').value;
+            const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            
+            let periodText = 'All Records';
+            if (monthFilter !== 'all' && yearFilter !== 'all') {
+                periodText = `${monthNames[parseInt(monthFilter) - 1]} ${yearFilter}`;
+            } else if (yearFilter !== 'all') {
+                periodText = `Year ${yearFilter}`;
+            } else if (monthFilter !== 'all') {
+                periodText = monthNames[parseInt(monthFilter) - 1];
+            }
+            
+            let html = `
+                <div class="report-title">
+                    <h1>Hasik Health Center</h1>
+                    <p>Ambulance Activity Log Report</p>
+                    <p style="margin-top:5px;font-size:10pt;">${periodText} — Total: ${reportRecords.length} trips</p>
+                </div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th style="width:5%;">No.</th>
+                            <th style="width:10%;">Date</th>
+                            <th style="width:8%;">Vehicle</th>
+                            <th style="width:14%;">Driver</th>
+                            <th style="width:9%;">Departure</th>
+                            <th style="width:9%;">Return</th>
+                            <th style="width:15%;">Destination</th>
+                            <th style="width:16%;">Patient Name</th>
+                            <th style="width:14%;">Nurse</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            reportRecords.forEach((record, idx) => {
+                html += `<tr>
+                    <td>${idx + 1}</td>
+                    <td>${DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-'}</td>
+                    <td>${record['Vehicle Number'] || '-'}</td>
+                    <td>${record['Driver Name'] || '-'}</td>
+                    <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
+                    <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
+                    <td>${record['Destination'] || '-'}</td>
+                    <td>${record['Patient Name'] || '-'}</td>
+                    <td>${record['Nurse Name'] || '-'}</td>
+                </tr>`;
+            });
+            
+            html += `</tbody></table>
+                <div class="report-footer">
+                    <p>Generated on ${DateTimeFormatter.formatDateForReport(now)} at ${DateTimeFormatter.formatTimeForReport(DateTimeFormatter.getCurrentTime())}</p>
+                    <p>Total trips: ${reportRecords.length}</p>
+                </div>`;
+            
+            container.innerHTML = html;
+            
+            setTimeout(() => window.print(), 150);
         }
 
         // ============================================

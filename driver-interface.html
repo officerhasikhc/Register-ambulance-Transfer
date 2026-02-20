@@ -4,11 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
+    <!-- DNS/TLS pre-warm for API — saves ~200ms on first request -->
+    <link rel="preconnect" href="https://script.google.com" crossorigin>
+    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+    <link rel="dns-prefetch" href="https://script.google.com">
+    
     <!-- Performance Optimization Scripts - Load First -->
     <script src="request-optimizer.js"></script>
     <script src="ui-optimizer.js"></script>
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    
+    <!-- Start fetching data IMMEDIATELY — don't wait for DOM or init() -->
+    <script>
+    (function() {
+        var url = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+        if (typeof DataCache !== 'undefined') {
+            DataCache.preload(url, 'driver');
+        } else {
+            window.__earlyFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).catch(function() { return null; });
+        }
+    })();
+    </script>
     
     <script src="session-manager.js"></script>
     
@@ -1006,13 +1023,13 @@
         // INITIALIZE
         // ============================================
         function init() {
+            // Load user session FIRST — triggers data fetching immediately
+            loadUserSession();
+            
             initializeDriverDropdown();
             initializeMonthFilter();
             updateClock();
             setInterval(updateClock, 1000);
-            
-            // Load user session and auto-select driver
-            loadUserSession();
             
             // Request notification permission
             requestNotificationPermission();

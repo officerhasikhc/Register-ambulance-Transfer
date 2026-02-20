@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ambulance Reg System | نظام سجل الإسعاف - تسجيل الدخول</title>
     
+    <link rel="preconnect" href="https://script.google.com" crossorigin>
+    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+    <link rel="dns-prefetch" href="https://script.google.com">
+    
     <!-- Performance Optimization Scripts -->
     <script src="request-optimizer.js"></script>
     <script src="ui-optimizer.js"></script>
@@ -721,6 +725,47 @@
             });
         }
 
+        /**
+         * البحث عن المستخدم في بيانات السائقين والممرضين المحفوظة في localStorage
+         * (المُضافة من صفحة الإعدادات). يدعم الدخول بالرقم الوظيفي أو المدني.
+         */
+        function findUserInLocalStorage(inputNumber) {
+            // البحث في قائمة السائقين
+            try {
+                const drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
+                const driver = drivers.find(function(d) {
+                    return d.staffNumber && d.staffNumber.toString() === inputNumber;
+                });
+                if (driver) {
+                    return {
+                        type: 'driver',
+                        employeeType: driver.type || 'employee',
+                        nameAr: driver.nameAr,
+                        nameEn: driver.nameEn,
+                        redirect: 'driver-interface.html'
+                    };
+                }
+            } catch (e) { /* ignore parse errors */ }
+
+            // البحث في قائمة الممرضين/ات
+            try {
+                const nurses = JSON.parse(localStorage.getItem('ambulance_nurses')) || [];
+                const nurse = nurses.find(function(n) {
+                    return n.staffNumber && n.staffNumber.toString() === inputNumber;
+                });
+                if (nurse) {
+                    return {
+                        type: 'nurse',
+                        nameAr: nurse.nameAr,
+                        nameEn: nurse.nameEn,
+                        redirect: 'nurse-interface.html'
+                    };
+                }
+            } catch (e) { /* ignore parse errors */ }
+
+            return null;
+        }
+
         // Handle login
         async function handleLogin(event) {
             event.preventDefault();
@@ -746,11 +791,16 @@
             }, 10000);
             
             try {
-                // Check in local users first
+                // 1) Check in hardcoded users first
                 let user = USERS[staffNumber];
                 
+                // 2) Check in localStorage drivers/nurses (added via Settings page)
                 if (!user) {
-                    // Try to fetch from API with timeout
+                    user = findUserInLocalStorage(staffNumber);
+                }
+                
+                // 3) Try to fetch from server API
+                if (!user) {
                     try {
                         const controller = new AbortController();
                         const fetchTimeout = setTimeout(() => controller.abort(), 8000);
@@ -766,7 +816,6 @@
                         }
                     } catch (error) {
                         console.error('API error:', error);
-                        // Continue with local check only
                     }
                 }
                 
@@ -798,12 +847,23 @@
                     localStorage.setItem('userSession', JSON.stringify(sessionData));
                     localStorage.setItem('appLanguage', currentLang);
                     
+                    // Pre-warm target page API to eliminate cold start delay
+                    try {
+                        var targetApi = '';
+                        if (user.redirect === 'driver-interface.html') {
+                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
+                        } else if (user.redirect === 'nurse-interface.html') {
+                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
+                        }
+                        if (targetApi) fetch(targetApi).catch(function(){});
+                    } catch(e) {}
+                    
                     // Redirect based on user type
                     window.location.href = user.redirect;
                 } else {
                     // User not found
                     resetLoginButton();
-                    showError(currentLang === 'ar' ? 'الرقم الوظيفي غير مسجل في النظام' : 'Staff number not registered in the system');
+                    showError(currentLang === 'ar' ? 'الرقم الوظيفي أو المدني غير مسجل في النظام' : 'Staff number or Civil ID not registered in the system');
                 }
             } catch (error) {
                 clearTimeout(timeoutId);
