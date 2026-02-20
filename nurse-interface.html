@@ -62,6 +62,10 @@
             box-sizing: border-box;
         }
 
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
             font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             background: linear-gradient(135deg, var(--bg-blue) 0%, var(--lighter-blue) 100%);
@@ -426,6 +430,16 @@
         
         .field-error-label {
             color: #ef4444 !important;
+        }
+        
+        /* Gentle pulse for fields awaiting completion (destination, patient name) */
+        @keyframes pulse-attention {
+            0%, 100% { border-color: #e5e7eb; box-shadow: 0 0 0 0 rgba(180, 83, 9, 0.15); }
+            50% { border-color: #d97706; box-shadow: 0 0 0 3px rgba(213, 119, 6, 0.12); }
+        }
+        .field-attention input,
+        .field-attention select {
+            animation: pulse-attention 1.2s ease-in-out 2;
         }
         
         /* Ensure validation message is visible */
@@ -1812,9 +1826,36 @@
         function scrollToField(fieldId) {
             const field = document.getElementById(fieldId);
             if (field) {
-                field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => field.focus(), 300);
+                smoothScrollToElement(field);
+                setTimeout(() => field.focus(), 400);
             }
+        }
+        
+        /** Smooth sliding scroll - feels like movement rather than jump */
+        function smoothScrollToElement(element, duration = 700) {
+            if (!element) return;
+            const offset = 24;
+            const targetPos = element.getBoundingClientRect().top + window.pageYOffset - offset;
+            const startPos = window.pageYOffset;
+            const distance = targetPos - startPos;
+            const startTime = performance.now();
+            
+            function easeInOutCubic(t) {
+                return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            }
+            
+            function scrollStep() {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = easeInOutCubic(progress);
+                window.scrollTo({ top: startPos + distance * easeProgress, behavior: 'auto' });
+                if (progress < 1) {
+                    requestAnimationFrame(scrollStep);
+                } else {
+                    element.focus();
+                }
+            }
+            requestAnimationFrame(scrollStep);
         }
         
         // Show ALL field errors at once with shake animation
@@ -2070,14 +2111,24 @@
 
             updateTimeInputs();
 
-            // Scroll down to the form fields that need completion (destination field)
+            // Smooth sliding scroll to fields that need completion
             setTimeout(() => {
                 const destinationField = document.getElementById('destination');
                 if (destinationField) {
-                    destinationField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    destinationField.focus();
+                    smoothScrollToElement(destinationField, 700);
+                    setTimeout(() => destinationField.focus(), 750);
                 }
-            }, 500);
+                
+                // Gentle pulse on fields to complete (destination, patient name) for 2.5 seconds
+                const destGroup = document.getElementById('destination')?.closest('.form-group');
+                const patientGroup = document.getElementById('patientName')?.closest('.form-group');
+                [destGroup, patientGroup].forEach(g => {
+                    if (g) g.classList.add('field-attention');
+                });
+                setTimeout(() => {
+                    [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
+                }, 2500);
+            }, 400);
         }
 
         function clearDatePickers() {
@@ -3130,8 +3181,8 @@
             loadPendingTrips(false, true);
         }
         
-        // Check for updates every 15 seconds - store reference to stop it on logout
-        window.smartRefreshInterval = setInterval(smartRefreshPendingTrips, 15000);
+        // Check for updates every 8 seconds - faster sync with driver/home app
+        window.smartRefreshInterval = setInterval(smartRefreshPendingTrips, 8000);
 
         // Track if logout is in progress to prevent spinner issues
         let isLoggingOut = false;
