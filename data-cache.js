@@ -209,15 +209,12 @@ const DataCache = {
 
             if (freshData !== null && freshData !== undefined) {
                 const freshHash = this.hash(freshData);
+                const dataChanged = freshHash !== cachedHash;
 
-                // Only update UI if data actually changed
-                if (freshHash !== cachedHash) {
-                    this.set(cacheKey, freshData);
-                    onData(freshData, { fromCache: false, isExpired: false });
-                } else {
-                    // Data unchanged, just update timestamp
-                    this.set(cacheKey, freshData);
-                }
+                this.set(cacheKey, freshData);
+                // Always notify with fresh server data so pages can reconcile
+                // localStorage state (e.g. remove admin-deleted trips)
+                onData(freshData, { fromCache: false, isExpired: false, unchanged: !dataChanged });
             }
         } catch (error) {
             delete this._inflight[url];

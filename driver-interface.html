@@ -1347,7 +1347,7 @@
             // Load local history immediately (only if not recently rendered)
             const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
             if (localHistory.length > 0 && allDriverHistory.length === 0) {
-                allDriverHistory = localHistory;
+                allDriverHistory = localHistory.map(t => ({ ...t, syncing: false }));
                 renderDriverHistoryPage();
             }
 
@@ -1357,20 +1357,15 @@
                 DataCache.KEYS.PENDING_TRIPS,
                 DataCache.EXPIRY.PENDING_TRIPS,
                 (trips, meta) => {
-                    // Only update if:
-                    // 1. Not currently submitting
-                    // 2. Enough time has passed since last render
-                    // 3. Data is fresh (not from cache) OR this is initial load
-                    const now = Date.now();
-                    const shouldRender = !isSubmittingDeparture && 
-                                        !isSubmittingReturn && 
-                                        (now - _lastHistoryRender > _MIN_RENDER_INTERVAL || allDriverHistory.length === 0);
+                    if (meta?.fromCache) return;
+                    if (isSubmittingDeparture || isSubmittingReturn) return;
                     
-                    if (shouldRender && !meta?.fromCache) {
-                        _lastHistoryRender = now;
+                    const now = Date.now();
+                    if (now - _lastHistoryRender < _MIN_RENDER_INTERVAL && allDriverHistory.length > 0 && meta?.unchanged) return;
+                    
+                    _lastHistoryRender = now;
                     processPendingTripsData(trips);
                     renderTripHistoryFromData(trips);
-                    }
                 },
                 (result) => (result.success && Array.isArray(result.trips)) ? result.trips : null
             );
@@ -1608,7 +1603,6 @@
             
             // === SEND TO SERVER IN BACKGROUND (non-blocking) ===
             const syncCompleteDeparture = () => {
-                // Remove syncing indicator
                 allDriverHistory = allDriverHistory.map(t => {
                     if (t.departureDate === date && t.departureTime === time) {
                         return { ...t, syncing: false };
@@ -1617,6 +1611,17 @@
                 });
                 renderDriverHistoryPage();
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+                // Persist syncing:false to localStorage
+                const histKey = `trip_history_${selectedDriver.staffNumber}`;
+                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
+                const updated = stored.map(t => {
+                    if (t.departureDate === date && t.departureTime === time) {
+                        const { syncing, ...rest } = t;
+                        return rest;
+                    }
+                    return t;
+                });
+                localStorage.setItem(histKey, JSON.stringify(updated));
             };
             
             if (isOnline) {
@@ -1776,7 +1781,6 @@
 
             // === STEP 4: SEND TO SERVER IN BACKGROUND ===
             const syncComplete = () => {
-                // Remove syncing indicator after successful sync
                 allDriverHistory = allDriverHistory.map(t => {
                     if (t.departureDate === tripDepartureDate && 
                         t.departureTime === tripDepartureTime) {
@@ -1785,6 +1789,17 @@
                     return t;
                 });
                 renderDriverHistoryPage();
+                // Persist syncing:false to localStorage
+                const histKey = `trip_history_${selectedDriver.staffNumber}`;
+                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
+                const updated = stored.map(t => {
+                    if (t.departureDate === tripDepartureDate && t.departureTime === tripDepartureTime) {
+                        const { syncing, ...rest } = t;
+                        return rest;
+                    }
+                    return t;
+                });
+                localStorage.setItem(histKey, JSON.stringify(updated));
             };
             
             if (isOnline) {
@@ -1951,24 +1966,24 @@
          * Used when UI is already updated and we just need to persist to localStorage
          */
         function saveTripToHistoryQuiet(trip) {
+            const { syncing, ...cleanTrip } = trip;
             const key = `trip_history_${selectedDriver.staffNumber}`;
             let history = JSON.parse(localStorage.getItem(key)) || [];
             
             // Check if trip already exists in localStorage (prevent duplicates)
             const existsIndex = history.findIndex(t => 
-                t.departureDate === trip.departureDate && 
-                t.departureTime === trip.departureTime
+                t.departureDate === cleanTrip.departureDate && 
+                t.departureTime === cleanTrip.departureTime
             );
             
             if (existsIndex >= 0) {
-                // Update existing trip with return data
+                const { syncing: _, ...existingClean } = history[existsIndex];
                 history[existsIndex] = {
-                    ...history[existsIndex],
-                    ...trip
+                    ...existingClean,
+                    ...cleanTrip
                 };
             } else {
-                // Add new trip
-                history.unshift(trip);
+                history.unshift(cleanTrip);
             }
             
             // Keep only last 100 trips
@@ -2022,21 +2037,22 @@
                     t.departureTime === localTrip.departureTime
                 );
                 if (!exists) {
-                    // If server data is available and trip was approved/submitted, it was deleted by admin
                     if (serverDataAvailable && (localTrip.approved || localTrip.status === 'submitted' || localTrip.status === 'complete')) {
-                        // Trip was on server but now deleted — skip it
+                        // Trip was approved/complete but no longer on server — deleted by admin
+                    } else if (serverDataAvailable && localTrip.tripId) {
+                        // Trip had a server ID but no longer on server — deleted by admin
                     } else if (serverDataAvailable) {
-                        // Trip not on server and not approved — could be a local-only trip, skip stale ones
-                        // Only keep if it's recent (within last 24 hours)
-                        const tripDate = new Date(localTrip.departureDate);
-                        const now = new Date();
-                        const ageMs = now - tripDate;
-                        if (ageMs < 24 * 60 * 60 * 1000) {
-                            history.push(localTrip);
-                            cleanedLocalHistory.push(localTrip);
+                        // Local-only trip (no tripId, never synced) — keep only if recent and offline-saved
+                        if (localTrip.offlineSaved) {
+                            const tripDate = new Date(localTrip.departureDate);
+                            const ageMs = Date.now() - tripDate;
+                            if (ageMs < 24 * 60 * 60 * 1000) {
+                                history.push(localTrip);
+                                cleanedLocalHistory.push(localTrip);
+                            }
                         }
                     } else {
-                        // No server data — keep all local trips
+                        // No server data available — keep all local trips as fallback
                         history.push(localTrip);
                         cleanedLocalHistory.push(localTrip);
                     }
