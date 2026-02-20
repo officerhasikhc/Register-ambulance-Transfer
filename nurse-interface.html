@@ -15,6 +15,10 @@
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
     
+    <!-- Flatpickr - Date picker with yyyy/mm/dd format (native type=date cannot customize display) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+    
     <script src="session-manager.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
@@ -434,14 +438,10 @@
             direction: ltr;
             text-align: left;
         }
-        /* Date picker - ensure visible and LTR for yyyy/mm/dd format */
-        input[type="date"].date-input {
+        /* Date picker (Flatpickr) - ensure visible and LTR for yyyy/mm/dd format */
+        .date-input.flatpickr-input {
             min-width: 160px;
             cursor: pointer;
-        }
-        [dir="rtl"] input[type="date"].date-input {
-            direction: ltr;
-            unicode-bidi: embed;
         }
 
         .form-group textarea {
@@ -1116,7 +1116,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Departure Date</label>
-                                <input type="date" id="departureDate" class="date-input" required onchange="validateDates()" lang="en" title="yyyy/mm/dd">
+                                <input type="text" id="departureDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd" autocomplete="off">
                             </div>
                             <div class="form-group">
                                 <label>Departure Time</label>
@@ -1144,7 +1144,7 @@
                         <div class="date-time-grid">
                             <div class="form-group">
                                 <label>Return Date</label>
-                                <input type="date" id="returnDate" class="date-input" required onchange="validateDates()" lang="en" title="yyyy/mm/dd">
+                                <input type="text" id="returnDate" class="date-input" required placeholder="yyyy/mm/dd" onchange="validateDates()" lang="en" pattern="\d{4}[/-]\d{1,2}[/-]\d{1,2}" title="yyyy/mm/dd" autocomplete="off">
                             </div>
                             <div class="form-group">
                                 <label>Return Time</label>
@@ -1706,6 +1706,30 @@
             });
         }
 
+        // ============================================
+        // DATE PICKER - Flatpickr for yyyy/mm/dd (native type=date cannot customize format)
+        // Accepts driver format (yyyy-mm-dd) and displays as yyyy/mm/dd
+        // ============================================
+        let flatpickrDeparture = null;
+        let flatpickrReturn = null;
+        function initializeDatePickers() {
+            if (typeof flatpickr === 'undefined') return;
+            const opts = {
+                dateFormat: 'Y/m/d',
+                allowInput: true,
+                locale: { firstDayOfWeek: 0 },
+                onChange: function() { validateDates(); }
+            };
+            const depEl = document.getElementById('departureDate');
+            const retEl = document.getElementById('returnDate');
+            if (depEl && !depEl._flatpickr) {
+                flatpickrDeparture = flatpickr(depEl, opts);
+            }
+            if (retEl && !retEl._flatpickr) {
+                flatpickrReturn = flatpickr(retEl, opts);
+            }
+        }
+
         function updateTimeInputs() {
             const depHour = document.getElementById('departureTimeHour').value;
             const depMin = document.getElementById('departureTimeMinute').value;
@@ -2008,10 +2032,11 @@
                 }
             }
 
-            // Fill departure date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            // Fill departure date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
             const depDate = DateTimeFormatter.formatDate(trip.departureDate);
             if (depDate) {
-                document.getElementById('departureDate').value = depDate;
+                if (flatpickrDeparture) flatpickrDeparture.setDate(depDate);
+                else document.getElementById('departureDate').value = DateTimeFormatter.formatDateForDisplay(trip.departureDate);
             }
             
             // Parse departure time - use DateTimeFormatter for English format
@@ -2025,10 +2050,11 @@
                 }
             }
 
-            // Fill return date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            // Fill return date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
             const retDate = DateTimeFormatter.formatDate(trip.returnDate);
             if (retDate) {
-                document.getElementById('returnDate').value = retDate;
+                if (flatpickrReturn) flatpickrReturn.setDate(retDate);
+                else document.getElementById('returnDate').value = DateTimeFormatter.formatDateForDisplay(trip.returnDate);
             }
 
             // Parse return time - use DateTimeFormatter for English format
@@ -2054,12 +2080,16 @@
             }, 500);
         }
 
+        function clearDatePickers() {
+            if (flatpickrDeparture) flatpickrDeparture.clear();
+            if (flatpickrReturn) flatpickrReturn.clear();
+        }
+
         function clearFormForPendingTrip() {
             // Clear all form fields except nurse name
             document.getElementById('driverName').value = '';
             document.getElementById('staffNumber').value = '';
-            document.getElementById('departureDate').value = '';
-            document.getElementById('returnDate').value = '';
+            clearDatePickers();
             document.getElementById('destination').value = '';
             
             // Hide and clear "Other" destination input
@@ -2394,6 +2424,7 @@
 
         function resetForm() {
             document.getElementById('ambulanceForm').reset();
+            clearDatePickers();
             document.getElementById('staffNumber').style.background = '#f3f4f6';
             hideValidation();
             editingRecordId = null;
@@ -2675,11 +2706,12 @@
                 }
             }
             
-            // Fill departure date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            // Fill departure date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
             if (record['Departure Date']) {
                 const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
                 if (depDate) {
-                    document.getElementById('departureDate').value = depDate;
+                    if (flatpickrDeparture) flatpickrDeparture.setDate(depDate);
+                    else document.getElementById('departureDate').value = DateTimeFormatter.formatDateForDisplay(record['Departure Date']);
                 }
             }
             
@@ -2694,10 +2726,11 @@
                 }
             }
             
-            // Fill return date - yyyy-mm-dd for date picker (displays as yyyy/mm/dd)
+            // Fill return date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
             const retDate = DateTimeFormatter.formatDate(record['Return Date']);
             if (retDate) {
-                document.getElementById('returnDate').value = retDate;
+                if (flatpickrReturn) flatpickrReturn.setDate(retDate);
+                else document.getElementById('returnDate').value = DateTimeFormatter.formatDateForDisplay(record['Return Date']);
             }
             
             // Parse return time
@@ -3040,6 +3073,7 @@
         updateYearlyTotalLabel();
 
         initializeTimePickers();
+        initializeDatePickers();
         initializeDropdowns();
         
         // Force English locale for date and time inputs on page load
