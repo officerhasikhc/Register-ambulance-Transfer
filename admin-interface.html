@@ -912,7 +912,7 @@
 
         /* Table row delete animation */
         tr.deleting {
-            animation: rowSlideOut 0.4s ease-out forwards;
+            animation: rowSlideOut 0.5s ease-out forwards;
             pointer-events: none;
         }
 
@@ -924,11 +924,28 @@
             0% {
                 opacity: 1;
                 transform: translateX(0);
+                max-height: 80px;
+            }
+            60% {
+                opacity: 0;
+                transform: translateX(60px);
+                max-height: 80px;
             }
             100% {
                 opacity: 0;
-                transform: translateX(50px);
+                transform: translateX(60px);
+                max-height: 0;
+                padding: 0;
+                margin: 0;
+                border: none;
+                overflow: hidden;
+                line-height: 0;
+                font-size: 0;
             }
+        }
+
+        tr.deleting td {
+            transition: padding 0.15s ease-out;
         }
 
         .trip-card:hover {
@@ -3136,7 +3153,7 @@
             });
             if (!confirmed) return;
             
-            // Find and animate the row immediately
+            // Find and animate the row immediately (slide out + collapse)
             const tableRow = document.querySelector(`tr[data-record-id="${id}"]`);
             if (tableRow) {
                 tableRow.classList.add('deleting');
@@ -3146,6 +3163,11 @@
             allRecords = allRecords.filter(r => r.id !== id && r.ID !== id);
             
             showToast('جاري حذف السجل...', 'info');
+            
+            // Re-render table after slide-out animation completes
+            setTimeout(() => {
+                renderTable(allRecords);
+            }, 550);
             
             try {
                 const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, {
@@ -3158,11 +3180,6 @@
                     showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
                     DataCache.invalidateAll();
                     clearLocalPendingTripCaches();
-                    
-                    // Re-render table after animation
-                    setTimeout(() => {
-                        renderTable(allRecords);
-                    }, 400);
                 } else {
                     showToast(result.error || 'فشل في الحذف', 'error');
                     loadAdminData();

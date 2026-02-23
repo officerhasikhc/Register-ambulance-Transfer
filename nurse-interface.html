@@ -2125,24 +2125,32 @@
 
             updateTimeInputs();
 
-            // Smooth sliding scroll to fields that need completion
+            // Disable the clicked button immediately to prevent double-click
+            const clickedBtn = document.getElementById(`trip-card-${index}`)?.querySelector('.btn-use-trip');
+            if (clickedBtn) {
+                clickedBtn.disabled = true;
+                clickedBtn.textContent = currentLang === 'en' ? '✓ Editing...' : '✓ جاري التعديل...';
+                clickedBtn.style.background = '#9ca3af';
+                clickedBtn.style.cursor = 'not-allowed';
+                clickedBtn.style.opacity = '0.7';
+            }
+
+            // Scroll immediately to the destination field (no delay)
+            const destinationField = document.getElementById('destination');
+            if (destinationField) {
+                smoothScrollToElement(destinationField, 400);
+                setTimeout(() => destinationField.focus(), 450);
+            }
+            
+            // Gentle pulse on fields to complete (destination, patient name)
+            const destGroup = document.getElementById('destination')?.closest('.form-group');
+            const patientGroup = document.getElementById('patientName')?.closest('.form-group');
+            [destGroup, patientGroup].forEach(g => {
+                if (g) g.classList.add('field-attention');
+            });
             setTimeout(() => {
-                const destinationField = document.getElementById('destination');
-                if (destinationField) {
-                    smoothScrollToElement(destinationField, 700);
-                    setTimeout(() => destinationField.focus(), 750);
-                }
-                
-                // Gentle pulse on fields to complete (destination, patient name) for 2.5 seconds
-                const destGroup = document.getElementById('destination')?.closest('.form-group');
-                const patientGroup = document.getElementById('patientName')?.closest('.form-group');
-                [destGroup, patientGroup].forEach(g => {
-                    if (g) g.classList.add('field-attention');
-                });
-                setTimeout(() => {
-                    [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
-                }, 6000);
-            }, 400);
+                [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
+            }, 6000);
         }
 
         function clearDatePickers() {
