@@ -2504,27 +2504,40 @@
                 
                 resetForm();
                 
-                // Invalidate records cache so next load gets fresh server data
-                DataCache.invalidate(DataCache.KEYS.RECORDS);
+                // Invalidate ALL records cache keys (base + year/month variants)
+                DataCache.invalidateAll();
                 
-                // Refresh pending trips and records, then scroll appropriately
-                setTimeout(() => {
-                    loadRecords();
-                    loadPendingTrips();
-                    
-                    // Scroll to pending trips if there are more, otherwise to records
+                if (isEditing) {
+                    // For edits: optimistic update already applied, just scroll to records
+                    // and do a delayed server refresh to confirm
                     setTimeout(() => {
-                        if (currentPendingTrips.length > 0) {
-                            document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        } else {
-                            document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
+                        document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 300);
-                }, 1000);
-                setTimeout(() => {
-                    DataCache.invalidate(DataCache.KEYS.RECORDS);
-                    loadRecords();
-                }, 2500);
+                    // Delayed server refresh to sync with server data
+                    setTimeout(() => {
+                        DataCache.invalidateAll();
+                        loadRecords();
+                    }, 3000);
+                } else {
+                    // For new records: refresh pending trips and records
+                    setTimeout(() => {
+                        loadRecords();
+                        loadPendingTrips();
+                        
+                        // Scroll to pending trips if there are more, otherwise to records
+                        setTimeout(() => {
+                            if (currentPendingTrips.length > 0) {
+                                document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            } else {
+                                document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }, 300);
+                    }, 1000);
+                    setTimeout(() => {
+                        DataCache.invalidateAll();
+                        loadRecords();
+                    }, 2500);
+                }
 
             } catch (error) {
                 console.error('Error:', error);
