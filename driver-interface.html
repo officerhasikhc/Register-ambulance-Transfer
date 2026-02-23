@@ -974,17 +974,6 @@
 
     <script>
         // ============================================
-        // DIAGNOSTIC - Disabled in production
-        // ============================================
-        const DIAGNOSTIC = {
-            enabled: false,
-            log() {},
-            showInUI() {},
-            getReport() { return []; },
-            clear() {}
-        };
-        
-        // ============================================
         // CONFIGURATION
         // ============================================
         const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
@@ -1934,8 +1923,6 @@
         }
 
         function saveTripToHistory(trip) {
-            DIAGNOSTIC.log('💾 saveTripToHistory called', { tripDate: trip.departureDate, tripTime: trip.departureTime, currentHistoryCount: allDriverHistory.length });
-            
             const key = `trip_history_${selectedDriver.staffNumber}`;
             let history = JSON.parse(localStorage.getItem(key)) || [];
             
@@ -1948,29 +1935,23 @@
             if (!exists) {
                 history.unshift(trip);
                 console.log('💾 Saved trip to local history:', trip);
-                DIAGNOSTIC.log('💾 Trip added to localStorage history', { newHistoryCount: history.length });
             }
             
             // Keep only last 100 trips
             if (history.length > 100) {
                 history = history.slice(0, 100);
-                DIAGNOSTIC.log('📝 History trimmed to 100 trips');
             }
             
             localStorage.setItem(key, JSON.stringify(history));
             
-            // === FIX: Merge with existing allDriverHistory instead of replacing ===
-            // Add the new trip to the current allDriverHistory (which contains server trips)
+            // Merge with existing allDriverHistory instead of replacing
+            // This preserves server trips (with request numbers) already in the list
             const existingInAllHistory = allDriverHistory.some(t => 
                 t.departureDate === trip.departureDate && 
                 t.departureTime === trip.departureTime
             );
             
-            DIAGNOSTIC.log('🔍 Checking if trip exists in allDriverHistory', { exists: existingInAllHistory, allDriverHistoryCount: allDriverHistory.length });
-            
             if (!existingInAllHistory) {
-                // Add to the beginning of allDriverHistory
-                DIAGNOSTIC.log('➕ Adding trip to allDriverHistory');
                 allDriverHistory.unshift(trip);
                 
                 // Remove any duplicate that might exist (same date/time but different data)
@@ -1981,18 +1962,12 @@
                     ))
                 );
                 
-                // Keep only last 100 trips in allDriverHistory as well
                 if (allDriverHistory.length > 100) {
                     allDriverHistory = allDriverHistory.slice(0, 100);
-                    DIAGNOSTIC.log('📝 allDriverHistory trimmed to 100 trips');
                 }
-            } else {
-                DIAGNOSTIC.log('⚠️ Trip already exists in allDriverHistory - skipping add');
             }
             
-            DIAGNOSTIC.log('🎨 About to render from saveTripToHistory', { finalHistoryCount: allDriverHistory.length });
             renderDriverHistoryPage();
-            DIAGNOSTIC.log('✅ saveTripToHistory completed');
         }
 
         /**

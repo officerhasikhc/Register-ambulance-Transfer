@@ -2372,9 +2372,10 @@
                 }
             }
 
+            const isEditing = !!editingRecordId;
             const formData = {
-                action: editingRecordId ? 'updateRecord' : 'submitCase',
-                id: editingRecordId || undefined,
+                action: isEditing ? 'updateRecord' : 'submitCase',
+                id: isEditing ? String(editingRecordId).trim() : undefined,
                 vehicleNumber: document.getElementById('vehicleNumber').value,
                 driverName: document.getElementById('driverName').value,
                 staffNumber: document.getElementById('staffNumber').value,
@@ -2424,7 +2425,53 @@
             }
 
             try {
-                // Single fetch with no-cors to prevent duplicate requests
+                // === OPTIMISTIC LOCAL UPDATE FOR EDITS ===
+                // Apply changes to local data immediately so UI updates instantly
+                if (isEditing) {
+                    const editId = String(editingRecordId).trim();
+                    allRecords = allRecords.map(r => {
+                        if (String(r.ID).trim() === editId) {
+                            return {
+                                ...r,
+                                'Vehicle Number': formData.vehicleNumber,
+                                'Driver Name': formData.driverName,
+                                'Staff Number': formData.staffNumber,
+                                'Departure Date': formData.departureDate,
+                                'Departure Time': formData.departureTime,
+                                'Return Date': formData.returnDate,
+                                'Return Time': formData.returnTime,
+                                'Destination': formData.destination,
+                                'Patient Name': formData.patientName,
+                                'Nurse Name': formData.nurseName
+                            };
+                        }
+                        return r;
+                    });
+                    // Also update allYearRecords
+                    allYearRecords = allYearRecords.map(r => {
+                        if (String(r.ID).trim() === editId) {
+                            return {
+                                ...r,
+                                'Vehicle Number': formData.vehicleNumber,
+                                'Driver Name': formData.driverName,
+                                'Staff Number': formData.staffNumber,
+                                'Departure Date': formData.departureDate,
+                                'Departure Time': formData.departureTime,
+                                'Return Date': formData.returnDate,
+                                'Return Time': formData.returnTime,
+                                'Destination': formData.destination,
+                                'Patient Name': formData.patientName,
+                                'Nurse Name': formData.nurseName
+                            };
+                        }
+                        return r;
+                    });
+                    // Re-render records table immediately with updated data
+                    displayRecords(allRecords);
+                    console.log('✅ Local records updated optimistically for ID:', editId);
+                }
+
+                // Send to server (no-cors = opaque response, can't read result)
                 await fetch(WEB_APP_URL, {
                     method: 'POST',
                     mode: 'no-cors',
@@ -2433,7 +2480,7 @@
                 });
                 
                 // Show success message
-                if (editingRecordId) {
+                if (isEditing) {
                     // Update modal content for edit success
                     document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
                     document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
@@ -2457,6 +2504,9 @@
                 
                 resetForm();
                 
+                // Invalidate records cache so next load gets fresh server data
+                DataCache.invalidate(DataCache.KEYS.RECORDS);
+                
                 // Refresh pending trips and records, then scroll appropriately
                 setTimeout(() => {
                     loadRecords();
@@ -2471,7 +2521,10 @@
                         }
                     }, 300);
                 }, 1000);
-                setTimeout(() => loadRecords(), 2500);
+                setTimeout(() => {
+                    DataCache.invalidate(DataCache.KEYS.RECORDS);
+                    loadRecords();
+                }, 2500);
 
             } catch (error) {
                 console.error('Error:', error);
