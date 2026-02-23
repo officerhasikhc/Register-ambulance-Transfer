@@ -2426,47 +2426,31 @@
 
             try {
                 // === OPTIMISTIC LOCAL UPDATE FOR EDITS ===
-                // Apply changes to local data immediately so UI updates instantly
                 if (isEditing) {
                     const editId = String(editingRecordId).trim();
-                    allRecords = allRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            return {
-                                ...r,
-                                'Vehicle Number': formData.vehicleNumber,
-                                'Driver Name': formData.driverName,
-                                'Staff Number': formData.staffNumber,
-                                'Departure Date': formData.departureDate,
-                                'Departure Time': formData.departureTime,
-                                'Return Date': formData.returnDate,
-                                'Return Time': formData.returnTime,
-                                'Destination': formData.destination,
-                                'Patient Name': formData.patientName,
-                                'Nurse Name': formData.nurseName
-                            };
-                        }
+                    const editFields = {
+                        'Vehicle Number': formData.vehicleNumber,
+                        'Driver Name': formData.driverName,
+                        'Staff Number': formData.staffNumber,
+                        'Departure Date': formData.departureDate,
+                        'Departure Time': formData.departureTime,
+                        'Return Date': formData.returnDate,
+                        'Return Time': formData.returnTime,
+                        'Destination': formData.destination,
+                        'Patient Name': formData.patientName,
+                        'Nurse Name': formData.nurseName
+                    };
+                    
+                    // Store in pendingEdits so server refreshes won't revert
+                    pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
+                    
+                    // Apply to local arrays in-place (single update, no duplicates)
+                    const updateRecord = r => {
+                        if (String(r.ID).trim() === editId) return { ...r, ...editFields };
                         return r;
-                    });
-                    // Also update allYearRecords
-                    allYearRecords = allYearRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            return {
-                                ...r,
-                                'Vehicle Number': formData.vehicleNumber,
-                                'Driver Name': formData.driverName,
-                                'Staff Number': formData.staffNumber,
-                                'Departure Date': formData.departureDate,
-                                'Departure Time': formData.departureTime,
-                                'Return Date': formData.returnDate,
-                                'Return Time': formData.returnTime,
-                                'Destination': formData.destination,
-                                'Patient Name': formData.patientName,
-                                'Nurse Name': formData.nurseName
-                            };
-                        }
-                        return r;
-                    });
-                    // Re-render records table immediately with updated data
+                    };
+                    allRecords = allRecords.map(updateRecord);
+                    allYearRecords = allYearRecords.map(updateRecord);
                     displayRecords(allRecords);
                     console.log('✅ Local records updated optimistically for ID:', editId);
                 }
@@ -2509,15 +2493,19 @@
                 
                 if (isEditing) {
                     // For edits: optimistic update already applied, just scroll to records
-                    // and do a delayed server refresh to confirm
                     setTimeout(() => {
                         document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 300);
-                    // Delayed server refresh to sync with server data
+                    // Delayed server refresh — give Google Apps Script time to propagate
                     setTimeout(() => {
                         DataCache.invalidateAll();
                         loadRecords();
-                    }, 3000);
+                    }, 8000);
+                    // Second retry to confirm server has the update
+                    setTimeout(() => {
+                        DataCache.invalidateAll();
+                        loadRecords();
+                    }, 15000);
                 } else {
                     // For new records: refresh pending trips and records
                     setTimeout(() => {
@@ -2620,6 +2608,32 @@
             );
         }
 
+        // Apply pending edits on top of server records to prevent revert
+        function applyPendingEdits(records) {
+            if (!records || Object.keys(pendingEdits).length === 0) return records;
+            const now = Date.now();
+            return records.map(r => {
+                const id = String(r.ID).trim();
+                const edit = pendingEdits[id];
+                if (!edit) return r;
+                // If edit is older than 30 seconds, assume server has caught up — clear it
+                if (now - edit.timestamp > 30000) {
+                    delete pendingEdits[id];
+                    return r;
+                }
+                // Check if server data already matches the edit (server caught up)
+                const serverMatches = edit.fields['Nurse Name'] === (r['Nurse Name'] || '') &&
+                    edit.fields['Driver Name'] === (r['Driver Name'] || '') &&
+                    edit.fields['Patient Name'] === ((r['Patient Name'] || r['patientName'] || '').toString().trim());
+                if (serverMatches) {
+                    delete pendingEdits[id];
+                    return r;
+                }
+                // Apply pending edit on top of server data
+                return { ...r, ...edit.fields };
+            });
+        }
+
         async function loadRecords() {
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
@@ -2640,9 +2654,9 @@
                     url, cacheKey, DataCache.EXPIRY.RECORDS,
                     (records) => {
                         if (records) {
-                            allRecords = records;
+                            allRecords = applyPendingEdits(records);
                             nurseRecordsPage = 1;
-                            displayRecords(records);
+                            displayRecords(allRecords);
                         } else {
                             allRecords = [];
                             displayRecords([]);
@@ -2760,6 +2774,7 @@
         const RECORDS_PER_PAGE = 15;
 
         let editingRecordId = null; // Track which record is being edited
+        let pendingEdits = {}; // Track edits not yet confirmed by server { id: { fields, timestamp } }
 
         function viewRecord(record) {
             // Show single record in printable format with edit button
