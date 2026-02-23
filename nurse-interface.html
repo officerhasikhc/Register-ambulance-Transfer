@@ -2056,6 +2056,20 @@
 
             if (!trip) return;
             
+            // Clear editing mode — this is a NEW submission, not an edit
+            editingRecordId = null;
+            pendingEdits = {};
+            const formHeader = document.querySelector('.form-header h2');
+            if (formHeader) {
+                formHeader.textContent = currentLang === 'en' ? 'Register New Ambulance Case' : 'تسجيل حالة إسعاف جديدة';
+                formHeader.style.color = '';
+            }
+            const submitBtnEl = document.getElementById('submitBtn');
+            if (submitBtnEl) {
+                submitBtnEl.textContent = currentLang === 'en' ? 'Submit Record' : 'إرسال السجل';
+                submitBtnEl.style.background = '';
+            }
+            
             // Store the selected trip info for later animation
             selectedTripIndex = index;
             selectedTripId = trip.tripId;
@@ -2137,6 +2151,9 @@
         }
 
         function clearFormForPendingTrip() {
+            // Ensure editing mode is cleared — pending trips are new submissions
+            editingRecordId = null;
+            
             // Clear all form fields except nurse name
             document.getElementById('driverName').value = '';
             document.getElementById('staffNumber').value = '';
@@ -2442,17 +2459,33 @@
                     };
                     
                     // Store in pendingEdits so server refreshes won't revert
+                    pendingEdits = {}; // Clear old pending edits first
                     pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
                     
-                    // Apply to local arrays in-place (single update, no duplicates)
-                    const updateRecord = r => {
-                        if (String(r.ID).trim() === editId) return { ...r, ...editFields };
+                    // Apply to local arrays — only update the EXACT matching record
+                    let matchCount = 0;
+                    allRecords = allRecords.map(r => {
+                        if (String(r.ID).trim() === editId) {
+                            matchCount++;
+                            if (matchCount > 1) {
+                                console.warn('⚠️ Multiple records matched ID:', editId);
+                                return r; // Don't update duplicates
+                            }
+                            return { ...r, ...editFields };
+                        }
                         return r;
-                    };
-                    allRecords = allRecords.map(updateRecord);
-                    allYearRecords = allYearRecords.map(updateRecord);
+                    });
+                    matchCount = 0;
+                    allYearRecords = allYearRecords.map(r => {
+                        if (String(r.ID).trim() === editId) {
+                            matchCount++;
+                            if (matchCount > 1) return r;
+                            return { ...r, ...editFields };
+                        }
+                        return r;
+                    });
                     displayRecords(allRecords);
-                    console.log('✅ Local records updated optimistically for ID:', editId);
+                    console.log('✅ Local record updated for ID:', editId);
                 }
 
                 // Send to server (no-cors = opaque response, can't read result)
@@ -2530,10 +2563,13 @@
             } catch (error) {
                 console.error('Error:', error);
                 alert(currentLang === 'en' ? 'Error submitting. Check connection.' : 'خطأ في الإرسال. تحقق من الاتصال.');
-            } finally {
+                // Only restore original text on error (resetForm already handles success case)
                 submitBtn.disabled = false;
                 submitBtn.textContent = originalText;
+                return;
             }
+            // Re-enable button after success (text already reset by resetForm)
+            submitBtn.disabled = false;
         });
 
         function resetForm() {
@@ -2809,8 +2845,18 @@
                 reportModal.classList.remove('show');
             }
             
-            // Set editing mode
-            editingRecordId = record.ID;
+            // Validate record has a valid ID
+            if (!record.ID || String(record.ID).trim() === '' || String(record.ID).trim() === '-') {
+                alert('Cannot edit: Record has no valid ID');
+                return;
+            }
+            
+            // Clear any previous pending edits to avoid cross-contamination
+            pendingEdits = {};
+            
+            // Set editing mode with exact ID
+            editingRecordId = String(record.ID).trim();
+            console.log('📝 Editing record ID:', editingRecordId);
             
             // Load record data into form
             loadRecordIntoForm(record);
