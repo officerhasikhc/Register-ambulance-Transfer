@@ -912,40 +912,27 @@
 
         /* Table row delete animation */
         tr.deleting {
-            animation: rowSlideOut 0.5s ease-out forwards;
             pointer-events: none;
         }
 
         tr.deleting td {
             background: linear-gradient(to left, #fee2e2, #fef2f2) !important;
+            transition: all 0.3s ease-out;
         }
 
-        @keyframes rowSlideOut {
-            0% {
-                opacity: 1;
-                transform: translateX(0);
-                max-height: 80px;
-            }
-            60% {
-                opacity: 0;
-                transform: translateX(60px);
-                max-height: 80px;
-            }
-            100% {
-                opacity: 0;
-                transform: translateX(60px);
-                max-height: 0;
-                padding: 0;
-                margin: 0;
-                border: none;
-                overflow: hidden;
-                line-height: 0;
-                font-size: 0;
-            }
+        tr.deleting.fade-out td {
+            opacity: 0;
+            transform: translateX(40px);
         }
 
-        tr.deleting td {
-            transition: padding 0.15s ease-out;
+        tr.deleting.collapse td {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            line-height: 0;
+            font-size: 0;
+            border: none;
+            height: 0;
+            overflow: hidden;
         }
 
         .trip-card:hover {
@@ -3153,10 +3140,16 @@
             });
             if (!confirmed) return;
             
-            // Find and animate the row immediately (slide out + collapse)
+            // Two-phase animation: fade-out → collapse → re-render
             const tableRow = document.querySelector(`tr[data-record-id="${id}"]`);
             if (tableRow) {
+                // Phase 1: fade out and slide right (300ms)
                 tableRow.classList.add('deleting');
+                requestAnimationFrame(() => tableRow.classList.add('fade-out'));
+                // Phase 2: collapse height so next row slides up (after fade completes)
+                setTimeout(() => {
+                    tableRow.classList.add('collapse');
+                }, 300);
             }
             
             // Remove from local array immediately
@@ -3164,10 +3157,10 @@
             
             showToast('جاري حذف السجل...', 'info');
             
-            // Re-render table after slide-out animation completes
+            // Re-render table after both phases complete
             setTimeout(() => {
                 renderTable(allRecords);
-            }, 550);
+            }, 650);
             
             try {
                 const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, {
