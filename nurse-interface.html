@@ -2529,16 +2529,11 @@
                     setTimeout(() => {
                         document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 300);
-                    // Delayed server refresh — give Google Apps Script time to propagate
+                    // Single silent server refresh to confirm update (no spinner)
                     setTimeout(() => {
                         DataCache.invalidateAll();
-                        loadRecords();
-                    }, 8000);
-                    // Second retry to confirm server has the update
-                    setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadRecords();
-                    }, 15000);
+                        loadRecords(true);
+                    }, 10000);
                 } else {
                     // For new records: refresh pending trips and records
                     setTimeout(() => {
@@ -2670,13 +2665,13 @@
             });
         }
 
-        async function loadRecords() {
+        async function loadRecords(silent = false) {
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
 
             const recordsSection = document.querySelector('.records-section');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (recordsSection && loadingSpinner) {
+            if (!silent && recordsSection && loadingSpinner) {
                 recordsSection.classList.add('loading');
                 loadingSpinner.classList.add('active');
             }
@@ -2711,7 +2706,7 @@
                     loadYearlyTotal();
                 }
             } finally {
-                if (recordsSection && loadingSpinner) {
+                if (!silent && recordsSection && loadingSpinner) {
                     recordsSection.classList.remove('loading');
                     loadingSpinner.classList.remove('active');
                 }
