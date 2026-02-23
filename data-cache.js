@@ -27,7 +27,7 @@ const DataCache = {
 
     // Cache expiry times (milliseconds) - Optimized for slow connections
     EXPIRY: {
-        PENDING_TRIPS: 3 * 60 * 1000,     // 3 minutes (more frequent updates)
+        PENDING_TRIPS: 1 * 60 * 1000,     // 1 minute (faster sync driver↔nurse)
         RECORDS: 15 * 60 * 1000,          // 15 minutes (longer for stability)
         STATS: 5 * 60 * 1000,             // 5 minutes
         VEHICLES: 60 * 60 * 1000,         // 60 minutes (rarely changes)
@@ -201,7 +201,12 @@ const DataCache = {
         // Step 2: Fetch fresh data in background (with request deduplication)
         try {
             if (!this._inflight[url]) {
-                this._inflight[url] = fetch(url).then(r => r.json());
+                if (window.__earlyFetch && url.includes('getPendingTrips')) {
+                    this._inflight[url] = window.__earlyFetch;
+                    window.__earlyFetch = null;
+                } else {
+                    this._inflight[url] = fetch(url).then(r => r.json());
+                }
             }
             const result = await this._inflight[url];
             delete this._inflight[url];

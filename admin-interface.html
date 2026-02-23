@@ -11,6 +11,9 @@
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     
+    <!-- Date and Time Formatter - English Locale Enforcer -->
+    <script src="date-time-formatter.js"></script>
+    
     <script src="session-manager.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     
@@ -2381,7 +2384,7 @@
                             return `
                             <tr data-record-id="${recordId}">
                                 <td><span style="background:var(--lighter-blue);color:var(--primary-blue);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">${recordId}</span></td>
-                                <td>${(record['Departure Date'] || '').toString().split('T')[0]}</td>
+                                <td>${DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-'}</td>
                                 <td><strong>${record['Vehicle Number']}</strong></td>
                                 <td>${record['Driver Name']}</td>
                                 <td>${mapDestinationToAr(record['Destination'])}</td>
@@ -2421,7 +2424,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">تاريخ المغادرة</div>
-                        <div class="detail-value">${(currentRecord['Departure Date'] || '').toString().split('T')[0]}</div>
+                        <div class="detail-value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Departure Date']) || '-'}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">ساعة المغادرة</div>
@@ -2429,7 +2432,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">تاريخ العودة</div>
-                        <div class="detail-value">${(currentRecord['Return Date'] || '').toString().split('T')[0]}</div>
+                        <div class="detail-value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Return Date']) || '-'}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">ساعة العودة</div>
@@ -2493,9 +2496,9 @@
                         <div class="item"><div class="label">رقم السيارة</div><div class="value">${currentRecord['Vehicle Number']}</div></div>
                         <div class="item"><div class="label">اسم السائق</div><div class="value">${currentRecord['Driver Name']}</div></div>
                         <div class="item"><div class="label">الرقم الوظيفي</div><div class="value">${currentRecord['Staff Number']}</div></div>
-                        <div class="item"><div class="label">تاريخ المغادرة</div><div class="value">${(currentRecord['Departure Date'] || '').toString().split('T')[0]}</div></div>
+                        <div class="item"><div class="label">تاريخ المغادرة</div><div class="value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Departure Date']) || '-'}</div></div>
                         <div class="item"><div class="label">ساعة المغادرة</div><div class="value">${currentRecord['Departure Time']}</div></div>
-                        <div class="item"><div class="label">تاريخ العودة</div><div class="value">${(currentRecord['Return Date'] || '').toString().split('T')[0]}</div></div>
+                        <div class="item"><div class="label">تاريخ العودة</div><div class="value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Return Date']) || '-'}</div></div>
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${currentRecord['Return Time']}</div></div>
                         <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item full"><div class="label">حالة المريض / التشخيص</div><div class="value">${currentRecord['Patient Condition / Diagnosis']}</div></div>
@@ -2512,14 +2515,15 @@
         /** تنسيق التاريخ للعرض في PDF (مثلاً من 2025-01-15 إلى 15/01/2025) */
         function formatDateForPdf(value) {
             if (!value) return '';
-            const s = value.toString().trim();
-            const t = s.split('T')[0];
-            const parts = t.split(/[-/]/);
-            if (parts.length === 3) {
-                const y = parts[0], m = parts[1], d = parts[2];
-                if (y.length === 4) return `${d}/${m}/${y}`;
+            // Use DateTimeFormatter for correct timezone-aware parsing
+            const formatted = DateTimeFormatter.formatDate(value);
+            if (formatted) {
+                const parts = formatted.split('-');
+                if (parts.length === 3) {
+                    return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+                }
             }
-            return s;
+            return value.toString().trim();
         }
 
         /** ربط اسم السائق الإنجليزي بالعربي من بيانات الإعدادات المحلية */
@@ -2680,7 +2684,9 @@
                     const fromDate = new Date(document.getElementById('exportFromDate').value);
                     const toDate = new Date(document.getElementById('exportToDate').value);
                     data = data.filter(record => {
-                        const recordDate = new Date(record['Departure Date'].split('/').reverse().join('-'));
+                        const dateStr = DateTimeFormatter.formatDate(record['Departure Date']);
+                        if (!dateStr) return false;
+                        const recordDate = new Date(dateStr);
                         return recordDate >= fromDate && recordDate <= toDate;
                     });
                 }
@@ -2689,7 +2695,9 @@
                     let csv = 'التاريخ,رقم السيارة,السائق,الرقم الوظيفي,ساعة المغادرة,تاريخ العودة,ساعة العودة,الوجهة,التشخيص,الممرضة\n';
                     
                     data.forEach(record => {
-                        csv += `${record['Departure Date']},${record['Vehicle Number']},${record['Driver Name']},${record['Staff Number']},${record['Departure Time']},${record['Return Date']},${record['Return Time']},${record['Destination']},"${record['Patient Condition / Diagnosis']}",${record['Nurse Name']}\n`;
+                        const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '';
+                        const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '';
+                        csv += `${depDate},${record['Vehicle Number']},${record['Driver Name']},${record['Staff Number']},${record['Departure Time']},${retDate},${record['Return Time']},${record['Destination']},"${record['Patient Condition / Diagnosis']}",${record['Nurse Name']}\n`;
                     });
 
                     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -2936,8 +2944,8 @@
                             </div>
                             <div class="trip-meta">
                                 الرقم: ${trip.staffNumber || '-'}<br>
-                                الذهاب: ${(trip.departureDate || '-').toString().split('T')[0]} ${trip.departureTime || ''}<br>
-                                ${hasReturn ? `العودة: ${(trip.returnDate || '').toString().split('T')[0]} ${trip.returnTime}` : '<span style="color:var(--warning);">العودة: لم تُسجل بعد</span>'}
+                                الذهاب: ${DateTimeFormatter.formatDateForDisplay(trip.departureDate) || '-'} ${trip.departureTime || ''}<br>
+                                ${hasReturn ? `العودة: ${DateTimeFormatter.formatDateForDisplay(trip.returnDate) || '-'} ${trip.returnTime}` : '<span style="color:var(--warning);">العودة: لم تُسجل بعد</span>'}
                             </div>
                             ${statusNote}
                         </div>
