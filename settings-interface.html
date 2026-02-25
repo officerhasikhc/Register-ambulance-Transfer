@@ -636,7 +636,194 @@
         }
 
         // ============================================
-        // SERVER SYNC FUNCTIONS
+        // LOAD ALL USERS FROM SERVER (nurses + drivers in one request)
+        // ============================================
+        async function loadAllUsersFromServer() {
+            try {
+                const response = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
+                const result = await response.json();
+                if (result.success && result.users) {
+                    // Update nurses
+                    const serverNurses = result.users.filter(u => u.type === 'nurse' && u.active);
+                    if (serverNurses.length > 0) {
+                        nurses = serverNurses.map(n => ({
+                            id: n.id,
+                            nameAr: n.nameAr || '',
+                            nameEn: n.nameEn || '',
+                            staffNumber: (n.staffNumber || n.civilId || '').toString()
+                        }));
+                        renderNursesTable();
+                    }
+                    // Update drivers
+                    const serverDrivers = result.users.filter(u => u.type === 'driver' && u.active);
+                    if (serverDrivers.length > 0) {
+                        drivers = serverDrivers.map(d => ({
+                            id: d.id,
+                            nameAr: d.nameAr || '',
+                            nameEn: d.nameEn || '',
+                            staffNumber: (d.staffNumber || d.civilId || '').toString(),
+                            type: (!d.staffNumber && d.civilId) ? 'daily-paid' : 'employee'
+                        }));
+                        renderDriversTable();
+                    }
+                    saveToStorage();
+                }
+            } catch (error) {
+                console.error('Failed to load users from server:', error);
+            }
+        }
+
+        // Aliases for individual reload after sync
+        async function loadNursesFromServer() { await loadAllUsersFromServer(); }
+        async function loadDriversFromServer() { await loadAllUsersFromServer(); }
+
+        async function syncNurseToServer(nurse, isNew) {
+            try {
+                if (isNew) {
+                    showStatus('جاري حفظ الممرض/ة في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'addUser',
+                            type: 'nurse',
+                            nameAr: nurse.nameAr,
+                            nameEn: nurse.nameEn,
+                            staffNumber: nurse.staffNumber,
+                            civilId: '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم حفظ الممرض/ة بنجاح', 'success');
+                        await loadNursesFromServer();
+                    } else {
+                        showStatus('خطأ في حفظ الممرض/ة: ' + (result.error || ''), 'error');
+                    }
+                } else {
+                    showStatus('جاري تحديث بيانات الممرض/ة في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            id: nurse.id,
+                            type: 'nurse',
+                            nameAr: nurse.nameAr,
+                            nameEn: nurse.nameEn,
+                            staffNumber: nurse.staffNumber,
+                            civilId: '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم تحديث بيانات الممرض/ة بنجاح', 'success');
+                        await loadNursesFromServer();
+                    } else {
+                        showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
+                    }
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Nurse server sync error:', error);
+            }
+        }
+
+        async function deleteNurseFromServer(nurseId) {
+            try {
+                showStatus('جاري حذف الممرض/ة...');
+                const response = await fetch(`${WEB_APP_URL}?action=deleteUser&userId=${encodeURIComponent(nurseId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حذف الممرض/ة بنجاح', 'success');
+                    await loadNursesFromServer();
+                } else {
+                    showStatus('خطأ في حذف الممرض/ة', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // ============================================
+        // DRIVER SERVER SYNC FUNCTIONS
+        // ============================================
+
+        async function syncDriverToServer(driver, isNew) {
+            try {
+                const isDailyPaid = driver.type === 'daily-paid';
+                if (isNew) {
+                    showStatus('جاري حفظ السائق في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'addUser',
+                            type: 'driver',
+                            nameAr: driver.nameAr,
+                            nameEn: driver.nameEn,
+                            staffNumber: isDailyPaid ? '' : driver.staffNumber,
+                            civilId: isDailyPaid ? driver.staffNumber : '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم حفظ السائق بنجاح', 'success');
+                        await loadDriversFromServer();
+                    } else {
+                        showStatus('خطأ في حفظ السائق: ' + (result.error || ''), 'error');
+                    }
+                } else {
+                    showStatus('جاري تحديث بيانات السائق في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            id: driver.id,
+                            type: 'driver',
+                            nameAr: driver.nameAr,
+                            nameEn: driver.nameEn,
+                            staffNumber: isDailyPaid ? '' : driver.staffNumber,
+                            civilId: isDailyPaid ? driver.staffNumber : '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم تحديث بيانات السائق بنجاح', 'success');
+                        await loadDriversFromServer();
+                    } else {
+                        showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
+                    }
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Driver server sync error:', error);
+            }
+        }
+
+        async function deleteDriverFromServer(driverId) {
+            try {
+                showStatus('جاري حذف السائق...');
+                const response = await fetch(`${WEB_APP_URL}?action=deleteUser&userId=${encodeURIComponent(driverId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حذف السائق بنجاح', 'success');
+                    await loadDriversFromServer();
+                } else {
+                    showStatus('خطأ في حذف السائق', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // ============================================
+        // GENERAL UI FUNCTIONS
         // ============================================
         function showStatus(message, type = 'info') {
             // Remove existing status
@@ -803,7 +990,7 @@
             document.getElementById('nurseModal').classList.remove('active');
         }
 
-        function saveNurse(event) {
+        async function saveNurse(event) {
             event.preventDefault();
             
             const index = parseInt(document.getElementById('nurseIndex').value);
@@ -814,6 +1001,8 @@
             };
 
             if (index >= 0) {
+                // Preserve server ID for update
+                nurse.id = nurses[index].id;
                 nurses[index] = nurse;
             } else {
                 nurses.push(nurse);
@@ -822,17 +1011,27 @@
             saveToStorage();
             renderNursesTable();
             closeNurseModal();
+
+            // Sync to server (updateUser for edit, addUser for new)
+            const isNew = index < 0 || !nurse.id;
+            await syncNurseToServer(nurse, isNew);
         }
 
         function editNurse(index) {
             openNurseModal(index);
         }
 
-        function deleteNurse(index) {
+        async function deleteNurse(index) {
             if (confirm(`هل تريد حذف "${nurses[index].nameAr}"؟`)) {
+                const nurse = nurses[index];
                 nurses.splice(index, 1);
                 saveToStorage();
                 renderNursesTable();
+
+                // Delete from server if it has a server ID
+                if (nurse.id) {
+                    await deleteNurseFromServer(nurse.id);
+                }
             }
         }
 
@@ -985,7 +1184,7 @@
             }
         }
 
-        function saveDriver(event) {
+        async function saveDriver(event) {
             event.preventDefault();
             
             const index = parseInt(document.getElementById('driverIndex').value);
@@ -997,6 +1196,8 @@
             };
 
             if (index >= 0) {
+                // Preserve server ID for update
+                driver.id = drivers[index].id;
                 drivers[index] = driver;
             } else {
                 drivers.push(driver);
@@ -1005,17 +1206,27 @@
             saveToStorage();
             renderDriversTable();
             closeDriverModal();
+
+            // Sync to server (updateUser for edit, addUser for new)
+            const isNew = index < 0 || !driver.id;
+            await syncDriverToServer(driver, isNew);
         }
 
         function editDriver(index) {
             openDriverModal(index);
         }
 
-        function deleteDriver(index) {
+        async function deleteDriver(index) {
             if (confirm(`هل تريد حذف السائق "${drivers[index].nameAr}"؟`)) {
+                const driver = drivers[index];
                 drivers.splice(index, 1);
                 saveToStorage();
                 renderDriversTable();
+
+                // Delete from server if it has a server ID
+                if (driver.id) {
+                    await deleteDriverFromServer(driver.id);
+                }
             }
         }
 
@@ -1168,8 +1379,11 @@
             renderDriversTable();
             renderVehiclesTable();
 
-            // Load vehicles from server (source of truth)
-            await loadVehiclesFromServer();
+            // Load all users (nurses + drivers) and vehicles from server (source of truth)
+            await Promise.all([
+                loadAllUsersFromServer(),
+                loadVehiclesFromServer()
+            ]);
         }
 
         initializeSettings();
