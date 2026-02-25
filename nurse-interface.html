@@ -2433,6 +2433,14 @@
                 nurseName: document.getElementById('nurseName').value
             };
 
+            // Safety: ensure nurseName is never empty on submit
+            if (!formData.nurseName || !formData.nurseName.trim()) {
+                try {
+                    const session = JSON.parse(localStorage.getItem('userSession') || '{}');
+                    formData.nurseName = session.nameEn || session.nameAr || '';
+                } catch(e) {}
+            }
+
             // Optimistic UI: slide out and remove card immediately (in sync with save)
             if (selectedTripId) {
                 const tripIndex = currentPendingTrips.findIndex(t => t.tripId === selectedTripId);
@@ -3000,9 +3008,15 @@
                 document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
             
-            // Fill nurse name
-            if (record['Nurse Name']) {
-                document.getElementById('nurseName').value = record['Nurse Name'];
+            // Fill nurse name - always ensure it has a value
+            const nurseField = document.getElementById('nurseName');
+            if (record['Nurse Name'] && record['Nurse Name'].toString().trim()) {
+                nurseField.value = record['Nurse Name'].toString().trim();
+            } else {
+                // Fallback: keep current field value (from session), or reload from session
+                if (!nurseField.value || !nurseField.value.trim()) {
+                    loadUserSession();
+                }
             }
             
             updateTimeInputs();
