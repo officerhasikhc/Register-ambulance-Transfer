@@ -2759,18 +2759,24 @@
             const startIndex = (nurseRecordsPage - 1) * NURSE_RECORDS_PER_PAGE;
             const pageRecords = records.slice(startIndex, startIndex + NURSE_RECORDS_PER_PAGE);
 
+            const truncName = (name, max = 12) => {
+                if (!name || name === '-') return '-';
+                return name.length > max ? name.substring(0, max) + '…' : name;
+            };
+
             let tableHTML = `
-                <table class="record-table">
+                <table class="record-table" style="font-size:12px;">
                     <thead>
                         <tr>
-                            <th>${currentLang === 'en' ? '#' : '#'}</th>
-                            <th>${currentLang === 'en' ? 'Vehicle' : 'السيارة'}</th>
-                            <th>${currentLang === 'en' ? 'Driver' : 'السائق'}</th>
-                            <th>${currentLang === 'en' ? 'Departure' : 'الذهاب'}</th>
-                            <th>${currentLang === 'en' ? 'Return' : 'العودة'}</th>
-                            <th>${currentLang === 'en' ? 'Destination' : 'الوجهة'}</th>
-                            <th>${currentLang === 'en' ? 'Patient' : 'المريض'}</th>
-                            <th>${currentLang === 'en' ? 'Actions' : 'الإجراءات'}</th>
+                            <th>#</th>
+                            <th>Vehicle</th>
+                            <th>Driver</th>
+                            <th>Departure</th>
+                            <th>Return</th>
+                            <th>Dest.</th>
+                            <th>Patient</th>
+                            <th>Nurse</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2780,15 +2786,18 @@
                             const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
                             const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
+                            const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
+                            const fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
                             return `
                             <tr>
-                                <td><span style="background:#e0e7ff;color:#1e40af;padding:4px 10px;border-radius:8px;font-size:13px;font-weight:700;">${recordId}</span></td>
+                                <td><span style="background:#e0e7ff;color:#1e40af;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;">${recordId}</span></td>
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
-                                <td style="font-size:12px;">${depDate}<br><small>${depTime}</small></td>
-                                <td style="font-size:12px;">${retDate}<br><small>${retTime}</small></td>
+                                <td style="font-size:11px;white-space:nowrap;">${depDate}<br><small>${depTime}</small></td>
+                                <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
-                                <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
+                                <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
+                                <td title="${fullNurse}" style="cursor:default;">${truncName(fullNurse)}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
