@@ -2434,11 +2434,11 @@
                 nurseStaffNumber: (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim()
             };
 
-            // Safety: ensure nurseName is never empty on submit (always prefer Arabic name)
+            // Safety: ensure nurseName is never empty on submit (prefer English name for nurse page)
             if (!formData.nurseName || !formData.nurseName.trim()) {
                 try {
                     const session = JSON.parse(localStorage.getItem('userSession') || '{}');
-                    formData.nurseName = (session.nameAr || session.nameEn || '').toString().trim();
+                    formData.nurseName = (session.nameEn || session.nameAr || '').toString().trim();
                 } catch(e) {}
             }
 
@@ -3016,21 +3016,19 @@
             // Nurse name logic: check if this is the logged-in nurse's own trip or someone else's
             const nurseField = document.getElementById('nurseName');
             const loggedInStaffNum = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
-            const recordStaffNum = (record['Staff Number'] || '').toString().trim();
-            
-            // Note: 'Staff Number' in Records sheet is the DRIVER's staff number, not the nurse's.
-            // We identify ownership by comparing the Nurse Name in the record with the logged-in nurse's name.
             const loggedInNameAr = (window.loggedInUser && window.loggedInUser.nameAr || '').toString().trim();
             const loggedInNameEn = (window.loggedInUser && window.loggedInUser.nameEn || '').toString().trim();
             const recordNurseName = (record['Nurse Name'] || '').toString().trim();
+            const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             
-            const isOwnTrip = recordNurseName === '' || 
-                              recordNurseName === loggedInNameAr || 
-                              recordNurseName === loggedInNameEn;
+            // Identify ownership: prefer Nurse Staff Number match, fallback to name comparison
+            const isOwnTrip = recordNurseName === '' ||
+                              (recordNurseStaff && recordNurseStaff === loggedInStaffNum) ||
+                              (!recordNurseStaff && (recordNurseName === loggedInNameAr || recordNurseName === loggedInNameEn));
             
             if (isOwnTrip) {
                 // Own trip - nurse can edit her name freely
-                loadUserSession(); // Sets Arabic name and makes field editable
+                loadUserSession(); // Sets English name and makes field editable
                 // If the record had a custom name she entered before, show that instead
                 if (recordNurseName && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
                     nurseField.value = recordNurseName;
@@ -3292,12 +3290,13 @@
                     const userData = JSON.parse(session);
                     const nurseNameField = document.getElementById('nurseName');
                     
-                    // Always use Arabic name (nameAr) as the primary display name
-                    const arabicName = (userData.nameAr || '').toString().trim();
+                    // Nurse page uses English name (nurses are non-Arabic speakers)
+                    // Arabic name is used only on admin page
                     const englishName = (userData.nameEn || '').toString().trim();
-                    const displayName = arabicName || englishName || '';
+                    const arabicName = (userData.nameAr || '').toString().trim();
+                    const displayName = englishName || arabicName || '';
                     
-                    // Set the nurse's own Arabic name
+                    // Set the nurse's English name
                     if (displayName) {
                         nurseNameField.value = displayName;
                     }
