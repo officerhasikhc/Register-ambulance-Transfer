@@ -110,28 +110,41 @@
 
     if (!isLoginPage) {
         const currentSession = getSession();
-        if (currentSession && currentSession.staffNumber) {
-            // Fire-and-forget: refresh user data from server in background
-            fetch(`${SESSION_API_URL}?action=validateUser&staffNumber=${encodeURIComponent(currentSession.staffNumber)}`)
-                .then(r => r.json())
-                .then(result => {
-                    if (result.success && result.user) {
-                        const fresh = result.user;
-                        // Merge fresh server data into existing session (preserve loginTime etc.)
-                        const updated = Object.assign({}, currentSession, {
-                            nameAr: fresh.nameAr || currentSession.nameAr,
-                            nameEn: fresh.nameEn || currentSession.nameEn,
-                            type: fresh.type || currentSession.type,
-                            vehicleNumber: fresh.vehicleNumber || currentSession.vehicleNumber,
-                            civilId: fresh.civilId || currentSession.civilId,
-                            employeeType: fresh.employeeType || currentSession.employeeType
-                        });
-                        localStorage.setItem(SESSION_CONFIG.SESSION_KEY, JSON.stringify(updated));
-                        // Notify pages that session data was refreshed
-                        window.dispatchEvent(new CustomEvent('sessionRefreshed', { detail: updated }));
-                    }
-                })
-                .catch(() => { /* silent - offline or error, keep cached session */ });
+        const pageType = getPageType();
+        // Nurse page uses getNurseData combined endpoint which includes userData refresh,
+        // so skip the separate validateUser call to avoid a redundant request.
+        if (currentSession && currentSession.staffNumber && pageType !== 'nurse') {
+            // Defer to avoid competing with main data fetch on page load
+            const doRefresh = () => {
+                fetch(`${SESSION_API_URL}?action=validateUser&staffNumber=${encodeURIComponent(currentSession.staffNumber)}`)
+                    .then(r => r.json())
+                    .then(result => {
+                        if (result.success && result.user) {
+                            const fresh = result.user;
+                            const isNumeric = function(v) { return v && /^\d+$/.test(v.toString().trim()); };
+                            const updated = Object.assign({}, currentSession, {
+                                nameAr: fresh.nameAr || currentSession.nameAr,
+                                nameEn: fresh.nameEn || currentSession.nameEn,
+                                type: fresh.type || currentSession.type,
+                                vehicleNumber: fresh.vehicleNumber || currentSession.vehicleNumber,
+                                civilId: fresh.civilId || currentSession.civilId,
+                                employeeType: fresh.employeeType || currentSession.employeeType
+                            });
+                            // Clean up: if nameEn/nameAr still looks like employee number, prefer server value
+                            if (isNumeric(updated.nameEn)) updated.nameEn = (fresh.nameEn || '').toString().trim();
+                            if (isNumeric(updated.nameAr)) updated.nameAr = (fresh.nameAr || '').toString().trim();
+                            localStorage.setItem(SESSION_CONFIG.SESSION_KEY, JSON.stringify(updated));
+                            window.dispatchEvent(new CustomEvent('sessionRefreshed', { detail: updated }));
+                        }
+                    })
+                    .catch(() => { /* silent */ });
+            };
+            // Use requestIdleCallback if available, else defer with setTimeout
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(doRefresh, { timeout: 5000 });
+            } else {
+                setTimeout(doRefresh, 2000);
+            }
         }
     }
 
