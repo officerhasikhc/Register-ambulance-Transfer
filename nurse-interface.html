@@ -2316,6 +2316,25 @@
         document.getElementById('ambulanceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            // Check for pending/incomplete trips before allowing new submission
+            // Only block if this is a NEW record (not editing) and not using a pending trip
+            const isNewSubmission = !editingRecordId && !selectedTripId;
+            if (isNewSubmission && currentPendingTrips && currentPendingTrips.length > 0) {
+                const incompleteTripIds = currentPendingTrips
+                    .filter(t => t.status === 'pending' || t.status === 'complete')
+                    .map(t => t.tripId)
+                    .join(', ');
+                if (incompleteTripIds) {
+                    alert(`⚠️ Cannot submit a new record!\n\nThere are incomplete trips waiting: ${incompleteTripIds}\n\nPlease complete the pending trip(s) first by clicking "Complete Data" on the trip card above.`);
+                    // Scroll to pending trips section
+                    const pendingSection = document.getElementById('pendingTripsAlert');
+                    if (pendingSection) {
+                        pendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    return;
+                }
+            }
+
             // Validate before submit and scroll to first error field
             if (!validateDates()) {
                 scrollToField('returnDate');
@@ -2401,6 +2420,7 @@
             const formData = {
                 action: isEditing ? 'updateRecord' : 'submitCase',
                 id: isEditing ? String(editingRecordId).trim() : undefined,
+                tripId: selectedTripId || undefined,
                 vehicleNumber: document.getElementById('vehicleNumber').value,
                 driverName: document.getElementById('driverName').value,
                 staffNumber: document.getElementById('staffNumber').value,
@@ -2743,29 +2763,32 @@
                 <table class="record-table">
                     <thead>
                         <tr>
-                            <th>${currentLang === 'en' ? 'Request #' : 'رقم الطلب'}</th>
-                            <th>${currentLang === 'en' ? 'Date' : 'التاريخ'}</th>
+                            <th>${currentLang === 'en' ? '#' : '#'}</th>
                             <th>${currentLang === 'en' ? 'Vehicle' : 'السيارة'}</th>
                             <th>${currentLang === 'en' ? 'Driver' : 'السائق'}</th>
+                            <th>${currentLang === 'en' ? 'Departure' : 'الذهاب'}</th>
+                            <th>${currentLang === 'en' ? 'Return' : 'العودة'}</th>
                             <th>${currentLang === 'en' ? 'Destination' : 'الوجهة'}</th>
-                            <th>${currentLang === 'en' ? 'Patient Name' : 'اسم المريض'}</th>
-                            <th>${currentLang === 'en' ? 'Nurse' : 'الممرضة'}</th>
+                            <th>${currentLang === 'en' ? 'Patient' : 'المريض'}</th>
                             <th>${currentLang === 'en' ? 'Actions' : 'الإجراءات'}</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${pageRecords.map(record => {
                             const recordId = record.ID || '-';
-                            const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']);
+                            const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
+                            const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
+                            const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
+                            const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             return `
                             <tr>
                                 <td><span style="background:#e0e7ff;color:#1e40af;padding:4px 10px;border-radius:8px;font-size:13px;font-weight:700;">${recordId}</span></td>
-                                <td>${depDate}</td>
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
+                                <td style="font-size:12px;">${depDate}<br><small>${depTime}</small></td>
+                                <td style="font-size:12px;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
                                 <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                                <td>${record['Nurse Name'] || ''}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
@@ -3053,14 +3076,13 @@
                 <table class="report-table">
                     <thead>
                         <tr>
-                            <th style="width: 8%;">No.</th>
-                            <th style="width: 10%;">Date</th>
+                            <th style="width: 5%;">No.</th>
                             <th style="width: 8%;">Vehicle</th>
-                            <th style="width: 14%;">Driver</th>
-                            <th style="width: 10%;">Departure</th>
-                            <th style="width: 10%;">Return</th>
-                            <th style="width: 15%;">Destination</th>
-                            <th style="width: 15%;">Patient Name</th>
+                            <th style="width: 12%;">Driver</th>
+                            <th style="width: 15%;">Departure</th>
+                            <th style="width: 15%;">Return</th>
+                            <th style="width: 13%;">Destination</th>
+                            <th style="width: 13%;">Patient Name</th>
                             <th style="width: 10%;">Nurse</th>
                         </tr>
                     </thead>
@@ -3068,14 +3090,17 @@
             `;
             
             pageRecords.forEach((record, idx) => {
+                const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
+                const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
+                const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
+                const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 html += `
                     <tr>
                         <td>${startIdx + idx + 1}</td>
-                        <td>${DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-'}</td>
                         <td>${record['Vehicle Number'] || '-'}</td>
                         <td>${record['Driver Name'] || '-'}</td>
-                        <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
-                        <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
+                        <td>${depDate}<br><small>${depTime}</small></td>
+                        <td>${retDate}<br><small>${retTime}</small></td>
                         <td>${record['Destination'] || '-'}</td>
                         <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                         <td>${record['Nurse Name'] || '-'}</td>
@@ -3153,26 +3178,28 @@
                     <thead>
                         <tr>
                             <th style="width:5%;">No.</th>
-                            <th style="width:10%;">Date</th>
                             <th style="width:8%;">Vehicle</th>
-                            <th style="width:14%;">Driver</th>
-                            <th style="width:9%;">Departure</th>
-                            <th style="width:9%;">Return</th>
-                            <th style="width:15%;">Destination</th>
-                            <th style="width:16%;">Patient Name</th>
-                            <th style="width:14%;">Nurse</th>
+                            <th style="width:12%;">Driver</th>
+                            <th style="width:15%;">Departure</th>
+                            <th style="width:15%;">Return</th>
+                            <th style="width:13%;">Destination</th>
+                            <th style="width:14%;">Patient Name</th>
+                            <th style="width:10%;">Nurse</th>
                         </tr>
                     </thead>
                     <tbody>`;
             
             reportRecords.forEach((record, idx) => {
+                const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
+                const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
+                const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
+                const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 html += `<tr>
                     <td>${idx + 1}</td>
-                    <td>${DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-'}</td>
                     <td>${record['Vehicle Number'] || '-'}</td>
                     <td>${record['Driver Name'] || '-'}</td>
-                    <td>${DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '-'}</td>
-                    <td>${DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '-'}</td>
+                    <td>${depDate}<br><small>${depTime}</small></td>
+                    <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                     <td>${record['Nurse Name'] || '-'}</td>
