@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة الإدارة - سجل نشاط الإسعاف</title>
     
+    <!-- DNS/TLS pre-warm for API — saves ~200ms on first request -->
+    <link rel="preconnect" href="https://script.google.com" crossorigin>
+    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+    <link rel="dns-prefetch" href="https://script.google.com">
+    
+    <!-- Early data fetch - fires BEFORE any other scripts load -->
+    <script>
+    (function() {
+        var url = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+        var now = new Date();
+        var year = now.getFullYear();
+        var month = now.getMonth() + 1;
+        window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).catch(function() { return null; });
+    })();
+    </script>
+    
     <!-- Performance Optimization Scripts - Load First -->
     <script src="request-optimizer.js"></script>
     <script src="ui-optimizer.js"></script>
@@ -2920,6 +2936,13 @@
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
+            
+            // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
+            if (window.__earlyAdminFetch && !search) {
+                const earlyUrl = `${WEB_APP_URL}?action=getAdminData&year=${year}&month=${month}`;
+                DataCache._inflight[earlyUrl] = window.__earlyAdminFetch;
+                window.__earlyAdminFetch = null;
+            }
             let url = `${WEB_APP_URL}?action=getAdminData`;
             if (year !== 'all') url += `&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
@@ -3321,11 +3344,18 @@
             }
         }
 
-        // Refresh data every 15 seconds using combined endpoint (1 request instead of 3)
-        setInterval(() => {
-            DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
-            loadAdminData();
-            loadNurseNameMap(); // Refresh nurse Arabic names in case admin edited users
+        // Refresh data every 15 seconds (skip if hidden or already refreshing)
+        let isAdminRefreshing = false;
+        setInterval(async () => {
+            if (document.hidden || isAdminRefreshing) return;
+            isAdminRefreshing = true;
+            try {
+                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                await loadAdminData();
+                loadNurseNameMap();
+            } finally {
+                isAdminRefreshing = false;
+            }
         }, 15000);
 
         // Register Service Worker for PWA with auto-update
