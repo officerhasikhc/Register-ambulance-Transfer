@@ -1015,6 +1015,22 @@
             // Load user session FIRST — triggers data fetching immediately
             loadUserSession();
             
+            // Listen for background session refresh (admin changed driver name on server)
+            window.addEventListener('sessionRefreshed', function(e) {
+                const fresh = e.detail || {};
+                window.loggedInUser = fresh;
+                // Update displayed driver name if logged in as driver
+                const loggedInDriverName = document.getElementById('loggedInDriverName');
+                if (loggedInDriverName && fresh.nameAr) {
+                    loggedInDriverName.textContent = fresh.nameAr;
+                }
+                // Update selectedDriver object
+                if (selectedDriver && fresh.nameAr) {
+                    selectedDriver.nameAr = fresh.nameAr;
+                    selectedDriver.nameEn = fresh.nameEn || selectedDriver.nameEn;
+                }
+            });
+            
             initializeDriverDropdown();
             initializeMonthFilter();
             updateClock();

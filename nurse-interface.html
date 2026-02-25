@@ -3370,6 +3370,20 @@
         loadRecords();
         loadPendingTrips();
 
+        // Listen for background session refresh (admin changed nurse name on server)
+        window.addEventListener('sessionRefreshed', function(e) {
+            // Re-populate nurse name only if the field is not readonly (i.e. not editing someone else's trip)
+            const nurseField = document.getElementById('nurseName');
+            if (nurseField && !nurseField.readOnly) {
+                const fresh = e.detail || {};
+                const freshName = (fresh.nameEn || fresh.nameAr || '').toString().trim();
+                if (freshName) {
+                    nurseField.value = freshName;
+                    window.loggedInUser = fresh;
+                }
+            }
+        });
+
         // Smart auto-refresh - only update UI when data changes
         // تحديث تلقائي ذكي - فقط عند وجود تغييرات في البيانات
         let lastDataHash = '';
