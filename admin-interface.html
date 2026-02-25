@@ -624,6 +624,11 @@
             color: #4338ca;
         }
 
+        .action-btn.edit {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
         .action-btn.delete {
             background: #fee2e2;
             color: #dc2626;
@@ -2016,6 +2021,67 @@
         </div>
     </div>
 
+    <!-- Edit Record Modal -->
+    <div id="editRecordModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>تعديل بيانات الرحلة</h3>
+                <button class="close-btn" onclick="closeEditRecordModal()">×</button>
+            </div>
+            <form id="editRecordForm" onsubmit="saveEditRecord(event)">
+                <input type="hidden" id="editRecordId">
+                <div class="detail-grid" style="gap:14px;">
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">رقم السيارة</label>
+                        <input type="text" id="editVehicleNumber" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:right;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم السائق</label>
+                        <input type="text" id="editDriverName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:right;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">الرقم الوظيفي للسائق</label>
+                        <input type="text" id="editStaffNumber" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:right;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">تاريخ المغادرة</label>
+                        <input type="date" id="editDepartureDate" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">ساعة المغادرة</label>
+                        <input type="text" id="editDepartureTime" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:right;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">تاريخ العودة</label>
+                        <input type="date" id="editReturnDate" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">ساعة العودة</label>
+                        <input type="text" id="editReturnTime" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:right;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">الوجهة</label>
+                        <input type="text" id="editDestination" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم المريض</label>
+                        <input type="text" id="editPatientName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
+                    </div>
+                    <div class="detail-item" style="padding:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجل (الممرضة)</label>
+                        <select id="editNurseName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;background:var(--white);">
+                            <option value="">-- اختر الممرضة --</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top:20px;display:flex;gap:12px;">
+                    <button type="submit" class="btn btn-primary" id="editRecordSaveBtn">حفظ التعديلات</button>
+                    <button type="button" class="btn" style="background:var(--lighter-blue);color:var(--primary-blue);" onclick="closeEditRecordModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // ============================================
         // CONFIGURATION - UPDATE THIS URL
@@ -2455,6 +2521,7 @@
                                 <td>
                                     <div class="action-btns" style="gap:2px;">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="padding:3px 6px;font-size:11px;">عرض</button>
+                                        <button class="action-btn edit" onclick='openEditRecordModal(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="padding:3px 6px;font-size:11px;">تعديل</button>
                                         <button class="action-btn print" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")}); setTimeout(printRecord, 100)' style="padding:3px 6px;font-size:11px;">طباعة</button>
                                         <button class="action-btn delete" onclick='deleteRecordDirectly("${recordId}", "${record['Vehicle Number']}")' style="padding:3px 6px;font-size:11px;">حذف</button>
                                     </div>
@@ -3324,6 +3391,131 @@
                 showToast('حدث خطأ أثناء تنفيذ الإجراء', 'error');
             } finally {
                 btn.disabled = false;
+            }
+        }
+
+        // ============================================
+        // EDIT RECORD FUNCTIONALITY
+        // ============================================
+        let nursesList = []; // cached list of active nurses from server
+
+        async function loadNursesList() {
+            if (nursesList.length > 0) return; // already loaded
+            try {
+                const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
+                const result = await resp.json();
+                if (result.success && result.users) {
+                    nursesList = result.users.filter(u => u.type === 'nurse' && (u.active === true || u.active === 'true'));
+                }
+            } catch (e) {
+                console.error('Failed to load nurses list:', e);
+            }
+        }
+        // Pre-load nurses list early
+        loadNursesList();
+
+        function populateNurseDropdown(selectedNameEn, selectedStaffNumber) {
+            const select = document.getElementById('editNurseName');
+            select.innerHTML = '<option value="">-- اختر الممرضة --</option>';
+            nursesList.forEach(n => {
+                const nameEn = (n.nameEn || '').toString().trim();
+                const nameAr = (n.nameAr || '').toString().trim();
+                const staffNum = (n.staffNumber || '').toString().trim();
+                const opt = document.createElement('option');
+                opt.value = JSON.stringify({ nameEn, nameAr, staffNumber: staffNum });
+                opt.textContent = `${nameAr} - ${nameEn} (${staffNum})`;
+                // Select matching nurse
+                if (selectedStaffNumber && staffNum === selectedStaffNumber) {
+                    opt.selected = true;
+                } else if (selectedNameEn && nameEn.toLowerCase() === selectedNameEn.toLowerCase()) {
+                    opt.selected = true;
+                }
+                select.appendChild(opt);
+            });
+        }
+
+        function openEditRecordModal(record) {
+            document.getElementById('editRecordId').value = record.ID || '';
+            document.getElementById('editVehicleNumber').value = record['Vehicle Number'] || '';
+            document.getElementById('editDriverName').value = record['Driver Name'] || '';
+            document.getElementById('editStaffNumber').value = record['Staff Number'] || '';
+            document.getElementById('editDepartureDate').value = DateTimeFormatter.formatDate(record['Departure Date']) || '';
+            document.getElementById('editDepartureTime').value = record['Departure Time'] || '';
+            document.getElementById('editReturnDate').value = DateTimeFormatter.formatDate(record['Return Date']) || '';
+            document.getElementById('editReturnTime').value = record['Return Time'] || '';
+            document.getElementById('editDestination').value = record['Destination'] || '';
+            document.getElementById('editPatientName').value = record['Patient Name'] || record['patientName'] || '';
+
+            // Populate nurse dropdown with active nurses
+            const nurseNameEn = (record['Nurse Name'] || '').toString().trim();
+            const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            populateNurseDropdown(nurseNameEn, nurseStaff);
+
+            document.getElementById('editRecordModal').classList.add('active');
+        }
+
+        function closeEditRecordModal() {
+            document.getElementById('editRecordModal').classList.remove('active');
+        }
+
+        async function saveEditRecord(event) {
+            event.preventDefault();
+            const btn = document.getElementById('editRecordSaveBtn');
+            btn.disabled = true;
+            btn.textContent = 'جاري الحفظ...';
+
+            const recordId = document.getElementById('editRecordId').value;
+            const nurseSelectValue = document.getElementById('editNurseName').value;
+            let nurseName = '';
+            let nurseStaffNumber = '';
+            if (nurseSelectValue) {
+                try {
+                    const nurseData = JSON.parse(nurseSelectValue);
+                    nurseName = nurseData.nameEn || nurseData.nameAr || '';
+                    nurseStaffNumber = nurseData.staffNumber || '';
+                } catch (e) {}
+            }
+
+            const payload = {
+                action: 'updateRecord',
+                id: recordId,
+                vehicleNumber: document.getElementById('editVehicleNumber').value.trim(),
+                driverName: document.getElementById('editDriverName').value.trim(),
+                staffNumber: document.getElementById('editStaffNumber').value.trim(),
+                departureDate: document.getElementById('editDepartureDate').value,
+                departureTime: document.getElementById('editDepartureTime').value.trim(),
+                returnDate: document.getElementById('editReturnDate').value,
+                returnTime: document.getElementById('editReturnTime').value.trim(),
+                destination: document.getElementById('editDestination').value.trim(),
+                patientName: document.getElementById('editPatientName').value.trim(),
+                nurseName: nurseName,
+                nurseStaffNumber: nurseStaffNumber
+            };
+
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('تم تحديث بيانات الرحلة بنجاح', 'success');
+                    closeEditRecordModal();
+                    // Invalidate caches and reload fresh data
+                    DataCache.invalidateAll();
+                    await loadAdminData();
+                    loadNurseNameMap();
+                } else {
+                    showToast('خطأ في التحديث: ' + (result.error || ''), 'error');
+                }
+            } catch (error) {
+                showToast('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Edit record error:', error);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'حفظ التعديلات';
             }
         }
 
