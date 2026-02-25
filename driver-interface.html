@@ -2332,10 +2332,8 @@
             loadPendingTrip();
         }
         
-        // Check for updates every 12 seconds (skip if page is hidden to save bandwidth)
-        setInterval(() => {
-            if (!document.hidden) autoRefreshHistory();
-        }, 12000);
+        // Check for updates every 12 seconds (faster sync with nurse page)
+        setInterval(autoRefreshHistory, 12000);
 
         // ============================================
         // OFFLINE SUPPORT | دعم العمل بدون إنترنت

@@ -3,863 +3,923 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تسجيل الدخول - نظام إدارة بيانات الموظفين</title>
+    <title>Ambulance Reg System | نظام سجل الإسعاف - تسجيل الدخول</title>
     
-    <!-- DNS Prefetch & Preconnect -->
     <link rel="preconnect" href="https://script.google.com" crossorigin>
     <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
     <link rel="dns-prefetch" href="https://script.google.com">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/moh-icon.png') }}">
+    <!-- Performance Optimization Scripts -->
+    <script src="request-optimizer.js"></script>
+    <script src="ui-optimizer.js"></script>
+    <script src="connection-monitor.js"></script>
+    <script src="data-cache.js"></script>
     
-    <!-- Bootstrap CSS - Critical -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
+    <link rel="stylesheet" href="responsive-ui.css">
     
-    <!-- Font Awesome - Deferred -->
-    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"></noscript>
+    <!-- HTML Meta Tags -->
+    <meta name="description" content="Ambulance Reg System - Ambulance Activity Log | نظام سجل الإسعاف - سجل رحلات الإسعاف | Ministry of Health - Hasik Health Center | وزارة الصحة - مركز حاسك الصحي">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ambulance Log | سجل الإسعاف">
     
-    <!-- Google Fonts - Non-blocking -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"></noscript>
+    <!-- Facebook / Open Graph Meta Tags -->
+    <meta property="og:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
+    <meta property="og:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta property="og:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Ministry of Health Oman - Ambulance Reg System | وزارة الصحة عُمان - نظام سجل الإسعاف">
+    <meta property="og:site_name" content="Hasik Health Center | مركز حاسك الصحي">
+    <meta property="og:locale" content="ar_SA">
+    <meta property="og:locale:alternate" content="en_US">
     
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="officerhasikhc.github.io">
+    <meta property="twitter:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
+    <meta name="twitter:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
+    <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta name="twitter:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
+    <link rel="manifest" href="manifest-ar.json?v=2" id="app-manifest">
+    
+    <!-- Favicon for browsers -->
+    <link rel="icon" type="image/png" sizes="48x48" href="icon-48x48.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icon-48x48.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icon-48x48.png">
+    <link rel="shortcut icon" href="icon-48x48.png">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="icon-144x144.png">
+    
+    <!-- Windows Tiles -->
+    <meta name="msapplication-TileImage" content="icon-144x144.png">
+    <meta name="msapplication-TileColor" content="#1e40af">
+    <meta name="msapplication-config" content="browserconfig.xml">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-blue: #1e40af;
+            --light-blue: #3b82f6;
+            --lighter-blue: #eff6ff;
+            --dark-blue: #1e3a8a;
+            --bg-blue: #dbeafe;
+            --white: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #d1d5db;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: 'Cairo', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #0f172a 50%, #000000 100%);
+            font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
+            background: linear-gradient(135deg, var(--dark-blue) 0%, var(--primary-blue) 50%, var(--light-blue) 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: relative;
-            overflow-x: hidden;
-        }
-        
-        /* Subtle background animation */
-        body::before {
-            content: '';
-            position: absolute;
-            width: 200%;
-            height: 200%;
-            background: 
-                radial-gradient(circle at 20% 80%, rgba(30, 58, 138, 0.2) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(30, 58, 138, 0.15) 0%, transparent 50%);
-            animation: subtleFloat 30s ease-in-out infinite;
-        }
-        
-        @keyframes subtleFloat {
-            0%, 100% { transform: translate(0, 0); }
-            50% { transform: translate(-20px, -20px); }
-        }
-        
-        .login-wrapper {
-            width: 100%;
-            max-width: 1000px;
             padding: 20px;
-            z-index: 1;
-            position: relative;
+            color: var(--text-primary);
         }
-        
+
+        [dir="ltr"] body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
         .login-container {
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(10px);
-            border-radius: 24px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.35), 0 10px 20px rgba(0, 0, 0, 0.2);
-            overflow: hidden;
-            display: flex;
-            min-height: 580px;
-        }
-        
-        .ministry-panel {
-            background: linear-gradient(180deg, #1e3a8a 0%, #1e293b 100%);
-            padding: 50px 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            text-align: center;
-            flex: 1;
+            background: var(--white);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: var(--shadow-xl);
             position: relative;
         }
-        
-        .ministry-panel::after {
-            content: '';
-            position: absolute;
-            bottom: 40%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: rgba(255, 255, 255, 0.2);
-            margin: 0 40px;
-        }
-        
-        .logo-container {
-            width: 120px;
-            height: 120px;
-            background: rgba(255, 255, 255, 0.95);
-            border: 3px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 25px;
-            padding: 15px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-        
-        .logo-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        
-        .logo-container i {
-            font-size: 50px;
-            color: white;
-            opacity: 0.9;
-        }
-        
-        .ministry-panel h3 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        
-        .ministry-info {
-            font-size: 15px;
-            line-height: 1.6;
-            opacity: 0.9;
-            margin-bottom: 8px;
-        }
-        
-        .system-title {
-            margin-top: 30px;
-            padding-top: 30px;
-        }
-        
-        .system-title h4 {
-            font-size: 22px;
-            font-weight: 500;
-            margin-bottom: 0;
-        }
-        
-        .login-form-panel {
-            flex: 1;
-            padding: 50px 45px;
-            background: white;
-        }
-        
+
         .login-header {
             text-align: center;
-            margin-bottom: 35px;
+            margin-bottom: 32px;
+            margin-top: 20px;
         }
-        
-        .login-header h2 {
-            font-size: 32px;
+
+        .login-logo {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            margin: 0 auto 16px auto;
+            display: block;
+        }
+
+        .login-title {
+            color: var(--primary-blue);
+            font-size: 22px;
             font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .login-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
         }
         
-        .login-header p {
-            color: #64748b;
-            font-size: 15px;
+        /* Mobile: Larger elements - scaled up ~25% for better readability on phones */
+
+        .lang-switch {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 4px;
+            background: var(--lighter-blue);
+            padding: 4px;
+            border-radius: 10px;
+            z-index: 10;
         }
-        
+
+        [dir="ltr"] .lang-switch {
+            right: auto;
+            left: 16px;
+        }
+
+        .lang-btn {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            font-size: 12px;
+            font-family: inherit;
+            min-width: 36px;
+        }
+
+        .lang-btn.active {
+            background: var(--primary-blue);
+            color: var(--white);
+            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+        }
+
+        .lang-btn:hover:not(.active) {
+            background: rgba(30, 64, 175, 0.1);
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
-        
+
         .form-label {
             display: block;
-            margin-bottom: 10px;
-            font-size: 14px;
+            margin-bottom: 8px;
             font-weight: 600;
-            color: #334155;
-            letter-spacing: 0.3px;
+            color: var(--text-primary);
+            font-size: 14px;
         }
-        
-        .input-wrapper {
+
+        .input-with-icon {
             position: relative;
         }
-        
+
         .input-icon {
             position: absolute;
-            right: 16px;
             top: 50%;
+            right: 16px;
             transform: translateY(-50%);
-            color: #667eea;
-            font-size: 16px;
-            opacity: 0.8;
-            transition: all 0.3s ease;
-        }
-        
-        .input-wrapper:focus-within .input-icon {
-            color: #667eea;
-            opacity: 1;
-        }
-        
-        .toggle-password {
-            right: auto !important;
-            left: 16px !important;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: #94a3b8;
-        }
-        
-        .toggle-password:hover {
-            color: #667eea;
-            transform: translateY(-50%) scale(1.1);
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 14px 45px 14px 45px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 15px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-        
-        .form-control::placeholder {
-            color: #94a3b8;
-            font-size: 14px;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.05);
-            background: white;
-        }
-        
-        .forgot-password {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            color: #667eea;
-            text-decoration: none;
-            font-size: 14px;
-            margin-top: -5px;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            padding: 6px 12px;
-            border-radius: 8px;
-            background: transparent;
-        }
-        
-        .forgot-password:hover {
-            color: #5a67d8;
-            background: rgba(102, 126, 234, 0.08);
-        }
-        
-        .forgot-password i {
-            font-size: 13px;
-            color: #667eea;
-        }
-        
-        .form-check {
-            margin-bottom: 25px;
-        }
-        
-        .form-check-input {
             width: 20px;
             height: 20px;
-            border: 2px solid #cbd5e1;
-            margin-left: 10px;
-            border-radius: 6px;
+            color: #9ca3af;
+            pointer-events: none;
+            transition: color 0.2s;
+        }
+
+        [dir="ltr"] .input-icon {
+            right: auto;
+            left: 16px;
+        }
+
+        .input-with-icon .form-input {
+            padding-right: 48px;
+        }
+
+        [dir="ltr"] .input-with-icon .form-input {
+            padding-right: 16px;
+            padding-left: 48px;
+        }
+
+        .input-with-icon:focus-within .input-icon {
+            color: var(--primary-blue);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            transition: all 0.2s;
+            background: var(--white);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
+            color: var(--white);
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
+            font-family: inherit;
         }
-        
-        .form-check-input:checked {
-            background-color: #667eea;
-            border-color: #667eea;
-            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
         }
-        
-        .form-check-input:focus {
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+
+        .login-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
         }
-        
-        .form-check-label {
+
+        .error-message {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
             font-size: 14px;
-            color: #475569;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .footer-text {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .footer-text a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+
+        .footer-text a:hover {
+            text-decoration: underline;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-blue);
             cursor: pointer;
         }
 
-        .login-loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(3px);
-            display: none;
+        .remember-me label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .install-btn {
+            display: inline-flex;
+            width: auto;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: var(--white);
+            border: none;
+            border-radius: 25px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            margin-top: 16px;
+            gap: 6px;
             align-items: center;
             justify-content: center;
-            z-index: 1100;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
 
-        .login-loading-overlay.show {
-            display: flex;
+        .install-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
         }
 
-        .loading-card {
-            background: white;
-            padding: 26px 32px;
-            border-radius: 12px;
-            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
+        .install-btn .device-icon {
+            font-size: 16px;
+        }
+
+        .install-container {
             text-align: center;
-            max-width: 360px;
-            width: calc(100% - 40px);
-        }
-
-        .loading-card h5 {
-            font-size: 18px;
-            margin-bottom: 10px;
-            color: #1f2937;
-        }
-
-        .loading-card p {
-            font-size: 13px;
-            color: #6b7280;
-            margin-bottom: 0;
+            margin-top: 20px;
         }
 
         .loading-spinner {
-            width: 42px;
-            height: 42px;
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
             border-radius: 50%;
-            margin: 0 auto 16px auto;
-            border: 4px solid #e2e8f0;
-            border-top-color: #3b82f6;
+            border-top-color: white;
             animation: spin 0.8s linear infinite;
+            margin-left: 8px;
+        }
+
+        [dir="ltr"] .loading-spinner {
+            margin-left: 0;
+            margin-right: 8px;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
-        .btn-login {
-            width: 100%;
-            background: linear-gradient(145deg, #667eea 0%, #5a67d8 50%, #4f46e5 100%);
-            border: none;
-            padding: 14px 30px;
-            font-size: 16px;
-            font-weight: 600;
-            color: white;
-            border-radius: 12px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.35);
-            letter-spacing: 0.5px;
-        }
 
-        .btn-login:hover {
-            background: linear-gradient(145deg, #5a67d8 0%, #4f46e5 50%, #4338ca 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45);
-            color: white;
-        }
-        
-        .btn-login:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
-        }
-        
-        .security-footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
-            color: #94a3b8;
-            font-size: 13px;
-        }
-        
-        .security-footer i {
-            color: #667eea;
-            margin-left: 5px;
-        }
-        
-        /* تحسين الـ Modal */
-        .modal-content {
-            border-radius: 16px;
-            border: none;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
-        }
-        
-        .modal-header {
-            border-bottom: 1px solid #e2e8f0;
-            padding: 20px 24px;
-        }
-        
-        .modal-body {
-            padding: 24px;
-        }
-        
-        .modal .form-control {
-            padding: 12px 16px;
-        }
-        
-        .modal .btn-primary {
-            background: linear-gradient(145deg, #667eea 0%, #5a67d8 100%);
-            border: none;
-            border-radius: 10px;
-            padding: 12px 24px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .modal .btn-primary:hover {
-            background: linear-gradient(145deg, #5a67d8 0%, #4f46e5 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-        }
-        
-        /* Responsive design */
-        @media (max-width: 768px) {
-            .login-container {
-                flex-direction: column;
-            }
-            
-            .ministry-panel {
-                padding: 35px 25px;
-            }
-            
-            .login-form-panel {
-                padding: 35px 25px;
-            }
-            
-            .ministry-panel::after {
-                display: none;
-            }
-        }
-        
+
         @media (max-width: 480px) {
-            .login-header h2 {
+            body {
+                padding: 12px;
+            }
+
+            .login-container {
+                padding: 32px 28px;
+                padding-top: 44px;
+                max-width: 100%;
+                border-radius: 24px;
+            }
+
+            .login-logo {
+                width: 110px;
+                height: 110px;
+                margin-bottom: 20px;
+            }
+
+            .login-header {
+                margin-bottom: 36px;
+                margin-top: 16px;
+            }
+
+            .login-title {
                 font-size: 26px;
+                margin-bottom: 12px;
             }
-            
-            .ministry-panel h3 {
-                font-size: 22px;
+
+            .login-subtitle {
+                font-size: 16px;
+                line-height: 1.6;
             }
-            
-            .form-control {
-                font-size: 14px;
-                padding: 10px 35px 10px 12px;
+
+            .form-label {
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+
+            .form-input {
+                padding: 16px 18px;
+                font-size: 18px;
+                border-radius: 12px;
+            }
+
+            .form-group {
+                margin-bottom: 24px;
+            }
+
+            .remember-me {
+                margin-bottom: 24px;
+            }
+
+            .remember-me input[type="checkbox"] {
+                width: 22px;
+                height: 22px;
+            }
+
+            .remember-me label {
+                font-size: 16px;
+            }
+
+            .login-btn {
+                padding: 16px;
+                font-size: 18px;
+                border-radius: 12px;
+            }
+
+            .install-btn {
+                padding: 12px 24px;
+                font-size: 15px;
+            }
+
+            .footer-text {
+                font-size: 13px;
+                margin-top: 28px;
+            }
+
+            .lang-switch {
+                top: 14px;
+                right: 14px;
+            }
+
+            [dir="ltr"] .lang-switch {
+                left: 14px;
+            }
+
+            .lang-btn {
+                padding: 8px 14px;
+                font-size: 13px;
             }
         }
     </style>
 </head>
 <body>
-
-<div class="login-wrapper">
-    <!-- Flash Messages - Only show when there's an actual message -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="position-fixed top-0 start-50 translate-middle-x" style="z-index: 1050; margin-top: 20px;">
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-    
     <div class="login-container">
-        <!-- Ministry Logo Panel -->
-        <div class="ministry-panel">
-            <div class="logo-container">
-                <img src="{{ url_for('static', filename='images/moh-logo.png') }}" 
-                     alt="شعار وزارة الصحة"
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-hospital-user\' style=\'font-size: 50px; color: white; opacity: 0.9;\'></i>';">
-            </div>
-            
-            <p class="ministry-info" style="font-size: 17px;">المديرية العامة للخدمات الصحية</p>
-            <p class="ministry-info">محافظة ظفار</p>
-            
-            <div class="system-title">
-                <p class="ministry-info" style="font-size: 13px; opacity: 0.8;">
-                    دائرة الخدمات الإدارية بولاية سدح
-                    <br>
-                    مركز صحي حاسك
-                </p>
-                <h4>نظام إدارة الموظفين</h4>
-            </div>
+        <div class="lang-switch">
+            <button class="lang-btn active" onclick="setLanguage('ar')">ع</button>
+            <button class="lang-btn" onclick="setLanguage('en')">EN</button>
         </div>
+
+        <div class="login-header">
+            <img src="moh-logo.png" alt="Logo" class="login-logo">
+            <h1 class="login-title" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Log System">نظام سجل نشاط الإسعاف</h1>
+            <p class="login-subtitle" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number or Civil ID">الرقم الوظيفي أو المدني</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                    <input type="text" class="form-input" id="staffNumber" 
+                           placeholder="أدخل الرقم الوظيفي أو المدني" 
+                           data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
+                           data-placeholder-en="Enter Staff Number or Civil ID"
+                           required autocomplete="off">
+                </div>
+            </div>
+
+            <div class="remember-me">
+                <input type="checkbox" id="rememberMe" checked>
+                <label for="rememberMe" data-ar="تذكرني" data-en="Remember me">تذكرني</label>
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">
+                <span data-ar="تسجيل الدخول" data-en="Login">تسجيل الدخول</span>
+            </button>
+        </form>
+
+        <div class="install-container">
+            <button class="install-btn" id="installBtn" onclick="installApp()">
+                <span class="device-icon" id="deviceIcon">📱</span>
+                <span data-ar="تثبيت التطبيق" data-en="Install App" id="installText">تثبيت التطبيق</span>
+            </button>
+        </div>
+
+        <p class="footer-text" data-ar="© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة" data-en="© 2026 Hasik Health Center - All Rights Reserved">© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة</p>
+    </div>
+
+    <script>
+        // Configuration
+        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzgjramV6C5fGt3QM1je34oRXAbfje__vrbxJGoBkkOo2oodydEcdUfkB4avqf2-PR8lg/exec';
         
-        <!-- Login Form Panel -->
-        <div class="login-form-panel">
-            <div class="login-header">
-                <h2>تسجيل الدخول</h2>
-                <p>أدخل بياناتك للوصول إلى النظام</p>
-            </div>
-            
-            <form method="POST" action="{{ url_for('auth.login') }}" id="loginForm">
-                <!-- Employee ID Field -->
-                <div class="form-group">
-                    <label class="form-label">الرقم الوظيفي</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-id-badge input-icon"></i>
-                        <input type="text" name="employee_id" class="form-control" placeholder="يرجى إدخال الرقم الوظيفي" autocomplete="off" required>
-                    </div>
-                </div>
-                
-                <!-- Password Field -->
-                <div class="form-group">
-                    <label class="form-label">كلمة المرور</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock input-icon"></i>
-                        <input type="password" name="password" id="password" class="form-control" placeholder="يرجى إدخال كلمة المرور" autocomplete="off" required>
-                        <i class="fas fa-eye input-icon toggle-password" id="togglePassword" style="cursor: pointer; left: 15px; right: auto;" onclick="togglePasswordVisibility()"></i>
-                    </div>
-                </div>
-                
-                <!-- Forgot Password Link -->
-                <div class="text-start mb-3">
-                    <a href="#" class="forgot-password" onclick="showForgotPasswordModal(); return false;">
-                        <i class="fas fa-key"></i>
-                        نسيت كلمة المرور؟
-                    </a>
-                </div>
-                
-                <!-- Remember Me -->
-                <div class="form-check">
-                    <input type="checkbox" name="remember_me" class="form-check-input" id="remember_me">
-                    <label class="form-check-label" for="remember_me">
-                        تذكرني على هذا الجهاز
-                    </label>
-                </div>
-                
-                <!-- Submit Button -->
-                <button type="submit" class="btn btn-login" id="loginBtn">
-                    دخول
-                </button>
-            </form>
-            
-            <div class="security-footer">
-                <small>© 2025 سلطنة عمان</small>
-            </div>
-        </div>
-    </div>
-</div>
+        let currentLang = localStorage.getItem('appLanguage') || 'ar';
 
-<!-- Forgot Password Modal -->
-<div class="modal fade" id="forgotPasswordModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-key text-primary me-2"></i>
-                    استعادة كلمة المرور
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    سيتم إرسال كلمة مرور مؤقتة إلى بريدك الإلكتروني المسجل
-                </div>
-                
-                <form id="forgotPasswordForm">
-                    <div class="mb-3">
-                        <label class="form-label">الرقم الوظيفي</label>
-                        <input type="text" class="form-control" id="forgot_employee_id" placeholder="أدخل رقمك الوظيفي" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">البريد الإلكتروني</label>
-                        <input type="email" class="form-control" id="forgot_email" placeholder="أدخل بريدك الإلكتروني" required>
-                    </div>
-                    
-                    <div id="forgotPasswordMessage"></div>
-                    
-                    <button type="submit" class="btn btn-primary w-100" id="sendResetBtn">
-                        <i class="fas fa-paper-plane me-2"></i>
-                        إرسال كلمة المرور المؤقتة
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Bootstrap JS - deferred -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
-
-<!-- ✅ تحسين أداء تسجيل الدخول -->
-<script src="{{ url_for('static', filename='js/login-optimizer.js') }}" defer></script>
-
-<div class="login-loading-overlay" id="loginLoadingOverlay" aria-hidden="true">
-    <div class="loading-card">
-        <div class="loading-spinner"></div>
-        <h5>جاري تسجيل الدخول...</h5>
-        <p>سيتم توجيهك حال اكتمال التحقق.</p>
-    </div>
-</div>
-
-<script>
-    const loginForm = document.getElementById('loginForm');
-    const loginBtn = document.getElementById('loginBtn');
-    const loadingOverlay = document.getElementById('loginLoadingOverlay');
-    let slowConnectionTimer = null;
-    let verySlowTimer = null;
-    let loginTimeoutTimer = null;
-    const LOGIN_TIMEOUT = 15000;
-
-    function togglePasswordVisibility() {
-        const passwordInput = document.getElementById('password');
-        const toggleIcon = document.getElementById('togglePassword');
-        
-        if (passwordInput.type === 'password') {
-            passwordInput.type = 'text';
-            toggleIcon.classList.remove('fa-eye');
-            toggleIcon.classList.add('fa-eye-slash');
-        } else {
-            passwordInput.type = 'password';
-            toggleIcon.classList.remove('fa-eye-slash');
-            toggleIcon.classList.add('fa-eye');
-        }
-    }
-
-    function showLoadingOverlay() {
-        if (!loadingOverlay) return;
-        loadingOverlay.classList.add('show');
-        loadingOverlay.setAttribute('aria-hidden', 'false');
-    }
-
-    function hideLoadingOverlay() {
-        if (!loadingOverlay) return;
-        loadingOverlay.classList.remove('show');
-        loadingOverlay.setAttribute('aria-hidden', 'true');
-    }
-
-    let lockedInputs = [];
-    let lockedCheckboxes = [];
-
-    function disableLoginForm() {
-        if (!loginForm) return;
-        lockedInputs = [];
-        lockedCheckboxes = [];
-
-        loginForm.querySelectorAll('input').forEach(el => {
-            if (el.type === 'checkbox') {
-                lockedCheckboxes.push(el);
-                el.disabled = true;
-            } else {
-                lockedInputs.push(el);
-                el.setAttribute('readonly', 'readonly');
+        // Users Database (will be loaded from Google Sheets)
+        const USERS = {
+            // Admin - has access to all pages
+            '65886': { 
+                type: 'admin', 
+                nameAr: 'عبدالباقي عبدالهادي مرزوق بيت مروس', 
+                nameEn: 'Abdulbaqi Abdulhadi Marzouq Bait Marous',
+                redirect: 'admin-interface.html',
+                canAccessDriver: true,
+                canAccessNurse: true
+            },
+            // Nurses
+            '79470': { 
+                type: 'nurse', 
+                nameAr: 'ميتي ماثيو', 
+                nameEn: 'Metty Mathew',
+                redirect: 'nurse-interface.html'
+            },
+            '62971': { 
+                type: 'nurse', 
+                nameAr: 'شيرين كوريان', 
+                nameEn: 'Sherine Kurian',
+                redirect: 'nurse-interface.html'
+            },
+            '85181': { 
+                type: 'nurse', 
+                nameAr: 'ساميني ثانكاموني', 
+                nameEn: 'Samini Thankamony',
+                redirect: 'nurse-interface.html'
+            },
+            '88973': { 
+                type: 'nurse', 
+                nameAr: 'آنو ماموتيل', 
+                nameEn: 'Annu Mamootel',
+                redirect: 'nurse-interface.html'
+            },
+            '57609': { 
+                type: 'nurse', 
+                nameAr: 'عائشة سعيد بخيت السليمي', 
+                nameEn: 'Aisha Said Bakhit Al-Sulaimi',
+                redirect: 'nurse-interface.html'
+            },
+            // Drivers
+            '39121': { 
+                type: 'driver', 
+                employeeType: 'employee',
+                nameAr: 'سعد زايد الجنيبي', 
+                nameEn: 'SAAD ZAID AL-JUNAIBI',
+                redirect: 'driver-interface.html'
+            },
+            '222975657': { 
+                type: 'driver', 
+                employeeType: 'daily-paid',
+                nameAr: 'حسان ثابت رجب', 
+                nameEn: 'HASSAN THABIT RAJAB',
+                redirect: 'driver-interface.html'
+            },
+            '39634': { 
+                type: 'driver', 
+                employeeType: 'employee',
+                nameAr: 'محمد الرضه علي', 
+                nameEn: 'MOHAMMED AL-RUDHA ALI',
+                redirect: 'driver-interface.html'
+            },
+            '65870': { 
+                type: 'driver', 
+                employeeType: 'employee',
+                nameAr: 'عبدالعزيز مسلم النقش', 
+                nameEn: 'ABDULAZIZ MUSALLEM AL-NAQSH',
+                redirect: 'driver-interface.html'
+            },
+            '41299': { 
+                type: 'nurse', 
+                nameAr: 'بخيت محمد الغفيلي المهري', 
+                nameEn: 'Bakhit Mohamed Al-Ghufaili Al-Mahri',
+                redirect: 'nurse-interface.html'
             }
-        });
-        if (loginBtn) {
-            loginBtn.disabled = true;
-            loginBtn.style.opacity = '0.7';
-            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تسجيل الدخول...';
-        }
-    }
+        };
 
-    function enableLoginForm() {
-        if (!loginForm) return;
-        lockedInputs.forEach(el => el.removeAttribute('readonly'));
-        lockedInputs = [];
-        lockedCheckboxes.forEach(el => el.disabled = false);
-        lockedCheckboxes = [];
-        if (loginBtn) {
-            loginBtn.disabled = false;
-            loginBtn.style.opacity = '1';
-            loginBtn.innerHTML = 'دخول';
-        }
-    }
+        // PWA Install prompt
+        let deferredPrompt;
 
-    window.addEventListener('offline', function() {
-        showLoadingOverlay();
-    });
-
-    window.addEventListener('online', function() {
-        // لا حاجة لعرض أي رسائل إضافية؛ يتم المتابعة تلقائياً
-    });
-
-    document.addEventListener('DOMContentLoaded', function() {
-        const employeeField = document.querySelector('input[name="employee_id"]');
-        if (employeeField) {
-            employeeField.value = '';
-            employeeField.setAttribute('autocomplete', 'off');
-        }
-
-        const passwordField = document.querySelector('input[type="password"]');
-        if (passwordField) {
-            passwordField.value = '';
-            passwordField.setAttribute('autocomplete', 'new-password');
-        }
-
-        setTimeout(function() {
-            document.querySelectorAll('input').forEach(function(input) {
-                input.style.backgroundColor = 'white';
-            });
-        }, 100);
-
-        const alerts = document.querySelectorAll('.alert');
-        alerts.forEach(function(alert) {
-            setTimeout(function() {
-                alert.style.transition = 'opacity 0.5s ease';
-                alert.style.opacity = '0';
-                setTimeout(function() {
-                    if (alert.parentNode) {
-                        alert.parentNode.removeChild(alert);
-                    }
-                }, 500);
-            }, 2000);
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setLanguage(currentLang);
+            loadSavedCredentials();
+            checkInstallPrompt();
         });
 
-        document.querySelectorAll('.form-control').forEach(function(input) {
-            const originalPlaceholder = input.placeholder;
-            input.addEventListener('focus', function() {
-                if (this.value === '') {
-                    this.placeholder = '';
-                }
-            });
-            input.addEventListener('blur', function() {
-                if (this.value === '') {
-                    this.placeholder = originalPlaceholder;
-                }
-            });
-        });
-    });
+        // Load saved credentials (Remember Me)
+        function loadSavedCredentials() {
+            const savedStaffNumber = localStorage.getItem('savedStaffNumber');
+            if (savedStaffNumber) {
+                document.getElementById('staffNumber').value = savedStaffNumber;
+                document.getElementById('rememberMe').checked = true;
+            }
+        }
 
-    // متغير لتتبع حالة إرسال النموذج
-    let isSubmitting = false;
-
-    if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
-            // منع الإرسال المتكرر
-            if (isSubmitting) {
+        // Check if app can be installed
+        function checkInstallPrompt() {
+            // Detect device type and update icon
+            updateDeviceIcon();
+            
+            window.addEventListener('beforeinstallprompt', (e) => {
                 e.preventDefault();
+                deferredPrompt = e;
+                document.getElementById('installBtn').classList.add('show');
+            });
+
+            // Hide install button if already installed
+            window.addEventListener('appinstalled', () => {
+                document.getElementById('installBtn').classList.remove('show');
+                deferredPrompt = null;
+            });
+        }
+
+        // Detect device type and update install button icon
+        function updateDeviceIcon() {
+            const deviceIcon = document.getElementById('deviceIcon');
+            const installText = document.getElementById('installText');
+            const userAgent = navigator.userAgent.toLowerCase();
+            
+            if (/android/i.test(userAgent)) {
+                // Android phone
+                deviceIcon.textContent = '📱';
+            } else if (/iphone|ipad|ipod/i.test(userAgent)) {
+                // iOS device
+                deviceIcon.textContent = '🍏';
+            } else if (/windows/i.test(userAgent)) {
+                // Windows PC
+                deviceIcon.textContent = '💻';
+            } else if (/macintosh|mac os x/i.test(userAgent)) {
+                // Mac
+                deviceIcon.textContent = '🖥️';
+            } else if (/linux/i.test(userAgent)) {
+                // Linux
+                deviceIcon.textContent = '🖥️';
+            } else {
+                // Default
+                deviceIcon.textContent = '📲';
+            }
+        }
+
+        // Install app
+        async function installApp() {
+            if (!deferredPrompt) {
+                alert(currentLang === 'ar' ? 'التطبيق مثبت بالفعل أو غير متاح للتثبيت' : 'App is already installed or not available for installation');
                 return;
             }
             
-            isSubmitting = true;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
             
-            // إظهار الـ overlay فوراً وإبقائه ظاهراً
-            showLoadingOverlay();
-            disableLoginForm();
-            
-            // حفظ حالة التحميل في sessionStorage لإبقاء الـ overlay ظاهراً
-            sessionStorage.setItem('loginInProgress', 'true');
-        });
-    }
-
-    window.addEventListener('pageshow', function(event) {
-        // التحقق من حالة تسجيل الدخول
-        const loginInProgress = sessionStorage.getItem('loginInProgress');
-        
-        // إخفاء الـ overlay فقط عند العودة من الـ cache (زر الرجوع)
-        if (event.persisted) {
-            hideLoadingOverlay();
-            enableLoginForm();
-            isSubmitting = false;
-            sessionStorage.removeItem('loginInProgress');
-        }
-    });
-    
-    // إخفاء الـ overlay عند تحميل الصفحة (في حالة الفشل أو العودة)
-    window.addEventListener('load', function() {
-        // إذا عدنا لصفحة تسجيل الدخول بعد فشل، نخفي الـ overlay
-        sessionStorage.removeItem('loginInProgress');
-        // تأخير بسيط للتأكد من عدم إخفائه أثناء الانتقال
-        setTimeout(function() {
-            if (!isSubmitting) {
-                hideLoadingOverlay();
-                enableLoginForm();
+            if (outcome === 'accepted') {
+                document.getElementById('installBtn').classList.remove('show');
             }
-        }, 100);
-    });
+            deferredPrompt = null;
+        }
 
-    // Handle forgot password form submission
-    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
-    if (forgotPasswordForm) {
-        forgotPasswordForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
+        // Set language
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('appLanguage', lang);
             
-            const employeeId = document.getElementById('forgot_employee_id').value;
-            const email = document.getElementById('forgot_email').value;
-            const sendBtn = document.getElementById('sendResetBtn');
-            const messageDiv = document.getElementById('forgotPasswordMessage');
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
             
-            // Disable button
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>جاري الإرسال...';
+            // Update manifest based on language
+            const manifestLink = document.getElementById('app-manifest');
+            if (manifestLink) {
+                const timestamp = new Date().getTime();
+                manifestLink.href = lang === 'ar' ? `manifest-ar.json?v=${timestamp}` : `manifest-en.json?v=${timestamp}`;
+            }
+            
+            // Update language buttons
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if ((lang === 'ar' && btn.textContent === 'ع') || 
+                    (lang === 'en' && btn.textContent === 'EN')) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update text content
+            document.querySelectorAll('[data-ar][data-en]').forEach(el => {
+                el.innerHTML = el.getAttribute(`data-${lang}`);
+            });
+            
+            // Update placeholders
+            document.querySelectorAll('[data-placeholder-ar][data-placeholder-en]').forEach(el => {
+                el.placeholder = el.getAttribute(`data-placeholder-${lang}`);
+            });
+        }
+
+        /**
+         * البحث عن المستخدم في بيانات السائقين والممرضين المحفوظة في localStorage
+         * (المُضافة من صفحة الإعدادات). يدعم الدخول بالرقم الوظيفي أو المدني.
+         */
+        function findUserInLocalStorage(inputNumber) {
+            // البحث في قائمة السائقين
+            try {
+                const drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
+                const driver = drivers.find(function(d) {
+                    return d.staffNumber && d.staffNumber.toString() === inputNumber;
+                });
+                if (driver) {
+                    return {
+                        type: 'driver',
+                        employeeType: driver.type || 'employee',
+                        nameAr: driver.nameAr,
+                        nameEn: driver.nameEn,
+                        redirect: 'driver-interface.html'
+                    };
+                }
+            } catch (e) { /* ignore parse errors */ }
+
+            // البحث في قائمة الممرضين/ات
+            try {
+                const nurses = JSON.parse(localStorage.getItem('ambulance_nurses')) || [];
+                const nurse = nurses.find(function(n) {
+                    return n.staffNumber && n.staffNumber.toString() === inputNumber;
+                });
+                if (nurse) {
+                    return {
+                        type: 'nurse',
+                        nameAr: nurse.nameAr,
+                        nameEn: nurse.nameEn,
+                        redirect: 'nurse-interface.html'
+                    };
+                }
+            } catch (e) { /* ignore parse errors */ }
+
+            return null;
+        }
+
+        // Handle login
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const staffNumber = document.getElementById('staffNumber').value.trim();
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            if (!staffNumber) {
+                showError(currentLang === 'ar' ? 'يرجى إدخال الرقم الوظيفي أو المدني' : 'Please enter Staff Number or Civil ID');
+                return;
+            }
+            
+            // Show loading
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = `<span>${currentLang === 'ar' ? 'جاري التحقق...' : 'Verifying...'}</span><span class="loading-spinner"></span>`;
+            errorMessage.classList.remove('show');
+            
+            // Timeout to prevent stuck spinner (10 seconds)
+            const timeoutId = setTimeout(() => {
+                resetLoginButton();
+                showError(currentLang === 'ar' ? 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى' : 'Connection timeout. Please try again');
+            }, 10000);
             
             try {
-                const response = await fetch('/auth/request-password-reset', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        employee_id: employeeId,
-                        email: email
-                    })
-                });
+                // 1) Check in hardcoded users first
+                let user = USERS[staffNumber];
                 
-                const data = await response.json();
+                // 2) Check in localStorage drivers/nurses (added via Settings page)
+                if (!user) {
+                    user = findUserInLocalStorage(staffNumber);
+                }
                 
-                if (data.success) {
-                    messageDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="fas fa-check-circle me-2"></i>
-                            ${data.message}
-                        </div>
-                    `;
+                // 3) Try to fetch from server API
+                if (!user) {
+                    try {
+                        const controller = new AbortController();
+                        const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+                        
+                        const response = await fetch(`${WEB_APP_URL}?action=validateUser&staffNumber=${encodeURIComponent(staffNumber)}`, {
+                            signal: controller.signal
+                        });
+                        clearTimeout(fetchTimeout);
+                        
+                        const result = await response.json();
+                        if (result.success && result.user) {
+                            user = result.user;
+                        }
+                    } catch (error) {
+                        console.error('API error:', error);
+                    }
+                }
+                
+                clearTimeout(timeoutId);
+                
+                if (user) {
+                    // Save credentials if Remember Me is checked
+                    const rememberMe = document.getElementById('rememberMe').checked;
+                    if (rememberMe) {
+                        localStorage.setItem('savedStaffNumber', staffNumber);
+                    } else {
+                        localStorage.removeItem('savedStaffNumber');
+                    }
+
+                    // Store user session
+                    const sessionData = {
+                        staffNumber: staffNumber,
+                        type: user.type,
+                        employeeType: user.employeeType || 'employee',
+                        nameAr: user.nameAr,
+                        nameEn: user.nameEn,
+                        vehicleNumber: user.vehicleNumber || '',
+                        canAccessDriver: user.canAccessDriver || false,
+                        canAccessNurse: user.canAccessNurse || false,
+                        loginTime: new Date().toISOString(),
+                        language: currentLang
+                    };
                     
-                    // Close modal after 3 seconds
-                    setTimeout(() => {
-                        bootstrap.Modal.getInstance(document.getElementById('forgotPasswordModal')).hide();
-                        forgotPasswordForm.reset();
-                        messageDiv.innerHTML = '';
-                    }, 3000);
+                    localStorage.setItem('userSession', JSON.stringify(sessionData));
+                    localStorage.setItem('appLanguage', currentLang);
+                    
+                    // Pre-warm target page API to eliminate cold start delay
+                    try {
+                        var targetApi = '';
+                        if (user.redirect === 'driver-interface.html') {
+                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
+                        } else if (user.redirect === 'nurse-interface.html') {
+                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
+                        }
+                        if (targetApi) fetch(targetApi).catch(function(){});
+                    } catch(e) {}
+                    
+                    // Redirect based on user type
+                    window.location.href = user.redirect;
                 } else {
-                    messageDiv.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-circle me-2"></i>
-                            ${data.message}
-                        </div>
-                    `;
+                    // User not found
+                    resetLoginButton();
+                    showError(currentLang === 'ar' ? 'الرقم الوظيفي أو المدني غير مسجل في النظام' : 'Staff number or Civil ID not registered in the system');
                 }
             } catch (error) {
-                messageDiv.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى
-                    </div>
-                `;
-            } finally {
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>إرسال كلمة المرور المؤقتة';
+                clearTimeout(timeoutId);
+                resetLoginButton();
+                showError(currentLang === 'ar' ? 'حدث خطأ. يرجى المحاولة مرة أخرى' : 'An error occurred. Please try again');
             }
-        });
-    }
-</script>
+        }
+        
+        function resetLoginButton() {
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = `<span data-ar="تسجيل الدخول" data-en="Login">${currentLang === 'ar' ? 'تسجيل الدخول' : 'Login'}</span>`;
+        }
 
+        // Show error message
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+        }
+
+        // Register Service Worker for PWA with auto-update
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => {
+                    console.log('[App] Service Worker registered successfully');
+                    
+                    // Check for updates every 60 seconds
+                    setInterval(() => {
+                        reg.update();
+                    }, 60000);
+                    
+                    // Listen for updates
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        console.log('[App] New Service Worker found, installing...');
+                        
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('[App] New version available! Reloading...');
+                                // Auto-reload to get the new version
+                                setTimeout(() => window.location.reload(), 1000);
+                            }
+                        });
+                    });
+                })
+                .catch(err => console.error('[App] Service Worker registration failed:', err));
+            
+            // Listen for messages from Service Worker
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data && event.data.type === 'SW_UPDATED') {
+                    console.log('[App] ' + event.data.message);
+                    window.location.reload();
+                }
+            });
+        }
+    </script>
 </body>
 </html>

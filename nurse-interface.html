@@ -6,24 +6,6 @@
     <meta http-equiv="Content-Language" content="en-US">
     <title>Ambulance Activity Log - Hasik Health Center</title>
     
-    <!-- DNS/TLS pre-warm for API — saves ~200ms on first request -->
-    <link rel="preconnect" href="https://script.google.com" crossorigin>
-    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
-    <link rel="dns-prefetch" href="https://script.google.com">
-    
-    <!-- Early data fetch - fires BEFORE any other scripts load -->
-    <script>
-    (function() {
-        var url = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
-        var s = null; try { s = JSON.parse(localStorage.getItem('userSession') || '{}'); } catch(e) {}
-        var staffNum = (s && s.staffNumber) ? s.staffNumber : '';
-        var year = new Date().getFullYear();
-        var reqUrl = url + '?action=getNurseData&year=' + year;
-        if (staffNum) reqUrl += '&staffNumber=' + encodeURIComponent(staffNum);
-        window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).catch(function() { return null; });
-    })();
-    </script>
-    
     <!-- Performance Optimization Scripts - Load First -->
     <script src="request-optimizer.js"></script>
     <script src="ui-optimizer.js"></script>
@@ -1691,7 +1673,8 @@
             });
 
             initializeDropdowns();
-            loadAllNurseData();
+            loadRecords();
+            loadPendingTrips();
         }
 
         // ============================================
@@ -1937,14 +1920,29 @@
         let isLoadingPendingTrips = false;
         
         async function loadPendingTrips(showLoading = true, forceRefresh = false) {
+            // Clear cache if force refresh
             if (forceRefresh) {
                 cachedPendingTrips = null;
-                const year = document.getElementById('yearFilter').value;
-                const month = document.getElementById('monthFilter').value;
-                DataCache.invalidate('cache_nurse_data_' + year + '_' + month);
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
             }
-            // Route through the combined endpoint — avoids separate request
-            await loadAllNurseData();
+
+            // Use DataCache: show cached data instantly, fetch fresh in background
+            await DataCache.fetchWithCache(
+                `${WEB_APP_URL}?action=getPendingTrips`,
+                DataCache.KEYS.PENDING_TRIPS,
+                DataCache.EXPIRY.PENDING_TRIPS,
+                (trips) => {
+                    if (trips !== null && trips !== undefined) {
+                        const nurseTrips = trips.filter(t => t.status !== 'submitted');
+                        cachedPendingTrips = nurseTrips;
+                        displayPendingTrips(nurseTrips);
+                    } else {
+                        const localTrips = JSON.parse(localStorage.getItem('pending_trips_for_nurse')) || [];
+                        displayPendingTrips(localTrips.filter(t => !t.submittedToSystem));
+                    }
+                },
+                (result) => (result.success && Array.isArray(result.trips)) ? result.trips : null
+            );
         }
 
         // Store trips globally for usePendingTrip function
@@ -2281,15 +2279,17 @@
                 driverSelect.innerHTML += `<option value="${driver.nameEn}" data-staff="${driver.staffNumber}" data-type="${driver.type}">${displayName}${typeLabel}</option>`;
             });
 
-            // Vehicles are loaded via the combined getNurseData endpoint
-            // Just ensure default vehicle is selected from cached data
-            const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
-            if (defaultVehicle) {
-                const vehicleSelect = document.getElementById('vehicleNumber');
-                if (vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
-                    vehicleSelect.value = defaultVehicle.number;
+            // Load vehicles from server in background and ensure default is selected
+            loadVehiclesFromServer().then(() => {
+                // Double-check default vehicle is selected after server load
+                const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
+                if (defaultVehicle) {
+                    const vehicleSelect = document.getElementById('vehicleNumber');
+                    if (vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
+                        vehicleSelect.value = defaultVehicle.number;
+                    }
                 }
-            }
+            });
         }
 
         function updateStaffNumber() {
@@ -2434,12 +2434,11 @@
                 nurseStaffNumber: (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim()
             };
 
-            // Safety: ensure nurseName is a real name, not empty or an employee number
-            if (!formData.nurseName || !formData.nurseName.trim() || looksLikeEmployeeNumber(formData.nurseName)) {
+            // Safety: ensure nurseName is never empty on submit (prefer English name for nurse page)
+            if (!formData.nurseName || !formData.nurseName.trim()) {
                 try {
                     const session = JSON.parse(localStorage.getItem('userSession') || '{}');
-                    const validName = getValidDisplayName(session);
-                    if (validName) formData.nurseName = validName;
+                    formData.nurseName = (session.nameEn || session.nameAr || '').toString().trim();
                 } catch(e) {}
             }
 
@@ -2571,13 +2570,13 @@
                     // Single silent server refresh to confirm update (no spinner)
                     setTimeout(() => {
                         DataCache.invalidateAll();
-                        loadAllNurseData();
+                        loadRecords(true);
                     }, 10000);
                 } else {
-                    // For new records: refresh all data via combined endpoint
+                    // For new records: refresh pending trips and records
                     setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
+                        loadRecords();
+                        loadPendingTrips();
                         
                         // Scroll to pending trips if there are more, otherwise to records
                         setTimeout(() => {
@@ -2588,6 +2587,10 @@
                             }
                         }, 300);
                     }, 1000);
+                    setTimeout(() => {
+                        DataCache.invalidateAll();
+                        loadRecords();
+                    }, 2500);
                 }
 
             } catch (error) {
@@ -2704,6 +2707,9 @@
         }
 
         async function loadRecords(silent = false) {
+            const year = document.getElementById('yearFilter').value;
+            const month = document.getElementById('monthFilter').value;
+
             const recordsSection = document.querySelector('.records-section');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
             if (!silent && recordsSection && loadingSpinner) {
@@ -2711,8 +2717,41 @@
                 loadingSpinner.classList.add('active');
             }
 
-            // Use the combined endpoint — it returns records + yearly total + pending trips all at once
-            await loadAllNurseData();
+            let url = `${WEB_APP_URL}?action=getAllRecords&year=${year}`;
+            if (month !== 'all') url += `&month=${month}`;
+
+            try {
+                const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month;
+                await DataCache.fetchWithCache(
+                    url, cacheKey, DataCache.EXPIRY.RECORDS,
+                    (records) => {
+                        if (records) {
+                            allRecords = applyPendingEdits(records);
+                            nurseRecordsPage = 1;
+                            displayRecords(allRecords);
+                        } else {
+                            allRecords = [];
+                            displayRecords([]);
+                        }
+                        if (month === 'all') {
+                            allYearRecords = allRecords;
+                            document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
+                            updateYearlyTotalLabel();
+                        }
+                    },
+                    (result) => (result.success && result.data) ? result.data : null
+                );
+                
+                // If a specific month is selected, also load yearly total
+                if (month !== 'all') {
+                    loadYearlyTotal();
+                }
+            } finally {
+                if (!silent && recordsSection && loadingSpinner) {
+                    recordsSection.classList.remove('loading');
+                    loadingSpinner.classList.remove('active');
+                }
+            }
         }
 
         function displayRecords(records) {
@@ -2983,23 +3022,20 @@
             const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             
             // Identify ownership: prefer Nurse Staff Number match, fallback to name comparison
-            // Also treat records where nurse name is actually an employee number as own trip if it matches
             const isOwnTrip = recordNurseName === '' ||
                               (recordNurseStaff && recordNurseStaff === loggedInStaffNum) ||
-                              (!recordNurseStaff && (recordNurseName === loggedInNameAr || recordNurseName === loggedInNameEn)) ||
-                              (looksLikeEmployeeNumber(recordNurseName) && recordNurseName === loggedInStaffNum);
+                              (!recordNurseStaff && (recordNurseName === loggedInNameAr || recordNurseName === loggedInNameEn));
             
             if (isOwnTrip) {
                 // Own trip - nurse can edit her name freely
                 loadUserSession(); // Sets English name and makes field editable
                 // If the record had a custom name she entered before, show that instead
-                // But skip if that "name" is actually an employee number
-                if (recordNurseName && !looksLikeEmployeeNumber(recordNurseName) && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
+                if (recordNurseName && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
                     nurseField.value = recordNurseName;
                 }
             } else {
                 // Someone else's trip - show original name, readonly
-                nurseField.value = (recordNurseName && !looksLikeEmployeeNumber(recordNurseName)) ? recordNurseName : '-';
+                nurseField.value = recordNurseName || '-';
                 nurseField.readOnly = true;
                 nurseField.style.backgroundColor = '#f3f4f6';
                 nurseField.style.cursor = 'not-allowed';
@@ -3246,23 +3282,6 @@
         // ============================================
         // INITIALIZE
         // ============================================
-        // Helper: detect if a value looks like an employee/staff number (purely digits) rather than a real name
-        function looksLikeEmployeeNumber(val) {
-            if (!val) return false;
-            const s = val.toString().trim();
-            return s.length > 0 && /^\d+$/.test(s);
-        }
-
-        // Helper: get a valid display name from session data, skipping employee numbers
-        function getValidDisplayName(userData) {
-            const englishName = (userData.nameEn || '').toString().trim();
-            const arabicName = (userData.nameAr || '').toString().trim();
-            // Prefer English name, but skip if it looks like an employee number
-            if (englishName && !looksLikeEmployeeNumber(englishName)) return englishName;
-            if (arabicName && !looksLikeEmployeeNumber(arabicName)) return arabicName;
-            return '';
-        }
-
         // Load user session and set nurse name automatically
         function loadUserSession() {
             const session = localStorage.getItem('userSession');
@@ -3273,9 +3292,11 @@
                     
                     // Nurse page uses English name (nurses are non-Arabic speakers)
                     // Arabic name is used only on admin page
-                    const displayName = getValidDisplayName(userData);
+                    const englishName = (userData.nameEn || '').toString().trim();
+                    const arabicName = (userData.nameAr || '').toString().trim();
+                    const displayName = englishName || arabicName || '';
                     
-                    // Set the nurse's English name (only if it's a real name, not employee number)
+                    // Set the nurse's English name
                     if (displayName) {
                         nurseNameField.value = displayName;
                     }
@@ -3333,115 +3354,29 @@
             });
         }, 100);
         
-        // ============================================
-        // COMBINED DATA LOADING - ONE request for everything
-        // Eliminates 3-4 separate round-trips that caused severe delays
-        // ============================================
-        async function loadAllNurseData(options = {}) {
-            const year = document.getElementById('yearFilter').value;
-            const month = document.getElementById('monthFilter').value;
-            const session = JSON.parse(localStorage.getItem('userSession') || '{}');
-            const staffNum = session.staffNumber || '';
-            
-            let url = `${WEB_APP_URL}?action=getNurseData&year=${year}`;
-            if (month !== 'all') url += `&month=${month}`;
-            if (staffNum) url += `&staffNumber=${encodeURIComponent(staffNum)}`;
-            
-            const cacheKey = 'cache_nurse_data_' + year + '_' + month;
-            
-            // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
-            if (window.__earlyNurseFetch && month === 'all') {
-                DataCache._inflight[url] = window.__earlyNurseFetch;
-                window.__earlyNurseFetch = null;
+        // Ensure default vehicle is selected after vehicles load from server
+        setTimeout(async () => {
+            await loadVehiclesFromServer();
+            const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
+            if (defaultVehicle) {
+                const vehicleSelect = document.getElementById('vehicleNumber');
+                if (vehicleSelect) {
+                    vehicleSelect.value = defaultVehicle.number;
+                }
             }
-            
-            await DataCache.fetchWithCache(
-                url, cacheKey, DataCache.EXPIRY.PENDING_TRIPS,
-                (data, meta) => {
-                    if (!data) return;
-                    
-                    // 1. Apply records
-                    if (data.records) {
-                        allRecords = applyPendingEdits(data.records);
-                        nurseRecordsPage = 1;
-                        displayRecords(allRecords);
-                        
-                        if (month === 'all') {
-                            allYearRecords = allRecords;
-                        }
-                    }
-                    
-                    // 2. Apply yearly total
-                    if (data.yearlyTotal !== undefined) {
-                        document.getElementById('yearlyTotalCount').textContent = data.yearlyTotal;
-                        updateYearlyTotalLabel();
-                    }
-                    
-                    // 3. Apply pending trips
-                    if (data.trips) {
-                        const nurseTrips = data.trips.filter(t => t.status !== 'submitted');
-                        cachedPendingTrips = nurseTrips;
-                        displayPendingTrips(nurseTrips);
-                    }
-                    
-                    // 4. Apply vehicles
-                    if (data.vehicles && data.vehicles.length > 0) {
-                        VEHICLES_DATA = data.vehicles.map(v => ({
-                            number: v.vehicleNumber,
-                            isDefault: v.isDefault || false
-                        }));
-                        localStorage.setItem('ambulance_vehicles', JSON.stringify(VEHICLES_DATA));
-                        populateVehicleDropdown();
-                        const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
-                        if (defaultVehicle && !editingRecordId) {
-                            document.getElementById('vehicleNumber').value = defaultVehicle.number;
-                        }
-                    }
-                    
-                    // 5. Refresh user session data (admin may have changed nurse name)
-                    if (data.userData) {
-                        // Server data always wins for name fields — don't fall back to session
-                        // which may contain employee number instead of real name
-                        const serverNameAr = (data.userData.nameAr || '').toString().trim();
-                        const serverNameEn = (data.userData.nameEn || '').toString().trim();
-                        const updated = Object.assign({}, session, {
-                            nameAr: serverNameAr || session.nameAr,
-                            nameEn: serverNameEn || session.nameEn,
-                            type: data.userData.type || session.type
-                        });
-                        // Clean up: if nameEn/nameAr still looks like employee number, clear it
-                        if (looksLikeEmployeeNumber(updated.nameEn)) updated.nameEn = serverNameEn;
-                        if (looksLikeEmployeeNumber(updated.nameAr)) updated.nameAr = serverNameAr;
-                        localStorage.setItem('userSession', JSON.stringify(updated));
-                        window.loggedInUser = updated;
-                        // Re-populate nurse name field if not editing someone else's trip
-                        const nurseField = document.getElementById('nurseName');
-                        if (nurseField && !nurseField.readOnly) {
-                            const freshName = getValidDisplayName(updated);
-                            if (freshName) nurseField.value = freshName;
-                        }
-                    }
-                    
-                    // Hide loading spinners
-                    const recordsSection = document.querySelector('.records-section');
-                    const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-                    if (recordsSection) recordsSection.classList.remove('loading');
-                    if (loadingSpinner) loadingSpinner.classList.remove('active');
-                },
-                (result) => result.success ? result : null
-            );
-        }
+        }, 500);
         
-        // Initial load: session from cache first (instant), then combined server fetch
         loadUserSession();
-        loadAllNurseData();
+        loadRecords();
+        loadPendingTrips();
 
         // Listen for background session refresh (admin changed nurse name on server)
         window.addEventListener('sessionRefreshed', function(e) {
+            // Re-populate nurse name only if the field is not readonly (i.e. not editing someone else's trip)
             const nurseField = document.getElementById('nurseName');
             if (nurseField && !nurseField.readOnly) {
                 const fresh = e.detail || {};
-                const freshName = getValidDisplayName(fresh);
+                const freshName = (fresh.nameEn || fresh.nameAr || '').toString().trim();
                 if (freshName) {
                     nurseField.value = freshName;
                     window.loggedInUser = fresh;
@@ -3449,27 +3384,18 @@
             }
         });
 
-        // Smart adaptive auto-refresh using combined endpoint
+        // Smart auto-refresh - only update UI when data changes
+        // تحديث تلقائي ذكي - فقط عند وجود تغييرات في البيانات
         let lastDataHash = '';
-        let isRefreshing = false;
         
-        async function smartRefreshNurseData() {
-            // Skip if page is hidden (saves bandwidth) or already refreshing
-            if (document.hidden || isRefreshing) return;
-            isRefreshing = true;
-            try {
-                const year = document.getElementById('yearFilter').value;
-                const month = document.getElementById('monthFilter').value;
-                const cacheKey = 'cache_nurse_data_' + year + '_' + month;
-                DataCache.invalidate(cacheKey);
-                await loadAllNurseData();
-            } finally {
-                isRefreshing = false;
-            }
+        async function smartRefreshPendingTrips() {
+            // Invalidate cache to force fresh fetch
+            DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            loadPendingTrips(false, true);
         }
         
-        // Refresh every 15 seconds (combined endpoint returns everything in 1 request)
-        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 15000);
+        // Check for updates every 8 seconds - faster sync with driver/home app
+        window.smartRefreshInterval = setInterval(smartRefreshPendingTrips, 8000);
 
         // Track if logout is in progress to prevent spinner issues
         let isLoggingOut = false;

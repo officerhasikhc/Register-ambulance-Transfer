@@ -247,24 +247,8 @@ const DataCache = {
 
     preload(webAppUrl, pageType) {
         const fetches = [];
-        const now = new Date();
-        const year = now.getFullYear().toString();
-        const month = String(now.getMonth() + 1);
 
-        if (pageType === 'nurse') {
-            // Single combined request for nurse page (replaces 3-4 separate calls)
-            const session = JSON.parse(localStorage.getItem('userSession') || '{}');
-            const staffNum = session.staffNumber || '';
-            let url = `${webAppUrl}?action=getNurseData&year=${year}`;
-            if (staffNum) url += `&staffNumber=${encodeURIComponent(staffNum)}`;
-            fetches.push(this._preloadFetch(
-                url,
-                'cache_nurse_data_' + year + '_all',
-                r => r.success ? r : null
-            ));
-        }
-
-        if (pageType === 'driver') {
+        if (pageType === 'driver' || pageType === 'nurse') {
             fetches.push(this._preloadFetch(
                 `${webAppUrl}?action=getPendingTrips`,
                 this.KEYS.PENDING_TRIPS,
@@ -272,12 +256,31 @@ const DataCache = {
             ));
         }
 
+        if (pageType === 'nurse') {
+            fetches.push(this._preloadFetch(
+                `${webAppUrl}?action=getRecords`,
+                this.KEYS.RECORDS,
+                r => (r.success && r.records) ? r.records : null
+            ));
+        }
+
         if (pageType === 'admin') {
+            const now = new Date();
+            const year = now.getFullYear().toString();
+            const month = String(now.getMonth() + 1);
             const url = `${webAppUrl}?action=getAdminData&year=${year}&month=${month}`;
             fetches.push(this._preloadFetch(
                 url,
                 this.KEYS.ADMIN_DATA,
                 r => r.success ? r : null
+            ));
+        }
+
+        if (pageType === 'nurse') {
+            fetches.push(this._preloadFetch(
+                `${webAppUrl}?action=getVehicles`,
+                this.KEYS.VEHICLES,
+                r => (r.success && r.vehicles) ? r.vehicles : null
             ));
         }
 
