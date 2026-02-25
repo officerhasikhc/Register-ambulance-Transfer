@@ -2430,14 +2430,15 @@
                 returnTime: document.getElementById('returnTime').value,
                 destination: destinationValue,
                 patientName: document.getElementById('patientName').value,
-                nurseName: document.getElementById('nurseName').value
+                nurseName: document.getElementById('nurseName').value,
+                nurseStaffNumber: (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim()
             };
 
-            // Safety: ensure nurseName is never empty on submit
+            // Safety: ensure nurseName is never empty on submit (always prefer Arabic name)
             if (!formData.nurseName || !formData.nurseName.trim()) {
                 try {
                     const session = JSON.parse(localStorage.getItem('userSession') || '{}');
-                    formData.nurseName = session.nameEn || session.nameAr || '';
+                    formData.nurseName = (session.nameAr || session.nameEn || '').toString().trim();
                 } catch(e) {}
             }
 
@@ -2491,7 +2492,8 @@
                         'Return Time': formData.returnTime,
                         'Destination': formData.destination,
                         'Patient Name': formData.patientName,
-                        'Nurse Name': formData.nurseName
+                        'Nurse Name': formData.nurseName,
+                        'Nurse Staff Number': formData.nurseStaffNumber
                     };
                     
                     // Store in pendingEdits so server refreshes won't revert
@@ -2639,6 +2641,9 @@
             if (defaultVehicle) {
                 document.getElementById('vehicleNumber').value = defaultVehicle.number;
             }
+            
+            // Re-set nurse name from session (form.reset() clears it)
+            loadUserSession();
         }
 
         function closeModal() {
@@ -3008,15 +3013,34 @@
                 document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
             
-            // Fill nurse name - always ensure it has a value
+            // Nurse name logic: check if this is the logged-in nurse's own trip or someone else's
             const nurseField = document.getElementById('nurseName');
-            if (record['Nurse Name'] && record['Nurse Name'].toString().trim()) {
-                nurseField.value = record['Nurse Name'].toString().trim();
-            } else {
-                // Fallback: keep current field value (from session), or reload from session
-                if (!nurseField.value || !nurseField.value.trim()) {
-                    loadUserSession();
+            const loggedInStaffNum = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
+            const recordStaffNum = (record['Staff Number'] || '').toString().trim();
+            
+            // Note: 'Staff Number' in Records sheet is the DRIVER's staff number, not the nurse's.
+            // We identify ownership by comparing the Nurse Name in the record with the logged-in nurse's name.
+            const loggedInNameAr = (window.loggedInUser && window.loggedInUser.nameAr || '').toString().trim();
+            const loggedInNameEn = (window.loggedInUser && window.loggedInUser.nameEn || '').toString().trim();
+            const recordNurseName = (record['Nurse Name'] || '').toString().trim();
+            
+            const isOwnTrip = recordNurseName === '' || 
+                              recordNurseName === loggedInNameAr || 
+                              recordNurseName === loggedInNameEn;
+            
+            if (isOwnTrip) {
+                // Own trip - nurse can edit her name freely
+                loadUserSession(); // Sets Arabic name and makes field editable
+                // If the record had a custom name she entered before, show that instead
+                if (recordNurseName && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
+                    nurseField.value = recordNurseName;
                 }
+            } else {
+                // Someone else's trip - show original name, readonly
+                nurseField.value = recordNurseName || '-';
+                nurseField.readOnly = true;
+                nurseField.style.backgroundColor = '#f3f4f6';
+                nurseField.style.cursor = 'not-allowed';
             }
             
             updateTimeInputs();
@@ -3268,24 +3292,20 @@
                     const userData = JSON.parse(session);
                     const nurseNameField = document.getElementById('nurseName');
                     
-                    // Check if admin with nurse access - can edit name
-                    if (userData.type === 'admin' && userData.canAccessNurse) {
-                        // Admin can enter any name - leave field editable
-                        nurseNameField.placeholder = currentLang === 'ar' ? 'أدخل اسم الممرض/ة' : 'Enter nurse name';
-                        // Optionally pre-fill with admin name
-                        if (currentLang === 'ar' && userData.nameAr) {
-                            nurseNameField.value = userData.nameAr;
-                        } else if (userData.nameEn) {
-                            nurseNameField.value = userData.nameEn;
-                        }
-                    } else {
-                        // Regular nurse - set name based on current language
-                        if (currentLang === 'ar' && userData.nameAr) {
-                            nurseNameField.value = userData.nameAr;
-                        } else if (userData.nameEn) {
-                            nurseNameField.value = userData.nameEn;
-                        }
+                    // Always use Arabic name (nameAr) as the primary display name
+                    const arabicName = (userData.nameAr || '').toString().trim();
+                    const englishName = (userData.nameEn || '').toString().trim();
+                    const displayName = arabicName || englishName || '';
+                    
+                    // Set the nurse's own Arabic name
+                    if (displayName) {
+                        nurseNameField.value = displayName;
                     }
+                    
+                    // Nurse can edit her own name (for new trips and editing own trips)
+                    nurseNameField.readOnly = false;
+                    nurseNameField.style.backgroundColor = '';
+                    nurseNameField.style.cursor = '';
                     
                     // Store for later use
                     window.loggedInUser = userData;

@@ -2020,6 +2020,32 @@
         let viewMode = 'current'; // 'current', 'archive', 'all'
         let notificationData = [];
 
+        // Nurse name lookup: maps staff number → Arabic name from Users sheet
+        let nurseNameMap = {};
+        async function loadNurseNameMap() {
+            try {
+                const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
+                const result = await resp.json();
+                if (result.success && (result.users || result.data)) {
+                    nurseNameMap = {};
+                    (result.users || result.data).forEach(u => {
+                        if (u.staffNumber) nurseNameMap[u.staffNumber.toString().trim()] = (u.nameAr || '').toString().trim();
+                        if (u.civilId) nurseNameMap[u.civilId.toString().trim()] = (u.nameAr || '').toString().trim();
+                    });
+                }
+            } catch(e) { console.log('Failed to load nurse name map:', e); }
+        }
+        loadNurseNameMap();
+
+        // Resolve nurse Arabic name: prefer Users sheet lookup by Nurse Staff Number, fallback to stored name
+        function resolveNurseArabicName(record) {
+            const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            if (nurseStaff && nurseNameMap[nurseStaff]) {
+                return nurseNameMap[nurseStaff];
+            }
+            return (record['Nurse Name'] || '').toString().trim() || '-';
+        }
+
         // ============================================
         // CUSTOM DIALOG & TOAST SYSTEM
         // ============================================
@@ -2397,7 +2423,7 @@
                             const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
-                            const fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
+                            const fullNurse = resolveNurseArabicName(record);
                             
                             return `
                             <tr data-record-id="${recordId}">
@@ -2474,7 +2500,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">المسجل (الممرضة)</div>
-                        <div class="detail-value">${currentRecord['Nurse Name'] || '-'}</div>
+                        <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">تاريخ التسجيل</div>
@@ -2529,7 +2555,7 @@
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${DateTimeFormatter.formatTimeForDisplay(currentRecord['Return Time']) || '-'}</div></div>
                         <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item"><div class="label">اسم المريض</div><div class="value">${(currentRecord['Patient Name'] || currentRecord['patientName'] || '').toString().trim() || '-'}</div></div>
-                        <div class="item"><div class="label">المسجل (الممرضة)</div><div class="value">${currentRecord['Nurse Name'] || '-'}</div></div>
+                        <div class="item"><div class="label">المسجل (الممرضة)</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                     </div>
                     <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #1e40af; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
