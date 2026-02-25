@@ -102,6 +102,40 @@
     }
 
     // ============================================
+    // BACKGROUND SESSION REFRESH FROM SERVER
+    // When admin updates a nurse/driver name, the change must
+    // reflect on next page load without re-login.
+    // ============================================
+    const SESSION_API_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+
+    if (!isLoginPage) {
+        const currentSession = getSession();
+        if (currentSession && currentSession.staffNumber) {
+            // Fire-and-forget: refresh user data from server in background
+            fetch(`${SESSION_API_URL}?action=validateUser&staffNumber=${encodeURIComponent(currentSession.staffNumber)}`)
+                .then(r => r.json())
+                .then(result => {
+                    if (result.success && result.user) {
+                        const fresh = result.user;
+                        // Merge fresh server data into existing session (preserve loginTime etc.)
+                        const updated = Object.assign({}, currentSession, {
+                            nameAr: fresh.nameAr || currentSession.nameAr,
+                            nameEn: fresh.nameEn || currentSession.nameEn,
+                            type: fresh.type || currentSession.type,
+                            vehicleNumber: fresh.vehicleNumber || currentSession.vehicleNumber,
+                            civilId: fresh.civilId || currentSession.civilId,
+                            employeeType: fresh.employeeType || currentSession.employeeType
+                        });
+                        localStorage.setItem(SESSION_CONFIG.SESSION_KEY, JSON.stringify(updated));
+                        // Notify pages that session data was refreshed
+                        window.dispatchEvent(new CustomEvent('sessionRefreshed', { detail: updated }));
+                    }
+                })
+                .catch(() => { /* silent - offline or error, keep cached session */ });
+        }
+    }
+
+    // ============================================
     // INACTIVITY TRACKER
     // ============================================
     if (!isLoginPage) {

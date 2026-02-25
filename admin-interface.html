@@ -3325,6 +3325,7 @@
         setInterval(() => {
             DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
             loadAdminData();
+            loadNurseNameMap(); // Refresh nurse Arabic names in case admin edited users
         }, 15000);
 
         // Register Service Worker for PWA with auto-update
