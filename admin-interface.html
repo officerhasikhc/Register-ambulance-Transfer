@@ -2691,6 +2691,10 @@
         /**
          * تنزيل كشف حركة الإسعاف PDF معبأ من الرحلات المكتملة للفترة المعروضة (حتى 10 رحلات).
          * يتطلب وجود ملف قالب في المسار PDF_TEMPLATE_URL وأسماء حقول كما في PDF-FIELD-NAMES.md
+         *
+         * حقول اسم السائق (Driver_Name_1 … 10) يجب أن تكون قوائم منسدلة (Dropdown/ComboBox)
+         * في ملف القالب، تحتوي على أسماء السائقين بالعربي.
+         * حقلا center_hospital_name و Destination لا يُعبآن بالكود — يبقيان كما أُدخلا في القالب.
          */
         async function downloadPdfForm() {
             const completed = (allRecords || []).filter(function (r) {
@@ -2718,30 +2722,69 @@
                 const pdfDoc = await lib.PDFDocument.load(buf);
                 const form = pdfDoc.getForm();
 
-                // تعيين NeedAppearances حتى يعرض عارض PDF النصوص العربية بشكل صحيح
-                const acroForm = form.acroForm;
-                acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
+                // تعيين NeedAppearances حتى يعرض Acrobat النصوص بنفسه (يدعم العربي بشكل صحيح)
+                try {
+                    var acroForm = form.acroForm;
+                    acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
+                } catch (nae) { console.warn('NeedAppearances flag:', nae); }
 
+                /** تعيين نص عادي (إنجليزي/أرقام) في حقل نصي */
                 function setText(name, value) {
                     try {
-                        const v = (value != null && value !== undefined) ? String(value).trim() : '';
+                        var v = (value != null && value !== undefined) ? String(value).trim() : '';
                         form.getTextField(name).setText(v);
                     } catch (e) { /* حقل غير موجود في القالب */ }
                 }
 
-                // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
-                const driverMap = getDriverNameArMap();
+                /**
+                 * اختيار اسم السائق من قائمة منسدلة (Dropdown) في PDF.
+                 * الحقل يجب أن يكون Dropdown في القالب يحتوي أسماء السائقين بالعربي.
+                 */
+                function selectDriver(name, driverNameEn) {
+                    try {
+                        var dropdown = form.getDropdown(name);
+                        var options = dropdown.getOptions();
+                        if (!options || options.length === 0) return;
 
-                setText('center_hospital_name', PDF_CENTER_NAME);
+                        // ابحث عن الاسم العربي المقابل للاسم الإنجليزي
+                        var driverAr = driverMap[driverNameEn.toUpperCase()] || '';
+
+                        // إذا السائق غير موجود في النظام — اترك الحقل فارغاً للإدخال اليدوي لاحقاً
+                        if (!driverAr) return;
+
+                        // حاول مطابقة الاسم العربي مع خيارات القائمة
+                        for (var i = 0; i < options.length; i++) {
+                            var opt = options[i].trim();
+                            if (opt === driverAr) {
+                                dropdown.select(options[i]);
+                                return;
+                            }
+                        }
+
+                        // مطابقة جزئية
+                        for (var j = 0; j < options.length; j++) {
+                            var optTrim = options[j].trim();
+                            if (optTrim && (optTrim.indexOf(driverAr) !== -1 || driverAr.indexOf(optTrim) !== -1)) {
+                                dropdown.select(options[j]);
+                                return;
+                            }
+                        }
+                        // لم يُطابق — يبقى فارغاً للإدخال اليدوي
+                    } catch (e) { /* حقل غير موجود في القالب */ }
+                }
+
+                // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
+                var driverMap = getDriverNameArMap();
+
+                // ملء حقول كل رحلة (لا نملأ center_hospital_name ولا Destination — يبقيان كما في القالب)
                 for (let i = 0; i < records.length; i++) {
                     const r = records[i];
                     const n = i + 1;
                     setText('Vehicle_Number_' + n, r['Vehicle Number']);
 
-                    // اسم السائق بالعربي (ابحث في الخريطة، إن لم يوجد استخدم الاسم الأصلي)
+                    // اسم السائق — اختيار من القائمة المنسدلة
                     const driverEn = (r['Driver Name'] || '').trim();
-                    const driverAr = driverMap[driverEn.toUpperCase()] || driverEn;
-                    setText('Driver_Name_' + n, driverAr);
+                    selectDriver('Driver_Name_' + n, driverEn);
 
                     setText('Staff_Number_' + n, r['Staff Number']);
                     setText('Departure_Time_' + n, r['Departure Time']);
@@ -2749,10 +2792,8 @@
                     setText('Return_Time_' + n, r['Return Time']);
                     setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
                 }
-                // الوجهة حقل واحد فقط (جميع الرحلات لنفس المستشفى) — يُحوَّل للعربي
-                setText('Destination', mapDestinationToAr(records[0]['Destination']));
 
-                // حفظ PDF بدون تحديث المظهر (لتجنب خطأ WinAnsi مع النصوص العربية)
+                // حفظ بدون تحديث تلقائي للمظهر — Acrobat يعرض النص بنفسه عبر NeedAppearances
                 const pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');

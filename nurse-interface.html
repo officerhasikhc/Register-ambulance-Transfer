@@ -1138,6 +1138,10 @@
                             <option value="" data-en="Select Driver" data-ar="اختر السائق">Select Driver</option>
                         </select>
                     </div>
+                    <div class="form-group" id="otherDriverGroup" style="display:none;">
+                        <label data-en="Driver Name (English)" data-ar="اسم السائق (بالإنجليزي)">Driver Name (English)</label>
+                        <input type="text" id="otherDriverName" placeholder="Enter driver name in English" style="text-transform: uppercase;">
+                    </div>
                     <div class="form-group">
                         <label data-en="Staff Number" data-ar="الرقم الوظيفي">Staff Number</label>
                         <input type="text" id="staffNumber" required readonly style="background: #f3f4f6; cursor: not-allowed;">
@@ -2081,6 +2085,9 @@
 
             // Fill form with trip data
             const driverSelect = document.getElementById('driverName');
+            // إخفاء خيار "أخرى" عند إكمال رحلة معلقة — السائق معروف مسبقاً
+            var otherOpt = driverSelect.querySelector('option[value="__OTHER__"]');
+            if (otherOpt) otherOpt.style.display = 'none';
             for (let i = 0; i < driverSelect.options.length; i++) {
                 if (driverSelect.options[i].value === trip.driverName) {
                     driverSelect.selectedIndex = i;
@@ -2167,6 +2174,13 @@
             // Clear all form fields except nurse name
             document.getElementById('driverName').value = '';
             document.getElementById('staffNumber').value = '';
+            document.getElementById('staffNumber').readOnly = true;
+            document.getElementById('staffNumber').style.background = '#f3f4f6';
+            document.getElementById('staffNumber').style.cursor = 'not-allowed';
+            // إخفاء ومسح حقل السائق اليدوي
+            var otherDriverGrp = document.getElementById('otherDriverGroup');
+            if (otherDriverGrp) { otherDriverGrp.style.display = 'none'; }
+            document.getElementById('otherDriverName').value = '';
             clearDatePickers();
             document.getElementById('destination').value = '';
             
@@ -2280,6 +2294,8 @@
                 const typeLabel = driver.type === 'daily-paid' ? (currentLang === 'en' ? ' (Daily-paid)' : ' (أجر يومي)') : '';
                 driverSelect.innerHTML += `<option value="${driver.nameEn}" data-staff="${driver.staffNumber}" data-type="${driver.type}">${displayName}${typeLabel}</option>`;
             });
+            // خيار "أخرى" لإدخال سائق غير موجود في النظام
+            driverSelect.innerHTML += `<option value="__OTHER__">${currentLang === 'en' ? '-- Other --' : '-- أخرى --'}</option>`;
 
             // Vehicles are loaded via the combined getNurseData endpoint
             // Just ensure default vehicle is selected from cached data
@@ -2296,17 +2312,31 @@
             const driverSelect = document.getElementById('driverName');
             const staffInput = document.getElementById('staffNumber');
             const selectedOption = driverSelect.options[driverSelect.selectedIndex];
+            const otherGroup = document.getElementById('otherDriverGroup');
 
-            if (selectedOption && selectedOption.dataset.staff) {
-                staffInput.value = selectedOption.dataset.staff;
-                if (selectedOption.dataset.type === 'daily-paid') {
-                    staffInput.style.background = '#fef3c7';
+            if (driverSelect.value === '__OTHER__') {
+                // سائق غير موجود في النظام — إظهار حقول الإدخال اليدوي
+                otherGroup.style.display = '';
+                staffInput.readOnly = false;
+                staffInput.style.background = '';
+                staffInput.style.cursor = '';
+                staffInput.value = '';
+                document.getElementById('otherDriverName').value = '';
+                document.getElementById('otherDriverName').focus();
+            } else {
+                // سائق من القائمة
+                otherGroup.style.display = 'none';
+                document.getElementById('otherDriverName').value = '';
+                staffInput.readOnly = true;
+                staffInput.style.cursor = 'not-allowed';
+
+                if (selectedOption && selectedOption.dataset.staff) {
+                    staffInput.value = selectedOption.dataset.staff;
+                    staffInput.style.background = selectedOption.dataset.type === 'daily-paid' ? '#fef3c7' : '#f3f4f6';
                 } else {
+                    staffInput.value = '';
                     staffInput.style.background = '#f3f4f6';
                 }
-            } else {
-                staffInput.value = '';
-                staffInput.style.background = '#f3f4f6';
             }
         }
 
@@ -2349,6 +2379,7 @@
             // Check all required fields - highlight ALL empty fields at once
             const requiredFields = [
                 { id: 'driverName', name: 'Driver Name' },
+                { id: 'otherDriverName', name: 'Other Driver Name' },
                 { id: 'departureDate', name: 'Departure Date' },
                 { id: 'departureTimeHour', name: 'Departure Time' },
                 { id: 'departureTimeMinute', name: 'Departure Time' },
@@ -2377,6 +2408,16 @@
                         emptyFields.push({ element: destinationSelect, name: field.name });
                     } else {
                         destinationSelect.classList.remove('error', 'field-error');
+                    }
+                } else if (field.id === 'otherDriverName') {
+                    // فقط إذا اختار "أخرى" يجب ملء اسم السائق يدوياً
+                    if (document.getElementById('driverName').value === '__OTHER__') {
+                        const otherDriverInput = document.getElementById('otherDriverName');
+                        if (!otherDriverInput.value || otherDriverInput.value.trim() === '') {
+                            emptyFields.push({ element: otherDriverInput, name: field.name });
+                        } else {
+                            otherDriverInput.classList.remove('error', 'field-error');
+                        }
                     }
                 } else {
                     const element = document.getElementById(field.id);
@@ -2422,7 +2463,9 @@
                 id: isEditing ? String(editingRecordId).trim() : undefined,
                 tripId: selectedTripId || undefined,
                 vehicleNumber: document.getElementById('vehicleNumber').value,
-                driverName: document.getElementById('driverName').value,
+                driverName: document.getElementById('driverName').value === '__OTHER__'
+                    ? document.getElementById('otherDriverName').value.trim().toUpperCase()
+                    : document.getElementById('driverName').value,
                 staffNumber: document.getElementById('staffNumber').value,
                 departureDate: DateTimeFormatter.formatDateForApi(document.getElementById('departureDate').value),
                 departureTime: document.getElementById('departureTime').value,
@@ -2616,6 +2659,15 @@
                 destinationOtherInput.required = false;
                 destinationOtherInput.value = '';
             }
+            
+            // إعادة إظهار خيار "أخرى" في قائمة السائقين + إخفاء حقل الإدخال اليدوي
+            var otherDriverOpt = document.querySelector('#driverName option[value="__OTHER__"]');
+            if (otherDriverOpt) otherDriverOpt.style.display = '';
+            var otherDriverGrp = document.getElementById('otherDriverGroup');
+            if (otherDriverGrp) otherDriverGrp.style.display = 'none';
+            document.getElementById('otherDriverName').value = '';
+            document.getElementById('staffNumber').readOnly = true;
+            document.getElementById('staffNumber').style.cursor = 'not-allowed';
             
             // Clear patient name
             const patientNameField = document.getElementById('patientName');
