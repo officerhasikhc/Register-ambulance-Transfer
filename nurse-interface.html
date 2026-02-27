@@ -2085,21 +2085,15 @@
 
             // Fill form with trip data
             const driverSelect = document.getElementById('driverName');
-            var driverFound = false;
+            // إخفاء خيار "أخرى" عند إكمال رحلة معلقة — السائق معروف مسبقاً
+            var otherOpt = driverSelect.querySelector('option[value="__OTHER__"]');
+            if (otherOpt) otherOpt.style.display = 'none';
             for (let i = 0; i < driverSelect.options.length; i++) {
                 if (driverSelect.options[i].value === trip.driverName) {
                     driverSelect.selectedIndex = i;
                     updateStaffNumber();
-                    driverFound = true;
                     break;
                 }
-            }
-            // إذا السائق غير موجود في القائمة — اختر "أخرى" واملأ الاسم يدوياً
-            if (!driverFound && trip.driverName) {
-                driverSelect.value = '__OTHER__';
-                updateStaffNumber();
-                document.getElementById('otherDriverName').value = trip.driverName;
-                if (trip.staffNumber) document.getElementById('staffNumber').value = trip.staffNumber;
             }
 
             // Fill departure date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
@@ -2665,6 +2659,15 @@
                 destinationOtherInput.required = false;
                 destinationOtherInput.value = '';
             }
+            
+            // إعادة إظهار خيار "أخرى" في قائمة السائقين + إخفاء حقل الإدخال اليدوي
+            var otherDriverOpt = document.querySelector('#driverName option[value="__OTHER__"]');
+            if (otherDriverOpt) otherDriverOpt.style.display = '';
+            var otherDriverGrp = document.getElementById('otherDriverGroup');
+            if (otherDriverGrp) otherDriverGrp.style.display = 'none';
+            document.getElementById('otherDriverName').value = '';
+            document.getElementById('staffNumber').readOnly = true;
+            document.getElementById('staffNumber').style.cursor = 'not-allowed';
             
             // Clear patient name
             const patientNameField = document.getElementById('patientName');
