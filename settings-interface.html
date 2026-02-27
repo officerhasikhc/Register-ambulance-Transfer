@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعدادات النظام - سجل نشاط الإسعاف</title>
+    <script src="session-manager.js"></script>
+    
+    <!-- Open Graph Meta Tags for WhatsApp, Email, etc -->
+    <meta name="description" content="إعدادات نظام تسجيل رحلات الإسعاف - المديرية العامة للخدمات الصحية بمحافظة ظفار - مركز حاسك الصحي">
+    <meta property="og:title" content="إعدادات النظام - نظام سجل الإسعاف">
+    <meta property="og:description" content="إعدادات نظام تسجيل رحلات الإسعاف - المديرية العامة للخدمات الصحية بمحافظة ظفار - مركز حاسك الصحي">
+    <meta property="og:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ar_OM">
+    <meta property="og:site_name" content="نظام سجل الإسعاف">
+    <link rel="icon" type="image/png" sizes="48x48" href="icon-48x48.png">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #1e40af;
+            --light-blue: #3b82f6;
+            --lighter-blue: #eff6ff;
+            --dark-blue: #1e3a8a;
+            --bg-blue: #dbeafe;
+            --white: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #d1d5db;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
+            background: linear-gradient(135deg, var(--bg-blue) 0%, var(--lighter-blue) 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--text-primary);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+
+        .header-info h1 {
+            color: var(--primary-blue);
+            font-size: 22px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-subtitle {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .header-subtitle-en {
+            font-size: 11px;
+            color: var(--text-secondary);
+            opacity: 0.8;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            padding: 10px 16px;
+            background: var(--lighter-blue);
+            color: var(--primary-blue);
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 13px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-link:hover {
+            background: var(--primary-blue);
+            color: var(--white);
+        }
+
+        .section {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--lighter-blue);
+        }
+
+        .section-header h2 {
+            color: var(--primary-blue);
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
+            color: var(--white);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: var(--white);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: var(--white);
+        }
+
+        .btn-secondary {
+            background: var(--lighter-blue);
+            color: var(--primary-blue);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 14px;
+            text-align: right;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table th {
+            background: var(--lighter-blue);
+            color: var(--primary-blue);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .data-table tr:hover {
+            background: var(--lighter-blue);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-employee {
+            background: #d1fae5;
+            color: var(--success);
+        }
+
+        .badge-daily {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .action-btn.edit {
+            background: var(--lighter-blue);
+            color: var(--primary-blue);
+        }
+
+        .action-btn.delete {
+            background: #fee2e2;
+            color: var(--error);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--white);
+            padding: 32px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--lighter-blue);
+        }
+
+        .modal-header h3 {
+            color: var(--primary-blue);
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+
+        .close-btn:hover {
+            background: var(--lighter-blue);
+            color: var(--primary-blue);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .info-box {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .info-box-icon {
+            font-size: 20px;
+        }
+
+        .info-box p {
+            color: #92400e;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-links {
+                flex-direction: column;
+            }
+
+            .section-header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+
+            .data-table {
+                font-size: 12px;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 10px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-brand">
+                <img src="moh-logo.png" alt="شعار وزارة الصحة" class="header-logo">
+                <div class="header-info">
+                    <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> إعدادات النظام</h1>
+                    <p class="header-subtitle">المديرية العامة للخدمات الصحية بمحافظة ظفار</p>
+                    <p class="header-subtitle">ولاية سدح - مركز حاسك الصحي</p>
+                </div>
+            </div>
+            <div class="nav-links">
+                <a href="login.html" class="nav-link">تسجيل الخروج</a>
+                <a href="nurse-interface.html" class="nav-link">صفحة التمريض</a>
+                <a href="admin-interface.html" class="nav-link">لوحة الإدارة</a>
+                <a href="driver-interface.html" class="nav-link">صفحة السائق</a>
+            </div>
+        </div>
+
+        <!-- Info Box -->
+        <div class="info-box">
+            <span class="info-box-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+            <p>التغييرات التي تجريها هنا ستُحفظ في النظام. يمكنك إضافة أو تعديل أو حذف المستخدمين وسيارات الإسعاف.</p>
+        </div>
+
+        <!-- Nurses Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg> إدارة الممرضين والممرضات</h2>
+                <button class="btn btn-primary" onclick="openNurseModal()">
+                    <span>+</span> إضافة ممرض/ة
+                </button>
+            </div>
+            <div id="nursesTable"></div>
+        </div>
+
+        <!-- Drivers Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> إدارة السائقين</h2>
+                <button class="btn btn-primary" onclick="openDriverModal()">
+                    <span>+</span> إضافة سائق
+                </button>
+            </div>
+            <div id="driversTable"></div>
+        </div>
+
+        <!-- Vehicles Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><line x1="7" y1="7" x2="7" y2="11"/><line x1="5" y1="9" x2="9" y2="9"/></svg> إدارة سيارات الإسعاف</h2>
+                <button class="btn btn-primary" onclick="openVehicleModal()">
+                    <span>+</span> إضافة سيارة
+                </button>
+            </div>
+            <div id="vehiclesTable"></div>
+        </div>
+
+        <!-- Export/Import Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> تصدير واستيراد البيانات</h2>
+            </div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-success" onclick="exportData()">تصدير البيانات</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">استيراد البيانات</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importData(event)">
+                <button class="btn btn-danger" onclick="resetToDefaults()">إعادة للافتراضي</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Driver Modal -->
+    <div id="driverModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="driverModalTitle">إضافة سائق جديد</h3>
+                <button class="close-btn" onclick="closeDriverModal()">×</button>
+            </div>
+            <form id="driverForm" onsubmit="saveDriver(event)">
+                <input type="hidden" id="driverIndex" value="-1">
+                <div class="form-group">
+                    <label>الاسم بالعربي</label>
+                    <input type="text" id="driverNameAr" required placeholder="مثال: سعد زايد الجنيبي">
+                </div>
+                <div class="form-group">
+                    <label>الاسم بالإنجليزي</label>
+                    <input type="text" id="driverNameEn" required placeholder="e.g., SAAD ZAID AL-JUNAIBI" style="direction: ltr; text-align: left;">
+                </div>
+                <div class="form-group">
+                    <label>نوع التوظيف</label>
+                    <select id="driverType" required onchange="updateStaffLabel()">
+                        <option value="employee">موظف (رقم وظيفي)</option>
+                        <option value="daily-paid">أجر يومي (رقم مدني)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label id="staffNumberLabel">الرقم الوظيفي</label>
+                    <input type="text" id="driverStaffNumber" required placeholder="مثال: 39121" style="direction: ltr; text-align: left;">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeDriverModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vehicle Modal -->
+    <div id="vehicleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="vehicleModalTitle">إضافة سيارة جديدة</h3>
+                <button class="close-btn" onclick="closeVehicleModal()">×</button>
+            </div>
+            <form id="vehicleForm" onsubmit="saveVehicle(event)">
+                <input type="hidden" id="vehicleIndex" value="-1">
+                <div class="form-group">
+                    <label>رقم السيارة</label>
+                    <input type="text" id="vehicleNumberInput" required placeholder="مثال: 612-23" style="direction: ltr; text-align: left;">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="vehicleIsDefault"> تعيين كسيارة افتراضية
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeVehicleModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Nurse Modal -->
+    <div id="nurseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="nurseModalTitle">إضافة ممرض/ة جديد</h3>
+                <button class="close-btn" onclick="closeNurseModal()">×</button>
+            </div>
+            <form id="nurseForm" onsubmit="saveNurse(event)">
+                <input type="hidden" id="nurseIndex" value="-1">
+                <div class="form-group">
+                    <label>الاسم بالعربي</label>
+                    <input type="text" id="nurseNameAr" required placeholder="مثال: عائشة سعيد السليمي">
+                </div>
+                <div class="form-group">
+                    <label>الاسم بالإنجليزي</label>
+                    <input type="text" id="nurseNameEn" required placeholder="e.g., AISHA SAID AL-SULAIMI" style="direction: ltr; text-align: left;">
+                </div>
+                <div class="form-group">
+                    <label>الرقم الوظيفي</label>
+                    <input type="text" id="nurseStaffNumber" required placeholder="مثال: 57609" style="direction: ltr; text-align: left;">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeNurseModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // API URL
+        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+
+        // Default data (fallback)
+        const DEFAULT_NURSES = [
+            { nameAr: 'ميتي ماثيو', nameEn: 'METTY MATHEW', staffNumber: '79470' },
+            { nameAr: 'شيرين كوريان', nameEn: 'SHERINE KURIAN', staffNumber: '62971' },
+            { nameAr: 'ساميني ثانكاموني', nameEn: 'SAMINI THANKAMONY', staffNumber: '85181' },
+            { nameAr: 'آنو ماموتيل', nameEn: 'ANNU MAMOOTEL', staffNumber: '88973' },
+            { nameAr: 'عائشة سعيد بخيت السليمي', nameEn: 'AISHA SAID BAKHIT AL-SULAIMI', staffNumber: '57609' },
+            { nameAr: 'بخيت محمد الغفيلي المهري', nameEn: 'BAKHIT MOHAMED AL-GHUFAILI AL-MAHRI', staffNumber: '41299' }
+        ];
+
+        const DEFAULT_DRIVERS = [
+            {
+                nameAr: 'سعد زايد الجنيبي',
+                nameEn: 'SAAD ZAID AL-JUNAIBI',
+                staffNumber: '39121',
+                type: 'employee'
+            },
+            {
+                nameAr: 'حسان ثابت رجب',
+                nameEn: 'HASSAN THABIT RAJAB',
+                staffNumber: '222975657',
+                type: 'daily-paid'
+            },
+            {
+                nameAr: 'محمد الرضه علي',
+                nameEn: 'MOHAMMED AL-RUDHA ALI',
+                staffNumber: '39634',
+                type: 'employee'
+            },
+            {
+                nameAr: 'عبدالعزيز مسلم النقش',
+                nameEn: 'ABDULAZIZ MUSALLEM AL-NAQSH',
+                staffNumber: '65870',
+                type: 'employee'
+            }
+        ];
+
+        const DEFAULT_VEHICLES = [
+            { number: '612-23', isDefault: true }
+        ];
+
+        // Data arrays
+        let nurses = JSON.parse(localStorage.getItem('ambulance_nurses')) || [...DEFAULT_NURSES];
+        let drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [...DEFAULT_DRIVERS];
+        let vehicles = JSON.parse(localStorage.getItem('ambulance_vehicles')) || [...DEFAULT_VEHICLES];
+
+        // Loading state
+        let isLoading = false;
+
+        // Save data to localStorage (cache) and sync to server
+        function saveToStorage() {
+            localStorage.setItem('ambulance_nurses', JSON.stringify(nurses));
+            localStorage.setItem('ambulance_drivers', JSON.stringify(drivers));
+            localStorage.setItem('ambulance_vehicles', JSON.stringify(vehicles));
+        }
+
+        // ============================================
+        // LOAD ALL USERS FROM SERVER (nurses + drivers in one request)
+        // ============================================
+        async function loadAllUsersFromServer() {
+            try {
+                const response = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
+                const result = await response.json();
+                if (result.success && result.users) {
+                    // Update nurses
+                    const serverNurses = result.users.filter(u => u.type === 'nurse' && u.active);
+                    if (serverNurses.length > 0) {
+                        nurses = serverNurses.map(n => ({
+                            id: n.id,
+                            nameAr: n.nameAr || '',
+                            nameEn: n.nameEn || '',
+                            staffNumber: (n.staffNumber || n.civilId || '').toString()
+                        }));
+                        renderNursesTable();
+                    }
+                    // Update drivers
+                    const serverDrivers = result.users.filter(u => u.type === 'driver' && u.active);
+                    if (serverDrivers.length > 0) {
+                        drivers = serverDrivers.map(d => ({
+                            id: d.id,
+                            nameAr: d.nameAr || '',
+                            nameEn: d.nameEn || '',
+                            staffNumber: (d.staffNumber || d.civilId || '').toString(),
+                            type: (!d.staffNumber && d.civilId) ? 'daily-paid' : 'employee'
+                        }));
+                        renderDriversTable();
+                    }
+                    saveToStorage();
+                }
+            } catch (error) {
+                console.error('Failed to load users from server:', error);
+            }
+        }
+
+        // Aliases for individual reload after sync
+        async function loadNursesFromServer() { await loadAllUsersFromServer(); }
+        async function loadDriversFromServer() { await loadAllUsersFromServer(); }
+
+        async function syncNurseToServer(nurse, isNew) {
+            try {
+                if (isNew) {
+                    showStatus('جاري حفظ الممرض/ة في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'addUser',
+                            type: 'nurse',
+                            nameAr: nurse.nameAr,
+                            nameEn: nurse.nameEn,
+                            staffNumber: nurse.staffNumber,
+                            civilId: '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم حفظ الممرض/ة بنجاح', 'success');
+                        await loadNursesFromServer();
+                    } else {
+                        showStatus('خطأ في حفظ الممرض/ة: ' + (result.error || ''), 'error');
+                    }
+                } else {
+                    showStatus('جاري تحديث بيانات الممرض/ة في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            id: nurse.id,
+                            type: 'nurse',
+                            nameAr: nurse.nameAr,
+                            nameEn: nurse.nameEn,
+                            staffNumber: nurse.staffNumber,
+                            civilId: '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم تحديث بيانات الممرض/ة بنجاح', 'success');
+                        await loadNursesFromServer();
+                    } else {
+                        showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
+                    }
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Nurse server sync error:', error);
+            }
+        }
+
+        async function deleteNurseFromServer(nurseId) {
+            try {
+                showStatus('جاري حذف الممرض/ة...');
+                const response = await fetch(`${WEB_APP_URL}?action=deleteUser&userId=${encodeURIComponent(nurseId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حذف الممرض/ة بنجاح', 'success');
+                    await loadNursesFromServer();
+                } else {
+                    showStatus('خطأ في حذف الممرض/ة', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // ============================================
+        // DRIVER SERVER SYNC FUNCTIONS
+        // ============================================
+
+        async function syncDriverToServer(driver, isNew) {
+            try {
+                const isDailyPaid = driver.type === 'daily-paid';
+                if (isNew) {
+                    showStatus('جاري حفظ السائق في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'addUser',
+                            type: 'driver',
+                            nameAr: driver.nameAr,
+                            nameEn: driver.nameEn,
+                            staffNumber: isDailyPaid ? '' : driver.staffNumber,
+                            civilId: isDailyPaid ? driver.staffNumber : '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم حفظ السائق بنجاح', 'success');
+                        await loadDriversFromServer();
+                    } else {
+                        showStatus('خطأ في حفظ السائق: ' + (result.error || ''), 'error');
+                    }
+                } else {
+                    showStatus('جاري تحديث بيانات السائق في السيرفر...');
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            id: driver.id,
+                            type: 'driver',
+                            nameAr: driver.nameAr,
+                            nameEn: driver.nameEn,
+                            staffNumber: isDailyPaid ? '' : driver.staffNumber,
+                            civilId: isDailyPaid ? driver.staffNumber : '',
+                            vehicleNumber: ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showStatus('تم تحديث بيانات السائق بنجاح', 'success');
+                        await loadDriversFromServer();
+                    } else {
+                        showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
+                    }
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Driver server sync error:', error);
+            }
+        }
+
+        async function deleteDriverFromServer(driverId) {
+            try {
+                showStatus('جاري حذف السائق...');
+                const response = await fetch(`${WEB_APP_URL}?action=deleteUser&userId=${encodeURIComponent(driverId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حذف السائق بنجاح', 'success');
+                    await loadDriversFromServer();
+                } else {
+                    showStatus('خطأ في حذف السائق', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // ============================================
+        // GENERAL UI FUNCTIONS
+        // ============================================
+        function showStatus(message, type = 'info') {
+            // Remove existing status
+            const existing = document.getElementById('syncStatus');
+            if (existing) existing.remove();
+
+            const div = document.createElement('div');
+            div.id = 'syncStatus';
+            const colors = {
+                info: { bg: '#dbeafe', text: '#1e40af', icon: '🔄' },
+                success: { bg: '#d1fae5', text: '#065f46', icon: '✅' },
+                error: { bg: '#fee2e2', text: '#991b1b', icon: '❌' }
+            };
+            const c = colors[type] || colors.info;
+            div.style.cssText = `position:fixed;top:16px;left:50%;transform:translateX(-50%);background:${c.bg};color:${c.text};padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 15px rgba(0,0,0,0.15);transition:opacity 0.3s;direction:rtl;`;
+            div.textContent = c.icon + ' ' + message;
+            document.body.appendChild(div);
+            if (type !== 'info') setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 300); }, 3000);
+        }
+
+        // Load vehicles from server
+        async function loadVehiclesFromServer() {
+            try {
+                const response = await fetch(`${WEB_APP_URL}?action=getVehicles`);
+                const result = await response.json();
+                if (result.success && result.vehicles && result.vehicles.length > 0) {
+                    vehicles = result.vehicles.map(v => ({
+                        id: v.id,
+                        number: v.vehicleNumber,
+                        isDefault: v.isDefault || false
+                    }));
+                    saveToStorage();
+                    renderVehiclesTable();
+                }
+            } catch (error) {
+                console.error('Failed to load vehicles from server:', error);
+            }
+        }
+
+        // Add vehicle to server
+        async function addVehicleToServer(vehicleData) {
+            try {
+                showStatus('جاري حفظ السيارة في السيرفر...');
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'addVehicle',
+                        vehicleNumber: vehicleData.number,
+                        description: '',
+                        isDefault: vehicleData.isDefault || false
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حفظ السيارة بنجاح', 'success');
+                    await loadVehiclesFromServer();
+                } else {
+                    showStatus('خطأ في حفظ السيارة: ' + (result.error || ''), 'error');
+                }
+                return result;
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+                console.error('Server error:', error);
+                return { success: false };
+            }
+        }
+
+        // Delete vehicle from server
+        async function deleteVehicleFromServer(vehicleId) {
+            try {
+                showStatus('جاري حذف السيارة...');
+                const response = await fetch(`${WEB_APP_URL}?action=deleteVehicle&vehicleId=${encodeURIComponent(vehicleId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم حذف السيارة بنجاح', 'success');
+                    await loadVehiclesFromServer();
+                } else {
+                    showStatus('خطأ في حذف السيارة', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // Set default vehicle on server
+        async function setDefaultVehicleOnServer(vehicleId) {
+            try {
+                showStatus('جاري تعيين السيارة كافتراضية...');
+                const response = await fetch(`${WEB_APP_URL}?action=setDefaultVehicle&vehicleId=${encodeURIComponent(vehicleId)}`);
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('تم تعيين السيارة كافتراضية بنجاح', 'success');
+                    await loadVehiclesFromServer();
+                } else {
+                    showStatus('خطأ في تعيين السيارة', 'error');
+                }
+            } catch (error) {
+                showStatus('خطأ في الاتصال بالسيرفر', 'error');
+            }
+        }
+
+        // Render nurses table
+        function renderNursesTable() {
+            const container = document.getElementById('nursesTable');
+            
+            if (nurses.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:0.4;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></div>
+                        <p>لا يوجد ممرضين مسجلين</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>الاسم بالعربي</th>
+                            <th>الاسم بالإنجليزي</th>
+                            <th>الرقم الوظيفي</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${nurses.map((nurse, index) => `
+                            <tr>
+                                <td><strong>${nurse.nameAr}</strong></td>
+                                <td style="direction: ltr; text-align: right;">${nurse.nameEn}</td>
+                                <td style="direction: ltr;">${nurse.staffNumber}</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="action-btn edit" onclick="editNurse(${index})">تعديل</button>
+                                        <button class="action-btn delete" onclick="deleteNurse(${index})">حذف</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Nurse Modal functions
+        function openNurseModal(index = -1) {
+            document.getElementById('nurseIndex').value = index;
+            
+            if (index >= 0) {
+                document.getElementById('nurseModalTitle').textContent = 'تعديل بيانات الممرض/ة';
+                document.getElementById('nurseNameAr').value = nurses[index].nameAr;
+                document.getElementById('nurseNameEn').value = nurses[index].nameEn;
+                document.getElementById('nurseStaffNumber').value = nurses[index].staffNumber;
+            } else {
+                document.getElementById('nurseModalTitle').textContent = 'إضافة ممرض/ة جديد';
+                document.getElementById('nurseForm').reset();
+            }
+            
+            document.getElementById('nurseModal').classList.add('active');
+        }
+
+        function closeNurseModal() {
+            document.getElementById('nurseModal').classList.remove('active');
+        }
+
+        async function saveNurse(event) {
+            event.preventDefault();
+            
+            const index = parseInt(document.getElementById('nurseIndex').value);
+            const nurse = {
+                nameAr: document.getElementById('nurseNameAr').value.trim(),
+                nameEn: document.getElementById('nurseNameEn').value.trim().toUpperCase(),
+                staffNumber: document.getElementById('nurseStaffNumber').value.trim()
+            };
+
+            if (index >= 0) {
+                // Preserve server ID for update
+                nurse.id = nurses[index].id;
+                nurses[index] = nurse;
+            } else {
+                nurses.push(nurse);
+            }
+
+            saveToStorage();
+            renderNursesTable();
+            closeNurseModal();
+
+            // Sync to server (updateUser for edit, addUser for new)
+            const isNew = index < 0 || !nurse.id;
+            await syncNurseToServer(nurse, isNew);
+        }
+
+        function editNurse(index) {
+            openNurseModal(index);
+        }
+
+        async function deleteNurse(index) {
+            if (confirm(`هل تريد حذف "${nurses[index].nameAr}"؟`)) {
+                const nurse = nurses[index];
+                nurses.splice(index, 1);
+                saveToStorage();
+                renderNursesTable();
+
+                // Delete from server if it has a server ID
+                if (nurse.id) {
+                    await deleteNurseFromServer(nurse.id);
+                }
+            }
+        }
+
+        // Render drivers table
+        function renderDriversTable() {
+            const container = document.getElementById('driversTable');
+            
+            if (drivers.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:0.4;"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+                        <p>لا يوجد سائقين مسجلين</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>الاسم بالعربي</th>
+                            <th>الاسم بالإنجليزي</th>
+                            <th>الرقم</th>
+                            <th>النوع</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${drivers.map((driver, index) => `
+                            <tr>
+                                <td><strong>${driver.nameAr}</strong></td>
+                                <td style="direction: ltr; text-align: right;">${driver.nameEn}</td>
+                                <td style="direction: ltr;">${driver.staffNumber}</td>
+                                <td>
+                                    <span class="badge ${driver.type === 'employee' ? 'badge-employee' : 'badge-daily'}">
+                                        ${driver.type === 'employee' ? 'موظف' : 'أجر يومي'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="action-btn edit" onclick="editDriver(${index})">تعديل</button>
+                                        <button class="action-btn delete" onclick="deleteDriver(${index})">حذف</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Render vehicles table
+        function renderVehiclesTable() {
+            const container = document.getElementById('vehiclesTable');
+            
+            if (vehicles.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:0.4;"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><line x1="7" y1="7" x2="7" y2="11"/><line x1="5" y1="9" x2="9" y2="9"/></svg></div>
+                        <p>لا توجد سيارات مسجلة</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>رقم السيارة</th>
+                            <th>الحالة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${vehicles.map((vehicle, index) => `
+                            <tr style="${vehicle.isDefault ? 'background: #dbeafe;' : ''}">
+                                <td style="direction: ltr; text-align: right;">
+                                    <strong>${vehicle.number}</strong>
+                                </td>
+                                <td>
+                                    ${vehicle.isDefault 
+                                        ? '<span style="background:#10b981;color:white;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;">✓ افتراضية</span>' 
+                                        : '<span style="color:#9ca3af;font-size:12px;">—</span>'
+                                    }
+                                </td>
+                                <td>
+                                    <div class="action-btns" style="gap:6px;">
+                                        ${!vehicle.isDefault ? `<button class="action-btn" onclick="setAsDefault(${index})" style="background:#dbeafe;color:#1e40af;font-size:11px;padding:4px 8px;">تعيين كافتراضي</button>` : ''}
+                                        <button class="action-btn edit" onclick="editVehicle(${index})">تعديل</button>
+                                        <button class="action-btn delete" onclick="deleteVehicle(${index})">حذف</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Set vehicle as default
+        async function setAsDefault(index) {
+            const vehicle = vehicles[index];
+            if (vehicle.id) {
+                await setDefaultVehicleOnServer(vehicle.id);
+            } else {
+                // Local only - update locally and sync
+                vehicles.forEach(v => v.isDefault = false);
+                vehicles[index].isDefault = true;
+                saveToStorage();
+                renderVehiclesTable();
+            }
+        }
+
+        // Driver Modal functions
+        function openDriverModal(index = -1) {
+            document.getElementById('driverIndex').value = index;
+            
+            if (index >= 0) {
+                document.getElementById('driverModalTitle').textContent = 'تعديل بيانات السائق';
+                document.getElementById('driverNameAr').value = drivers[index].nameAr;
+                document.getElementById('driverNameEn').value = drivers[index].nameEn;
+                document.getElementById('driverType').value = drivers[index].type;
+                document.getElementById('driverStaffNumber').value = drivers[index].staffNumber;
+            } else {
+                document.getElementById('driverModalTitle').textContent = 'إضافة سائق جديد';
+                document.getElementById('driverForm').reset();
+            }
+            
+            updateStaffLabel();
+            document.getElementById('driverModal').classList.add('active');
+        }
+
+        function closeDriverModal() {
+            document.getElementById('driverModal').classList.remove('active');
+        }
+
+        function updateStaffLabel() {
+            const type = document.getElementById('driverType').value;
+            const label = document.getElementById('staffNumberLabel');
+            const input = document.getElementById('driverStaffNumber');
+            
+            if (type === 'daily-paid') {
+                label.textContent = 'الرقم المدني';
+                input.placeholder = 'مثال: 222975657';
+            } else {
+                label.textContent = 'الرقم الوظيفي';
+                input.placeholder = 'مثال: 39121';
+            }
+        }
+
+        async function saveDriver(event) {
+            event.preventDefault();
+            
+            const index = parseInt(document.getElementById('driverIndex').value);
+            const driver = {
+                nameAr: document.getElementById('driverNameAr').value.trim(),
+                nameEn: document.getElementById('driverNameEn').value.trim().toUpperCase(),
+                staffNumber: document.getElementById('driverStaffNumber').value.trim(),
+                type: document.getElementById('driverType').value
+            };
+
+            if (index >= 0) {
+                // Preserve server ID for update
+                driver.id = drivers[index].id;
+                drivers[index] = driver;
+            } else {
+                drivers.push(driver);
+            }
+
+            saveToStorage();
+            renderDriversTable();
+            closeDriverModal();
+
+            // Sync to server (updateUser for edit, addUser for new)
+            const isNew = index < 0 || !driver.id;
+            await syncDriverToServer(driver, isNew);
+        }
+
+        function editDriver(index) {
+            openDriverModal(index);
+        }
+
+        async function deleteDriver(index) {
+            if (confirm(`هل تريد حذف السائق "${drivers[index].nameAr}"؟`)) {
+                const driver = drivers[index];
+                drivers.splice(index, 1);
+                saveToStorage();
+                renderDriversTable();
+
+                // Delete from server if it has a server ID
+                if (driver.id) {
+                    await deleteDriverFromServer(driver.id);
+                }
+            }
+        }
+
+        // Vehicle Modal functions
+        function openVehicleModal(index = -1) {
+            document.getElementById('vehicleIndex').value = index;
+            
+            if (index >= 0) {
+                document.getElementById('vehicleModalTitle').textContent = 'تعديل بيانات السيارة';
+                document.getElementById('vehicleNumberInput').value = vehicles[index].number;
+                document.getElementById('vehicleIsDefault').checked = vehicles[index].isDefault || false;
+            } else {
+                document.getElementById('vehicleModalTitle').textContent = 'إضافة سيارة جديدة';
+                document.getElementById('vehicleForm').reset();
+            }
+            
+            document.getElementById('vehicleModal').classList.add('active');
+        }
+
+        function closeVehicleModal() {
+            document.getElementById('vehicleModal').classList.remove('active');
+        }
+
+        async function saveVehicle(event) {
+            event.preventDefault();
+            
+            const index = parseInt(document.getElementById('vehicleIndex').value);
+            const vehicleNumber = document.getElementById('vehicleNumberInput').value.trim();
+            const isDefault = document.getElementById('vehicleIsDefault').checked;
+
+            if (index >= 0) {
+                // Update existing vehicle
+                const vehicle = vehicles[index];
+                if (vehicle.id) {
+                    // Update on server
+                    try {
+                        showStatus('جاري تحديث السيارة...');
+                        const response = await fetch(WEB_APP_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({
+                                action: 'updateVehicle',
+                                vehicleId: vehicle.id,
+                                vehicleNumber: vehicleNumber,
+                                isDefault: isDefault
+                            })
+                        });
+                        const result = await response.json();
+                        if (result.success) {
+                            showStatus('تم تحديث السيارة بنجاح', 'success');
+                            await loadVehiclesFromServer();
+                        } else {
+                            showStatus('خطأ في التحديث', 'error');
+                        }
+                    } catch (error) {
+                        showStatus('خطأ في الاتصال', 'error');
+                    }
+                } else {
+                    // Local update
+                    vehicles[index].number = vehicleNumber;
+                    vehicles[index].isDefault = isDefault;
+                    if (isDefault) vehicles.forEach((v, i) => { if (i !== index) v.isDefault = false; });
+                    saveToStorage();
+                    renderVehiclesTable();
+                }
+            } else {
+                // Add new vehicle to server
+                await addVehicleToServer({ number: vehicleNumber, isDefault: isDefault });
+            }
+
+            closeVehicleModal();
+        }
+
+        function editVehicle(index) {
+            openVehicleModal(index);
+        }
+
+        async function deleteVehicle(index) {
+            if (confirm(`هل تريد حذف السيارة "${vehicles[index].number}"؟`)) {
+                const vehicle = vehicles[index];
+                if (vehicle.id) {
+                    await deleteVehicleFromServer(vehicle.id);
+                } else {
+                    vehicles.splice(index, 1);
+                    saveToStorage();
+                    renderVehiclesTable();
+                }
+            }
+        }
+
+        // Export/Import functions
+        function exportData() {
+            const data = {
+                drivers: drivers,
+                vehicles: vehicles,
+                exportDate: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `ambulance_settings_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.drivers && Array.isArray(data.drivers)) {
+                        drivers = data.drivers;
+                    }
+                    if (data.vehicles && Array.isArray(data.vehicles)) {
+                        vehicles = data.vehicles;
+                    }
+                    
+                    saveToStorage();
+                    renderDriversTable();
+                    renderVehiclesTable();
+                    alert('تم استيراد البيانات بنجاح!');
+                } catch (error) {
+                    alert('خطأ في قراءة الملف. تأكد من أن الملف بتنسيق JSON صحيح.');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function resetToDefaults() {
+            if (confirm('هل تريد إعادة البيانات للقيم الافتراضية؟ سيتم حذف جميع التغييرات.')) {
+                nurses = [...DEFAULT_NURSES];
+                drivers = [...DEFAULT_DRIVERS];
+                vehicles = [...DEFAULT_VEHICLES];
+                saveToStorage();
+                renderNursesTable();
+                renderDriversTable();
+                renderVehiclesTable();
+                alert('تم إعادة البيانات للقيم الافتراضية.');
+            }
+        }
+
+        // Initialize - Load from server then render
+        async function initializeSettings() {
+            renderNursesTable();
+            renderDriversTable();
+            renderVehiclesTable();
+
+            // Load all users (nurses + drivers) and vehicles from server (source of truth)
+            await Promise.all([
+                loadAllUsersFromServer(),
+                loadVehiclesFromServer()
+            ]);
+        }
+
+        initializeSettings();
+
+        // Register Service Worker for PWA with auto-update
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => {
+                    console.log('[App] Service Worker registered successfully');
+                    setInterval(() => { reg.update(); }, 60000);
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        console.log('[App] New Service Worker found, installing...');
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('[App] New version available! Reloading...');
+                                setTimeout(() => window.location.reload(), 1000);
+                            }
+                        });
+                    });
+                })
+                .catch(err => console.error('[App] SW registration failed:', err));
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data && event.data.type === 'SW_UPDATED') {
+                    console.log('[App] ' + event.data.message);
+                    window.location.reload();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
