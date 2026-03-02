@@ -2628,6 +2628,11 @@
                     console.log('📤 Server response:', postResult);
                     if (postResult.offline) {
                         console.warn('⚠️ Data queued for offline sync');
+                    } else if (postResult.success && !postResult.opaque) {
+                        // Server confirmed save — refresh immediately to replace pending_ record
+                        console.log('✅ Server confirmed, refreshing records...');
+                        DataCache.invalidateAll();
+                        loadAllNurseData();
                     }
                 })
                 .catch(err => console.error('Background save error:', err));
@@ -2669,11 +2674,13 @@
                 setTimeout(() => {
                     document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 300);
-                // Silent server refresh to get real ID and confirm
+                // Fallback refresh in case POST response didn't trigger it
                 setTimeout(() => {
-                    DataCache.invalidateAll();
-                    loadAllNurseData();
-                }, 4000);
+                    if (_pendingOptimisticRecord) {
+                        DataCache.invalidateAll();
+                        loadAllNurseData();
+                    }
+                }, 6000);
             }
 
             // Re-enable button immediately
