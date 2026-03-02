@@ -30,6 +30,7 @@
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
@@ -2622,20 +2623,14 @@
                 console.log('✅ New record shown locally — awaiting server confirmation');
             }
 
-            // === FIRE POST IN BACKGROUND — don't await (instant UI) ===
-            ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 })
-                .then(postResult => {
-                    console.log('📤 Server response:', postResult);
-                    if (postResult.offline) {
-                        console.warn('⚠️ Data queued for offline sync');
-                    } else if (postResult.success && !postResult.opaque) {
-                        // Server confirmed save — refresh immediately to replace pending_ record
-                        console.log('✅ Server confirmed, refreshing records...');
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
-                    }
-                })
-                .catch(err => console.error('Background save error:', err));
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            const syncAction = isEditing ? 'updateRecord' : 'submitCase';
+            SyncManager.save(syncAction, formData).catch(err => {
+                console.error('SyncManager save error:', err);
+                // Fallback to direct ReliablePost if SyncManager fails
+                ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 })
+                    .catch(e => console.error('Fallback POST also failed:', e));
+            });
             
             // === INSTANT SUCCESS — no waiting ===
             if (isEditing) {
@@ -2660,27 +2655,19 @@
             // Invalidate cache so next background refresh gets fresh server data
             DataCache.invalidateAll();
             
-            if (isEditing) {
-                setTimeout(() => {
-                    document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 300);
-                // Silent server refresh to confirm update
-                setTimeout(() => {
-                    DataCache.invalidateAll();
-                    loadAllNurseData();
-                }, 3000);
-            } else {
-                // Scroll to records to show the new entry
-                setTimeout(() => {
-                    document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 300);
-                // Fallback refresh in case POST response didn't trigger it
+            // Scroll to records to show the entry
+            setTimeout(() => {
+                document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+            
+            // Safety fallback: if SyncManager event didn't fire within 10s, force refresh
+            if (!isEditing) {
                 setTimeout(() => {
                     if (_pendingOptimisticRecord) {
                         DataCache.invalidateAll();
                         loadAllNurseData();
                     }
-                }, 6000);
+                }, 10000);
             }
 
             // Re-enable button immediately
@@ -3574,6 +3561,26 @@
         // Initial load: session from cache first (instant), then combined server fetch
         loadUserSession();
         loadAllNurseData();
+
+        // Initialize SyncManager for instant local saves + background sync
+        SyncManager.init(WEB_APP_URL).then(() => {
+            // When server confirms a save, refresh records to get real ID
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'submitCase' || detail.action === 'updateRecord') {
+                    console.log('✅ SyncManager: Server confirmed, refreshing records...');
+                    // Clear optimistic record tracking
+                    _pendingOptimisticRecord = null;
+                    _nurseSubmitAt = 0;
+                    DataCache.invalidateAll();
+                    loadAllNurseData();
+                }
+            });
+            SyncManager.on('failed', (detail) => {
+                console.error('❌ SyncManager: Sync failed for', detail.localId, detail.error);
+            });
+            // Cleanup old synced entries
+            SyncManager.cleanup();
+        }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
 
         // Listen for background session refresh (admin changed nurse name on server)
         window.addEventListener('sessionRefreshed', function(e) {

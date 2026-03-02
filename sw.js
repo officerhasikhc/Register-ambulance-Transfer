@@ -28,6 +28,7 @@ const urlsToCache = [
   './connection-monitor.js',
   './data-cache.js',
   './reliable-post.js',
+  './sync-manager.js',
   './session-manager.js',
   './date-time-formatter.js',
   './responsive-ui.css'

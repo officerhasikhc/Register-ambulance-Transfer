@@ -27,6 +27,7 @@
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
@@ -3041,6 +3042,17 @@
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
 
+        // Initialize SyncManager for admin actions (delete, update)
+        SyncManager.init(WEB_APP_URL).then(() => {
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'deleteRecord' || detail.action === 'updateRecord' || detail.action === 'archiveRecord') {
+                    DataCache.invalidateAll();
+                    loadAdminData();
+                }
+            });
+            SyncManager.cleanup();
+        }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
+
         async function loadAdminData() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
@@ -3344,23 +3356,33 @@
             }, 650);
             
             try {
-                const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, {
-                    method: 'GET',
-                    mode: 'cors'
+                // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+                await SyncManager.save('deleteRecord', {
+                    action: 'deleteRecord',
+                    id: id,
+                    vehicleNumber: vehicleNumber
                 });
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                    DataCache.invalidateAll();
-                    clearLocalPendingTripCaches();
-                } else {
-                    showToast(result.error || 'فشل في الحذف', 'error');
+                showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
+                DataCache.invalidateAll();
+                clearLocalPendingTripCaches();
+            } catch (error) {
+                console.error('SyncManager direct delete error:', error);
+                // Fallback to original GET method
+                try {
+                    const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, { method: 'GET', mode: 'cors' });
+                    const result = await response.json();
+                    if (result.success) {
+                        showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
+                        DataCache.invalidateAll();
+                        clearLocalPendingTripCaches();
+                    } else {
+                        showToast(result.error || 'فشل في الحذف', 'error');
+                        loadAdminData();
+                    }
+                } catch (fetchErr) {
+                    showToast('خطأ في الاتصال: ' + fetchErr.message, 'error');
                     loadAdminData();
                 }
-            } catch (error) {
-                showToast('خطأ في الاتصال: ' + error.message, 'error');
-                loadAdminData();
             }
         }
         
@@ -3414,22 +3436,24 @@
                 clearLocalPendingTripCaches();
             }
 
-            // === FIRE POST IN BACKGROUND — don't await ===
-            ReliablePost.send(WEB_APP_URL, {
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save(actionType, {
                 action: actionType,
                 id: pendingRecordId,
                 vehicleNumber: pendingVehicleNumber,
                 reason: reason
-            }, { background: true, timeout: 30000 })
-                .then(result => {
-                    console.log('📤 Admin action server response:', result);
-                    if (!result.success && !result.offline) {
-                        showToast('تنبيه: قد يكون الإجراء لم يصل للسيرفر', 'warning');
-                    }
-                })
-                .catch(err => console.error('Background admin action error:', err));
+            }).catch(err => {
+                console.error('SyncManager admin action error:', err);
+                // Fallback to direct ReliablePost
+                ReliablePost.send(WEB_APP_URL, {
+                    action: actionType,
+                    id: pendingRecordId,
+                    vehicleNumber: pendingVehicleNumber,
+                    reason: reason
+                }, { background: true, timeout: 30000 }).catch(() => {});
+            });
 
-            // Silent server refresh after 3s to confirm
+            // Safety fallback refresh after 5s
             setTimeout(() => {
                 DataCache.invalidateAll();
                 loadAdminData();
@@ -3564,23 +3588,20 @@
             btn.disabled = false;
             btn.textContent = 'حفظ التعديلات';
 
-            // === FIRE POST IN BACKGROUND — don't await ===
-            ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 })
-                .then(result => {
-                    console.log('📤 Admin edit server response:', result);
-                    if (!result.success && !result.offline) {
-                        showToast('تنبيه: قد يكون التحديث لم يصل للسيرفر', 'warning');
-                    }
-                })
-                .catch(err => console.error('Background admin save error:', err));
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('updateRecord', payload).catch(err => {
+                console.error('SyncManager admin edit error:', err);
+                // Fallback to direct ReliablePost
+                ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 }).catch(() => {});
+            });
 
-            // Silent server refresh after 3s to confirm and reconcile
+            // Safety fallback refresh after 5s
             DataCache.invalidateAll();
             setTimeout(() => {
                 DataCache.invalidateAll();
                 loadAdminData();
                 loadNurseNameMap();
-            }, 3000);
+            }, 5000);
         }
 
         // Admin logout confirmation

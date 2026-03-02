@@ -15,6 +15,7 @@
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Start fetching data IMMEDIATELY — don't wait for DOM or init() -->
     <script>
@@ -1037,6 +1038,11 @@
             updateClock();
             setInterval(updateClock, 1000);
             
+            // Initialize SyncManager for instant local saves + background sync
+            SyncManager.init(WEB_APP_URL).then(() => {
+                SyncManager.cleanup();
+            }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
+            
             // Request notification permission
             requestNotificationPermission();
         }
@@ -1671,21 +1677,18 @@
                 departureTimestamp: now.getTime()
             });
             
-            // === SEND TO SERVER IN BACKGROUND (fire-and-forget) ===
-            if (isOnline) {
-                ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 })
-                .then((result) => {
-                    console.log('📤 Departure server response:', result);
-                    if (result.offline) {
-                        console.warn('⚠️ Departure queued for offline sync');
-                    }
-                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                }).catch(error => {
-                    console.error('Background send failed:', error);
-                });
-            } else {
-                queueOfflineData(tripData);
-            }
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('driverDeparture', tripData).then(() => {
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            }).catch(err => {
+                console.error('SyncManager departure error:', err);
+                // Fallback
+                if (isOnline) {
+                    ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 }).catch(() => {});
+                } else {
+                    queueOfflineData(tripData);
+                }
+            });
 
             // === INSTANT UI UPDATE - NO DELAYS ===
 
@@ -1838,20 +1841,16 @@
             localStorage.removeItem(key);
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
 
-            // === STEP 4: SEND TO SERVER IN BACKGROUND (fire-and-forget) ===
-            if (isOnline) {
-                ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 })
-                .then((result) => {
-                    console.log('📤 Return server response:', result);
-                    if (result.offline) {
-                        console.warn('⚠️ Return queued for offline sync');
-                    }
-                }).catch(error => {
-                    console.error('Background send failed:', error);
-                });
-            } else {
-                queueOfflineData(returnData);
-            }
+            // === STEP 4: SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('driverReturn', returnData).catch(err => {
+                console.error('SyncManager return error:', err);
+                // Fallback
+                if (isOnline) {
+                    ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 }).catch(() => {});
+                } else {
+                    queueOfflineData(returnData);
+                }
+            });
 
             // === INSTANT UI UPDATE - NO DELAYS ===
             
