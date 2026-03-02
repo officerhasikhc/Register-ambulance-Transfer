@@ -1292,6 +1292,17 @@
         </div>
     </div>
 
+    <!-- Warning Modal — Incomplete Trips -->
+    <div id="warningModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-icon" style="background: #fef3c7; color: #d97706;">⚠</div>
+            <h3 id="warningModalTitle" style="color: #92400e;">لا يمكن تسجيل رحلة جديدة</h3>
+            <p id="warningModalMessage" style="color: #78716c; font-size: 14px; line-height: 1.7; margin-bottom: 16px;">توجد رحلات معلقة لم تُكتمل بعد. يرجى إكمال بياناتها أولاً بالنقر على زر "إكمال البيانات" في بطاقة الرحلة أعلاه.</p>
+            <div id="warningTripIds" style="background: #fef3c7; color: #92400e; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; margin-bottom: 18px; direction: ltr;"></div>
+            <button class="btn btn-primary" style="background: #d97706; min-width: 140px;" onclick="closeWarningAndScroll()">حسناً</button>
+        </div>
+    </div>
+
     <!-- Print Report Modal -->
     <div id="reportModal" class="report-modal" onclick="closeReportModal(event)">
         <div class="report-container" onclick="event.stopPropagation()">
@@ -2387,12 +2398,8 @@
                     .map(t => t.tripId)
                     .join(', ');
                 if (incompleteTripIds) {
-                    alert(`⚠️ Cannot submit a new record!\n\nThere are incomplete trips waiting: ${incompleteTripIds}\n\nPlease complete the pending trip(s) first by clicking "Complete Data" on the trip card above.`);
-                    // Scroll to pending trips section
-                    const pendingSection = document.getElementById('pendingTripsAlert');
-                    if (pendingSection) {
-                        pendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
+                    document.getElementById('warningTripIds').textContent = incompleteTripIds;
+                    document.getElementById('warningModal').classList.add('active');
                     return;
                 }
             }
@@ -2735,6 +2742,28 @@
 
         function closeModal() {
             document.getElementById('successModal').classList.remove('active');
+        }
+
+        function closeWarningAndScroll() {
+            document.getElementById('warningModal').classList.remove('active');
+            // Scroll to pending trips section and highlight "Complete Data" button
+            const pendingSection = document.getElementById('pendingTripsAlert');
+            if (pendingSection) {
+                pendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Flash the Complete Data button(s) to draw attention
+                setTimeout(() => {
+                    const completeButtons = pendingSection.querySelectorAll('.btn-use-trip, [onclick*="usePendingTrip"]');
+                    completeButtons.forEach(btn => {
+                        btn.style.transition = 'all 0.3s';
+                        btn.style.transform = 'scale(1.15)';
+                        btn.style.boxShadow = '0 0 16px rgba(217, 119, 6, 0.5)';
+                        setTimeout(() => {
+                            btn.style.transform = '';
+                            btn.style.boxShadow = '';
+                        }, 1200);
+                    });
+                }, 600);
+            }
         }
 
         // ============================================
