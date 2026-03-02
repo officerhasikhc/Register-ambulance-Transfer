@@ -1810,9 +1810,33 @@
 
         function validateTimes() {
             updateTimeInputs();
-            // Note: Time validation removed because drivers record current time automatically
-            // It's not possible for return time to be before departure time in normal usage
-            // The system automatically captures the current time when driver clicks return
+            
+            const depDate = document.getElementById('departureDate').value;
+            const retDate = document.getElementById('returnDate').value;
+            
+            // Only validate time when both dates are the same day
+            if (depDate && retDate && depDate === retDate) {
+                const depHour = document.getElementById('departureTimeHour').value;
+                const depMin = document.getElementById('departureTimeMinute').value;
+                const depAmPm = document.getElementById('departureTimeAmPm').value;
+                const retHour = document.getElementById('returnTimeHour').value;
+                const retMin = document.getElementById('returnTimeMinute').value;
+                const retAmPm = document.getElementById('returnTimeAmPm').value;
+                
+                if (depHour && depMin && retHour && retMin) {
+                    const depMinutes = convertTo24Hour(depHour, depMin, depAmPm);
+                    const retMinutes = convertTo24Hour(retHour, retMin, retAmPm);
+                    
+                    if (retMinutes <= depMinutes) {
+                        showValidation(currentLang === 'en'
+                            ? 'Return time must be after departure time when on the same day!'
+                            : 'وقت العودة يجب أن يكون بعد وقت المغادرة عندما يكون في نفس اليوم!');
+                        return false;
+                    }
+                }
+            }
+            
+            hideValidation();
             return true;
         }
 
@@ -2568,7 +2592,7 @@
                 displayRecords(allRecords);
                 console.log('✅ Local record updated for ID:', editId);
             } else {
-                // === NEW RECORD: add optimistic local entry so it appears instantly ===
+                // === NEW RECORD: track optimistic entry silently (don't display pending_ ID) ===
                 const optimisticRecord = {
                     'ID': 'pending_' + Date.now(),
                     'Timestamp': new Date().toISOString(),
@@ -2584,13 +2608,11 @@
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber
                 };
-                allRecords.unshift(optimisticRecord);
-                allYearRecords.unshift(optimisticRecord);
-                nurseRecordsPage = 1;
-                displayRecords(allRecords);
+                // Don't add to displayed records — avoids flash of pending_ ID
+                // Just track it so loadAllNurseData knows a submission is in flight
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
-                console.log('✅ Optimistic new record added locally');
+                console.log('✅ New record submitted — awaiting server confirmation');
             }
 
             // === FIRE POST IN BACKGROUND — don't await (instant UI) ===
@@ -3468,8 +3490,8 @@
                     if (data.records) {
                         let mergedRecords = applyPendingEdits(data.records);
                         
-                        // Preserve optimistic new record if server hasn't caught up yet
-                        if (_pendingOptimisticRecord && _nurseSubmitAt && (Date.now() - _nurseSubmitAt < 15000)) {
+                        // Check if server confirmed the pending submission (silent — no UI flash)
+                        if (_pendingOptimisticRecord && _nurseSubmitAt) {
                             const opt = _pendingOptimisticRecord;
                             const serverHasIt = mergedRecords.some(r =>
                                 (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
@@ -3478,14 +3500,12 @@
                                 (r['Return Time'] || '') === (opt['Return Time'] || '') &&
                                 (r['Patient Name'] || '') === (opt['Patient Name'] || '')
                             );
-                            if (serverHasIt) {
-                                // Server confirmed — clear optimistic record
+                            if (serverHasIt || (Date.now() - _nurseSubmitAt > 15000)) {
+                                // Server confirmed or timeout — clear tracking
                                 _pendingOptimisticRecord = null;
                                 _nurseSubmitAt = 0;
-                            } else {
-                                // Server hasn't caught up — keep optimistic record at top
-                                mergedRecords.unshift(opt);
                             }
+                            // Never add pending_ record to displayed list
                         }
                         
                         allRecords = mergedRecords;
