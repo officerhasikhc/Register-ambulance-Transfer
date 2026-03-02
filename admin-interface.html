@@ -3396,39 +3396,44 @@
             btn.disabled = true;
             btn.textContent = 'جاري التنفيذ...';
 
-            try {
-                const actionType = pendingAction === 'archive' ? 'archiveRecord' : 'deleteRecord';
-                
-                const actionResult = await ReliablePost.send(WEB_APP_URL, {
-                    action: actionType,
-                    id: pendingRecordId,
-                    vehicleNumber: pendingVehicleNumber,
-                    reason: reason
-                }, { background: true, timeout: 30000 });
+            const actionType = pendingAction === 'archive' ? 'archiveRecord' : 'deleteRecord';
+            const actionLabel = pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح';
 
-                closeActionModal();
-                
-                if (actionResult.offline) {
-                    showToast('تم حفظ الإجراء محلياً وسيتم تنفيذه عند توفر الإنترنت', 'warning');
-                } else {
-                    showToast(pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح', 'success');
-                }
-                
-                // Invalidate all caches so driver/nurse pages get fresh data
-                DataCache.invalidateAll();
-                if (pendingAction === 'delete') {
-                    clearLocalPendingTripCaches();
-                }
-                
-                // Reload data immediately
-                loadAdminData();
-                
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('حدث خطأ أثناء تنفيذ الإجراء', 'error');
-            } finally {
-                btn.disabled = false;
+            // === INSTANT UI — close modal & show toast without waiting ===
+            closeActionModal();
+            showToast(actionLabel, 'success');
+            btn.disabled = false;
+
+            // Remove from local array for instant UI update
+            allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(pendingRecordId).trim());
+            displayRecordsWithPagination();
+
+            // Invalidate all caches so driver/nurse pages get fresh data
+            DataCache.invalidateAll();
+            if (pendingAction === 'delete') {
+                clearLocalPendingTripCaches();
             }
+
+            // === FIRE POST IN BACKGROUND — don't await ===
+            ReliablePost.send(WEB_APP_URL, {
+                action: actionType,
+                id: pendingRecordId,
+                vehicleNumber: pendingVehicleNumber,
+                reason: reason
+            }, { background: true, timeout: 30000 })
+                .then(result => {
+                    console.log('📤 Admin action server response:', result);
+                    if (!result.success && !result.offline) {
+                        showToast('تنبيه: قد يكون الإجراء لم يصل للسيرفر', 'warning');
+                    }
+                })
+                .catch(err => console.error('Background admin action error:', err));
+
+            // Silent server refresh after 3s to confirm
+            setTimeout(() => {
+                DataCache.invalidateAll();
+                loadAdminData();
+            }, 3000);
         }
 
         // ============================================
@@ -3529,26 +3534,53 @@
                 nurseStaffNumber: nurseStaffNumber
             };
 
-            try {
-                const result = await ReliablePost.send(WEB_APP_URL, payload, { timeout: 30000 });
-
-                if (result.success) {
-                    showToast(result.offline ? 'تم حفظ التعديل محلياً وسيتم إرساله عند توفر الإنترنت' : 'تم تحديث بيانات الرحلة بنجاح', result.offline ? 'warning' : 'success');
-                    closeEditRecordModal();
-                    // Invalidate caches and reload fresh data
-                    DataCache.invalidateAll();
-                    await loadAdminData();
-                    loadNurseNameMap();
-                } else {
-                    showToast('خطأ في التحديث: ' + (result.error || ''), 'error');
-                }
-            } catch (error) {
-                showToast('خطأ في الاتصال بالسيرفر', 'error');
-                console.error('Edit record error:', error);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'حفظ التعديلات';
+            // === OPTIMISTIC LOCAL UPDATE — update records in memory instantly ===
+            if (Array.isArray(allRecords)) {
+                allRecords = allRecords.map(r => {
+                    if (String(r.ID || r.id).trim() === String(recordId).trim()) {
+                        return {
+                            ...r,
+                            'Vehicle Number': payload.vehicleNumber,
+                            'Driver Name': payload.driverName,
+                            'Staff Number': payload.staffNumber,
+                            'Departure Date': payload.departureDate,
+                            'Departure Time': payload.departureTime,
+                            'Return Date': payload.returnDate,
+                            'Return Time': payload.returnTime,
+                            'Destination': payload.destination,
+                            'Patient Name': payload.patientName,
+                            'Nurse Name': payload.nurseName,
+                            'Nurse Staff Number': payload.nurseStaffNumber
+                        };
+                    }
+                    return r;
+                });
+                displayRecordsWithPagination();
             }
+
+            // === INSTANT UI — close modal & show toast without waiting ===
+            closeEditRecordModal();
+            showToast('تم تحديث بيانات الرحلة بنجاح', 'success');
+            btn.disabled = false;
+            btn.textContent = 'حفظ التعديلات';
+
+            // === FIRE POST IN BACKGROUND — don't await ===
+            ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 })
+                .then(result => {
+                    console.log('📤 Admin edit server response:', result);
+                    if (!result.success && !result.offline) {
+                        showToast('تنبيه: قد يكون التحديث لم يصل للسيرفر', 'warning');
+                    }
+                })
+                .catch(err => console.error('Background admin save error:', err));
+
+            // Silent server refresh after 3s to confirm and reconcile
+            DataCache.invalidateAll();
+            setTimeout(() => {
+                DataCache.invalidateAll();
+                loadAdminData();
+                loadNurseNameMap();
+            }, 3000);
         }
 
         // Admin logout confirmation

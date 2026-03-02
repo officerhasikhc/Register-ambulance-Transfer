@@ -2522,128 +2522,130 @@
                 selectedTripIndex = null;
             }
 
-            try {
-                // === OPTIMISTIC LOCAL UPDATE FOR EDITS ===
-                if (isEditing) {
-                    const editId = String(editingRecordId).trim();
-                    const editFields = {
-                        'Vehicle Number': formData.vehicleNumber,
-                        'Driver Name': formData.driverName,
-                        'Staff Number': formData.staffNumber,
-                        'Departure Date': formData.departureDate,
-                        'Departure Time': formData.departureTime,
-                        'Return Date': formData.returnDate,
-                        'Return Time': formData.returnTime,
-                        'Destination': formData.destination,
-                        'Patient Name': formData.patientName,
-                        'Nurse Name': formData.nurseName,
-                        'Nurse Staff Number': formData.nurseStaffNumber
-                    };
-                    
-                    // Store in pendingEdits so server refreshes won't revert
-                    pendingEdits = {}; // Clear old pending edits first
-                    pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
-                    
-                    // Apply to local arrays — only update the EXACT matching record
-                    let matchCount = 0;
-                    allRecords = allRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            matchCount++;
-                            if (matchCount > 1) {
-                                console.warn('⚠️ Multiple records matched ID:', editId);
-                                return r; // Don't update duplicates
-                            }
-                            return { ...r, ...editFields };
+            // === OPTIMISTIC LOCAL UPDATE (instant — no server wait) ===
+            if (isEditing) {
+                const editId = String(editingRecordId).trim();
+                const editFields = {
+                    'Vehicle Number': formData.vehicleNumber,
+                    'Driver Name': formData.driverName,
+                    'Staff Number': formData.staffNumber,
+                    'Departure Date': formData.departureDate,
+                    'Departure Time': formData.departureTime,
+                    'Return Date': formData.returnDate,
+                    'Return Time': formData.returnTime,
+                    'Destination': formData.destination,
+                    'Patient Name': formData.patientName,
+                    'Nurse Name': formData.nurseName,
+                    'Nurse Staff Number': formData.nurseStaffNumber
+                };
+                
+                // Store in pendingEdits so server refreshes won't revert
+                pendingEdits = {}; // Clear old pending edits first
+                pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
+                
+                // Apply to local arrays — only update the EXACT matching record
+                let matchCount = 0;
+                allRecords = allRecords.map(r => {
+                    if (String(r.ID).trim() === editId) {
+                        matchCount++;
+                        if (matchCount > 1) {
+                            console.warn('⚠️ Multiple records matched ID:', editId);
+                            return r; // Don't update duplicates
                         }
-                        return r;
-                    });
-                    matchCount = 0;
-                    allYearRecords = allYearRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            matchCount++;
-                            if (matchCount > 1) return r;
-                            return { ...r, ...editFields };
-                        }
-                        return r;
-                    });
-                    displayRecords(allRecords);
-                    console.log('✅ Local record updated for ID:', editId);
-                }
+                        return { ...r, ...editFields };
+                    }
+                    return r;
+                });
+                matchCount = 0;
+                allYearRecords = allYearRecords.map(r => {
+                    if (String(r.ID).trim() === editId) {
+                        matchCount++;
+                        if (matchCount > 1) return r;
+                        return { ...r, ...editFields };
+                    }
+                    return r;
+                });
+                displayRecords(allRecords);
+                console.log('✅ Local record updated for ID:', editId);
+            } else {
+                // === NEW RECORD: add optimistic local entry so it appears instantly ===
+                const optimisticRecord = {
+                    'ID': 'pending_' + Date.now(),
+                    'Timestamp': new Date().toISOString(),
+                    'Vehicle Number': formData.vehicleNumber,
+                    'Driver Name': formData.driverName,
+                    'Staff Number': formData.staffNumber,
+                    'Departure Date': formData.departureDate,
+                    'Departure Time': formData.departureTime,
+                    'Return Date': formData.returnDate,
+                    'Return Time': formData.returnTime,
+                    'Destination': formData.destination,
+                    'Patient Name': formData.patientName,
+                    'Nurse Name': formData.nurseName,
+                    'Nurse Staff Number': formData.nurseStaffNumber
+                };
+                allRecords.unshift(optimisticRecord);
+                allYearRecords.unshift(optimisticRecord);
+                nurseRecordsPage = 1;
+                displayRecords(allRecords);
+                console.log('✅ Optimistic new record added locally');
+            }
 
-                // Send to server using ReliablePost (cors + retry + fallback)
-                const postResult = await ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 });
-                console.log('📤 Server response:', postResult);
+            // === FIRE POST IN BACKGROUND — don't await (instant UI) ===
+            ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 })
+                .then(postResult => {
+                    console.log('📤 Server response:', postResult);
+                    if (postResult.offline) {
+                        console.warn('⚠️ Data queued for offline sync');
+                    }
+                })
+                .catch(err => console.error('Background save error:', err));
+            
+            // === INSTANT SUCCESS — no waiting ===
+            if (isEditing) {
+                document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
+                document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
+                document.getElementById('successModal').classList.add('active');
                 
-                if (postResult.offline) {
-                    console.warn('⚠️ Data queued for offline sync');
-                }
-                
-                // Show success message
-                if (isEditing) {
-                    // Update modal content for edit success
-                    document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
-                    document.getElementById('successModalMessage').textContent = postResult.offline 
-                        ? 'تم حفظ التعديلات محلياً وسيتم إرسالها عند توفر الإنترنت'
-                        : 'The ambulance case has been updated successfully.';
-                    document.getElementById('successModal').classList.add('active');
-                    
-                    editingRecordId = null;
-                    // Reset form header
-                    const formHeader = document.querySelector('.form-header h2');
-                    formHeader.textContent = 'Register New Ambulance Case';
-                    formHeader.style.color = '';
-                    // Reset submit button
-                    const submitBtn = document.getElementById('submitBtn');
-                    submitBtn.textContent = 'Submit Record';
-                    submitBtn.style.background = '';
-                } else {
-                    // Update modal content for new record
-                    document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
-                    document.getElementById('successModalMessage').textContent = postResult.offline
-                        ? 'تم حفظ البيانات محلياً وسيتم إرسالها عند توفر الإنترنت'
-                        : 'The ambulance case has been registered and notification sent to the administration.';
-                    document.getElementById('successModal').classList.add('active');
-                }
-                
-                resetForm();
-                
-                // Invalidate ALL records cache keys (base + year/month variants)
-                DataCache.invalidateAll();
-                
-                if (isEditing) {
-                    // For edits: optimistic update already applied, just scroll to records
-                    setTimeout(() => {
-                        document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 300);
-                    // Quick server refresh to confirm update (3s instead of 10s)
-                    setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
-                    }, 3000);
-                } else {
-                    // For new records: immediate refresh
+                editingRecordId = null;
+                const formHeader = document.querySelector('.form-header h2');
+                formHeader.textContent = 'Register New Ambulance Case';
+                formHeader.style.color = '';
+                submitBtn.textContent = 'Submit Record';
+                submitBtn.style.background = '';
+            } else {
+                document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
+                document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
+                document.getElementById('successModal').classList.add('active');
+            }
+            
+            resetForm();
+            
+            // Invalidate cache so next background refresh gets fresh server data
+            DataCache.invalidateAll();
+            
+            if (isEditing) {
+                setTimeout(() => {
+                    document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 300);
+                // Silent server refresh to confirm update
+                setTimeout(() => {
                     DataCache.invalidateAll();
                     loadAllNurseData();
-                    
-                    // Scroll to appropriate section
-                    setTimeout(() => {
-                        if (currentPendingTrips.length > 0) {
-                            document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        } else {
-                            document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                    }, 300);
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                alert(currentLang === 'en' ? 'Error submitting. Check connection.' : 'خطأ في الإرسال. تحقق من الاتصال.');
-                // Only restore original text on error (resetForm already handles success case)
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
-                return;
+                }, 3000);
+            } else {
+                // Scroll to records to show the new entry
+                setTimeout(() => {
+                    document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 300);
+                // Silent server refresh to get real ID and confirm
+                setTimeout(() => {
+                    DataCache.invalidateAll();
+                    loadAllNurseData();
+                }, 4000);
             }
-            // Re-enable button after success (text already reset by resetForm)
+
+            // Re-enable button immediately
             submitBtn.disabled = false;
         });
 
