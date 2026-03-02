@@ -29,6 +29,7 @@
     <script src="ui-optimizer.js"></script>
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
@@ -1616,14 +1617,13 @@
             addDiagMessage('info', `   Sending: ${JSON.stringify(returnData)}`);
             
             try {
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(returnData)
-                });
-                addDiagMessage('success', `   ✅ Request sent successfully`);
-                addDiagMessage('info', `   Now click "Raw Data" to verify the update in Google Sheets`);
+                const result = await ReliablePost.send(WEB_APP_URL, returnData, { timeout: 30000 });
+                if (result.success) {
+                    addDiagMessage('success', `   ✅ Request sent successfully` + (result.offline ? ' (queued offline)' : ''));
+                    addDiagMessage('info', `   Now click "Raw Data" to verify the update in Google Sheets`);
+                } else {
+                    addDiagMessage('error', `   ❌ Server returned error: ${result.error || 'unknown'}`);
+                }
             } catch (error) {
                 addDiagMessage('error', `   ❌ Error: ${error.message}`);
             }
@@ -2570,19 +2570,21 @@
                     console.log('✅ Local record updated for ID:', editId);
                 }
 
-                // Send to server (no-cors = opaque response, can't read result)
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(formData)
-                });
+                // Send to server using ReliablePost (cors + retry + fallback)
+                const postResult = await ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 });
+                console.log('📤 Server response:', postResult);
+                
+                if (postResult.offline) {
+                    console.warn('⚠️ Data queued for offline sync');
+                }
                 
                 // Show success message
                 if (isEditing) {
                     // Update modal content for edit success
                     document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
-                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
+                    document.getElementById('successModalMessage').textContent = postResult.offline 
+                        ? 'تم حفظ التعديلات محلياً وسيتم إرسالها عند توفر الإنترنت'
+                        : 'The ambulance case has been updated successfully.';
                     document.getElementById('successModal').classList.add('active');
                     
                     editingRecordId = null;
@@ -2597,7 +2599,9 @@
                 } else {
                     // Update modal content for new record
                     document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
-                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
+                    document.getElementById('successModalMessage').textContent = postResult.offline
+                        ? 'تم حفظ البيانات محلياً وسيتم إرسالها عند توفر الإنترنت'
+                        : 'The ambulance case has been registered and notification sent to the administration.';
                     document.getElementById('successModal').classList.add('active');
                 }
                 
@@ -2611,26 +2615,24 @@
                     setTimeout(() => {
                         document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 300);
-                    // Single silent server refresh to confirm update (no spinner)
+                    // Quick server refresh to confirm update (3s instead of 10s)
                     setTimeout(() => {
                         DataCache.invalidateAll();
                         loadAllNurseData();
-                    }, 10000);
+                    }, 3000);
                 } else {
-                    // For new records: refresh all data via combined endpoint
+                    // For new records: immediate refresh
+                    DataCache.invalidateAll();
+                    loadAllNurseData();
+                    
+                    // Scroll to appropriate section
                     setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
-                        
-                        // Scroll to pending trips if there are more, otherwise to records
-                        setTimeout(() => {
-                            if (currentPendingTrips.length > 0) {
-                                document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            } else {
-                                document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }
-                        }, 300);
-                    }, 1000);
+                        if (currentPendingTrips.length > 0) {
+                            document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        } else {
+                            document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }, 300);
                 }
 
             } catch (error) {

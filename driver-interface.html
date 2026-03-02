@@ -14,6 +14,7 @@
     <script src="ui-optimizer.js"></script>
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
     
     <!-- Start fetching data IMMEDIATELY — don't wait for DOM or init() -->
     <script>
@@ -1650,16 +1651,14 @@
             };
             
             if (isOnline) {
-                fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(tripData)
-                }).then(() => {
+                ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 })
+                .then((result) => {
+                    if (result.offline) {
+                        console.warn('⚠️ Departure queued for offline sync');
+                    }
                     setTimeout(syncCompleteDeparture, 800);
                 }).catch(error => {
-                    console.error('Background fetch failed, queuing offline:', error);
-                    queueOfflineData(tripData);
+                    console.error('Background send failed:', error);
                     syncCompleteDeparture();
                 });
             } else {
@@ -1842,16 +1841,14 @@
             };
             
             if (isOnline) {
-                fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(returnData)
-                }).then(() => {
+                ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 })
+                .then((result) => {
+                    if (result.offline) {
+                        console.warn('⚠️ Return queued for offline sync');
+                    }
                     setTimeout(syncComplete, 1200);
                 }).catch(error => {
-                    console.error('Background fetch failed, queuing offline:', error);
-                    queueOfflineData(returnData);
+                    console.error('Background send failed:', error);
                     syncComplete();
                 });
             } else {
@@ -2392,13 +2389,8 @@
 
             for (const item of queue) {
                 try {
-                    await fetch(WEB_APP_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify(item)
-                    });
-                    successCount++;
+                    const syncResult = await ReliablePost.send(WEB_APP_URL, item, { timeout: 30000 });
+                    if (!syncResult.offline) successCount++;
                     
                     // Update offlineSaved flag for synced trips
                     if (selectedDriver && item.staffNumber === selectedDriver.staffNumber) {

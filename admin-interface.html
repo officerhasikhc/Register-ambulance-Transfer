@@ -26,6 +26,7 @@
     <script src="ui-optimizer.js"></script>
     <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
@@ -3398,23 +3399,20 @@
             try {
                 const actionType = pendingAction === 'archive' ? 'archiveRecord' : 'deleteRecord';
                 
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'text/plain',
-                    },
-                    body: JSON.stringify({
-                        action: actionType,
-                        id: pendingRecordId,
-                        vehicleNumber: pendingVehicleNumber,
-                        reason: reason
-                    })
-                });
+                const actionResult = await ReliablePost.send(WEB_APP_URL, {
+                    action: actionType,
+                    id: pendingRecordId,
+                    vehicleNumber: pendingVehicleNumber,
+                    reason: reason
+                }, { background: true, timeout: 30000 });
 
                 closeActionModal();
                 
-                showToast(pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح', 'success');
+                if (actionResult.offline) {
+                    showToast('تم حفظ الإجراء محلياً وسيتم تنفيذه عند توفر الإنترنت', 'warning');
+                } else {
+                    showToast(pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح', 'success');
+                }
                 
                 // Invalidate all caches so driver/nurse pages get fresh data
                 DataCache.invalidateAll();
@@ -3422,10 +3420,8 @@
                     clearLocalPendingTripCaches();
                 }
                 
-                // Reload data
-                setTimeout(() => {
-                    loadAdminData();
-                }, 1000);
+                // Reload data immediately
+                loadAdminData();
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -3534,15 +3530,10 @@
             };
 
             try {
-                const response = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
+                const result = await ReliablePost.send(WEB_APP_URL, payload, { timeout: 30000 });
 
                 if (result.success) {
-                    showToast('تم تحديث بيانات الرحلة بنجاح', 'success');
+                    showToast(result.offline ? 'تم حفظ التعديل محلياً وسيتم إرساله عند توفر الإنترنت' : 'تم تحديث بيانات الرحلة بنجاح', result.offline ? 'warning' : 'success');
                     closeEditRecordModal();
                     // Invalidate caches and reload fresh data
                     DataCache.invalidateAll();

@@ -171,10 +171,13 @@ const DataCache = {
      * Generate a simple hash for data comparison
      */
     hash(data) {
-        return JSON.stringify(data).length + '_' + JSON.stringify(data).split('').reduce((a, b) => {
-            a = ((a << 5) - a) + b.charCodeAt(0);
-            return a & a;
-        }, 0);
+        const str = JSON.stringify(data);
+        let h = 0;
+        for (let i = 0, len = str.length; i < len; i++) {
+            h = ((h << 5) - h) + str.charCodeAt(i);
+            h = h & h;
+        }
+        return str.length + '_' + h;
     },
 
     /**
@@ -189,45 +192,62 @@ const DataCache = {
      * @returns {Promise} - Resolves when background fetch completes
      */
     async fetchWithCache(url, cacheKey, expiryMs, onData, extractData) {
-        // Step 1: Instantly show cached data
+        // Step 1: Instantly show cached data (even if expired — stale-while-revalidate)
         const cached = this.get(cacheKey, expiryMs);
         let cachedHash = null;
 
         if (cached && cached.data) {
             cachedHash = this.hash(cached.data);
+            // Show stale data immediately — zero delay
             onData(cached.data, { fromCache: true, isExpired: cached.isExpired });
         }
 
         // Step 2: Fetch fresh data in background (with request deduplication)
-        try {
-            if (!this._inflight[url]) {
-                if (window.__earlyFetch && url.includes('getPendingTrips')) {
-                    this._inflight[url] = window.__earlyFetch;
-                    window.__earlyFetch = null;
-                } else {
-                    this._inflight[url] = fetch(url).then(r => r.json());
+        const bgFetch = async () => {
+            try {
+                if (!this._inflight[url]) {
+                    if (window.__earlyFetch && url.includes('getPendingTrips')) {
+                        this._inflight[url] = window.__earlyFetch;
+                        window.__earlyFetch = null;
+                    } else if (window.__earlyNurseFetch && url.includes('getNurseData')) {
+                        this._inflight[url] = window.__earlyNurseFetch;
+                        window.__earlyNurseFetch = null;
+                    } else if (window.__earlyAdminFetch && url.includes('getAdminData')) {
+                        this._inflight[url] = window.__earlyAdminFetch;
+                        window.__earlyAdminFetch = null;
+                    } else {
+                        this._inflight[url] = fetch(url).then(r => r.json());
+                    }
+                }
+                const result = await this._inflight[url];
+                delete this._inflight[url];
+                const freshData = extractData ? extractData(result) : result;
+
+                if (freshData !== null && freshData !== undefined) {
+                    const freshHash = this.hash(freshData);
+                    const dataChanged = freshHash !== cachedHash;
+
+                    this.set(cacheKey, freshData);
+                    // Always notify with fresh server data so pages can reconcile
+                    // localStorage state (e.g. remove admin-deleted trips)
+                    onData(freshData, { fromCache: false, isExpired: false, unchanged: !dataChanged });
+                }
+            } catch (error) {
+                delete this._inflight[url];
+                // If no cached data was shown, report the error
+                if (!cached || !cached.data) {
+                    console.error('DataCache: Fetch failed and no cache available', error);
+                    onData(null, { fromCache: false, isExpired: true, error: error });
                 }
             }
-            const result = await this._inflight[url];
-            delete this._inflight[url];
-            const freshData = extractData ? extractData(result) : result;
+        };
 
-            if (freshData !== null && freshData !== undefined) {
-                const freshHash = this.hash(freshData);
-                const dataChanged = freshHash !== cachedHash;
-
-                this.set(cacheKey, freshData);
-                // Always notify with fresh server data so pages can reconcile
-                // localStorage state (e.g. remove admin-deleted trips)
-                onData(freshData, { fromCache: false, isExpired: false, unchanged: !dataChanged });
-            }
-        } catch (error) {
-            delete this._inflight[url];
-            // If no cached data was shown, report the error
-            if (!cached || !cached.data) {
-                console.error('DataCache: Fetch failed and no cache available', error);
-                onData(null, { fromCache: false, isExpired: true, error: error });
-            }
+        // If we have cache, don't block — run fetch in background
+        if (cached && cached.data) {
+            bgFetch(); // intentionally not awaited — non-blocking
+        } else {
+            // No cache: must await so UI gets initial data
+            await bgFetch();
         }
     },
 
@@ -247,8 +267,24 @@ const DataCache = {
 
     preload(webAppUrl, pageType) {
         const fetches = [];
+        const now = new Date();
+        const year = now.getFullYear().toString();
+        const month = String(now.getMonth() + 1);
 
-        if (pageType === 'driver' || pageType === 'nurse') {
+        if (pageType === 'nurse') {
+            // Single combined request for nurse page (replaces 3-4 separate calls)
+            const session = JSON.parse(localStorage.getItem('userSession') || '{}');
+            const staffNum = session.staffNumber || '';
+            let url = `${webAppUrl}?action=getNurseData&year=${year}`;
+            if (staffNum) url += `&staffNumber=${encodeURIComponent(staffNum)}`;
+            fetches.push(this._preloadFetch(
+                url,
+                'cache_nurse_data_' + year + '_all',
+                r => r.success ? r : null
+            ));
+        }
+
+        if (pageType === 'driver') {
             fetches.push(this._preloadFetch(
                 `${webAppUrl}?action=getPendingTrips`,
                 this.KEYS.PENDING_TRIPS,
@@ -256,31 +292,12 @@ const DataCache = {
             ));
         }
 
-        if (pageType === 'nurse') {
-            fetches.push(this._preloadFetch(
-                `${webAppUrl}?action=getRecords`,
-                this.KEYS.RECORDS,
-                r => (r.success && r.records) ? r.records : null
-            ));
-        }
-
         if (pageType === 'admin') {
-            const now = new Date();
-            const year = now.getFullYear().toString();
-            const month = String(now.getMonth() + 1);
             const url = `${webAppUrl}?action=getAdminData&year=${year}&month=${month}`;
             fetches.push(this._preloadFetch(
                 url,
                 this.KEYS.ADMIN_DATA,
                 r => r.success ? r : null
-            ));
-        }
-
-        if (pageType === 'nurse') {
-            fetches.push(this._preloadFetch(
-                `${webAppUrl}?action=getVehicles`,
-                this.KEYS.VEHICLES,
-                r => (r.success && r.vehicles) ? r.vehicles : null
             ));
         }
 

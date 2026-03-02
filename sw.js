@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Log PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v30';
+const CACHE_NAME = 'ambulance-log-v31';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -27,6 +27,7 @@ const urlsToCache = [
   './ui-optimizer.js',
   './connection-monitor.js',
   './data-cache.js',
+  './reliable-post.js',
   './session-manager.js',
   './date-time-formatter.js',
   './responsive-ui.css'
@@ -34,7 +35,7 @@ const urlsToCache = [
 
 // Install event - Skip waiting to activate immediately
 self.addEventListener('install', event => {
-  console.log('[SW] Installing Service Worker v30...');
+  console.log('[SW] Installing Service Worker v31...');
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -59,10 +60,11 @@ self.addEventListener('install', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   
-  // Handle POST requests (data submissions)
+  // Let POST requests go directly to network — do NOT intercept.
+  // Google Apps Script uses 302 redirects that require full CORS handling;
+  // intercepting here caused silent failures on some devices/PWA contexts.
   if (event.request.method === 'POST') {
-    event.respondWith(handlePostRequest(event.request.clone()));
-    return;
+    return; // browser handles natively
   }
   
   // Handle navigation requests (HTML pages) - Network First with login fallback
@@ -212,7 +214,7 @@ function getAllFromStore(store) {
 
 // Activate event - Take control immediately and clean old caches
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating Service Worker v29...');
+  console.log('[SW] Activating Service Worker v31...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
