@@ -527,7 +527,7 @@
 
     <script>
         // Configuration
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzgjramV6C5fGt3QM1je34oRXAbfje__vrbxJGoBkkOo2oodydEcdUfkB4avqf2-PR8lg/exec';
+        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
         
         let currentLang = localStorage.getItem('appLanguage') || 'ar';
 
@@ -618,7 +618,75 @@
             setLanguage(currentLang);
             loadSavedCredentials();
             checkInstallPrompt();
+            prefetchOnPageLoad();
         });
+
+        /**
+         * SMART PRE-WARMING: Start fetching data BEFORE user clicks login
+         * If user has a saved session or saved staff number, we know their type
+         * and can prefetch their full page data immediately on login page load.
+         */
+        function prefetchOnPageLoad() {
+            try {
+                // Check existing session first (user refreshed/returned)
+                var session = null;
+                try { session = JSON.parse(localStorage.getItem('userSession') || 'null'); } catch(e) {}
+                
+                if (session && session.type) {
+                    prefetchForUserType(session.type, session.staffNumber || '');
+                    return;
+                }
+                
+                // Check saved staff number (Remember Me) — look up user type
+                var savedNum = localStorage.getItem('savedStaffNumber');
+                if (savedNum) {
+                    var user = USERS[savedNum] || findUserInLocalStorage(savedNum);
+                    if (user) {
+                        prefetchForUserType(user.type, savedNum);
+                    }
+                }
+            } catch(e) { console.warn('Prefetch on load error (non-fatal):', e); }
+        }
+
+        /**
+         * Prefetch full page data based on user type.
+         * Stores in DataCache localStorage so target page loads instantly.
+         */
+        function prefetchForUserType(userType, staffNumber) {
+            var url = WEB_APP_URL;
+            var year = new Date().getFullYear();
+            var month = new Date().getMonth() + 1;
+            
+            if (userType === 'nurse') {
+                var nurseUrl = url + '?action=getNurseData&year=' + year;
+                if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
+                console.log('[Prefetch] Nurse data:', nurseUrl);
+                fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && typeof DataCache !== 'undefined') {
+                        DataCache.set('cache_nurse_data_' + year + '_all', result);
+                        console.log('[Prefetch] Nurse data cached successfully');
+                    }
+                }).catch(function() {});
+            } else if (userType === 'driver') {
+                var driverUrl = url + '?action=getPendingTrips';
+                console.log('[Prefetch] Driver data:', driverUrl);
+                fetch(driverUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && typeof DataCache !== 'undefined') {
+                        DataCache.set('cache_pending_trips', result.trips || []);
+                        console.log('[Prefetch] Driver data cached successfully');
+                    }
+                }).catch(function() {});
+            } else if (userType === 'admin') {
+                var adminUrl = url + '?action=getAdminData&year=' + year + '&month=' + month;
+                console.log('[Prefetch] Admin data:', adminUrl);
+                fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && typeof DataCache !== 'undefined') {
+                        DataCache.set('cache_admin_data', result);
+                        console.log('[Prefetch] Admin data cached successfully');
+                    }
+                }).catch(function() {});
+            }
+        }
 
         // Load saved credentials (Remember Me)
         function loadSavedCredentials() {
@@ -832,11 +900,13 @@
 
                     // Store user session
                     const sessionData = {
-                        staffNumber: staffNumber,
+                        id: user.id || '',
+                        staffNumber: user.staffNumber || staffNumber,
+                        civilId: user.civilId || '',
                         type: user.type,
                         employeeType: user.employeeType || 'employee',
-                        nameAr: user.nameAr,
-                        nameEn: user.nameEn,
+                        nameAr: user.nameAr || '',
+                        nameEn: user.nameEn || '',
                         vehicleNumber: user.vehicleNumber || '',
                         canAccessDriver: user.canAccessDriver || false,
                         canAccessNurse: user.canAccessNurse || false,
@@ -847,15 +917,10 @@
                     localStorage.setItem('userSession', JSON.stringify(sessionData));
                     localStorage.setItem('appLanguage', currentLang);
                     
-                    // Pre-warm target page API to eliminate cold start delay
+                    // Pre-warm target page with FULL data (not just getPendingTrips)
+                    // This stores data in DataCache localStorage so target page loads instantly
                     try {
-                        var targetApi = '';
-                        if (user.redirect === 'driver-interface.html') {
-                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
-                        } else if (user.redirect === 'nurse-interface.html') {
-                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
-                        }
-                        if (targetApi) fetch(targetApi).catch(function(){});
+                        prefetchForUserType(user.type, sessionData.staffNumber);
                     } catch(e) {}
                     
                     // Redirect based on user type
