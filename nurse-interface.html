@@ -221,6 +221,11 @@
             50% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
         }
 
+        @keyframes saving-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         .pending-trips-alert h3 {
             color: #92400e;
             font-size: 16px;
@@ -2592,7 +2597,7 @@
                 displayRecords(allRecords);
                 console.log('✅ Local record updated for ID:', editId);
             } else {
-                // === NEW RECORD: track optimistic entry silently (don't display pending_ ID) ===
+                // === NEW RECORD: show instantly with clean "saving" label ===
                 const optimisticRecord = {
                     'ID': 'pending_' + Date.now(),
                     'Timestamp': new Date().toISOString(),
@@ -2608,11 +2613,13 @@
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber
                 };
-                // Don't add to displayed records — avoids flash of pending_ ID
-                // Just track it so loadAllNurseData knows a submission is in flight
+                allRecords.unshift(optimisticRecord);
+                allYearRecords.unshift(optimisticRecord);
+                nurseRecordsPage = 1;
+                displayRecords(allRecords);
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
-                console.log('✅ New record submitted — awaiting server confirmation');
+                console.log('✅ New record shown locally — awaiting server confirmation');
             }
 
             // === FIRE POST IN BACKGROUND — don't await (instant UI) ===
@@ -2835,7 +2842,8 @@
                     </thead>
                     <tbody>
                         ${pageRecords.map(record => {
-                            const recordId = record.ID || '-';
+                            const isPending = String(record.ID || '').startsWith('pending_');
+                            const recordId = isPending ? (currentLang === 'en' ? 'Saving...' : 'جاري الحفظ...') : (record.ID || '-');
                             const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
                             const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
                             const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
@@ -2855,7 +2863,7 @@
                             }
                             return `
                             <tr>
-                                <td><span style="background:#e0e7ff;color:#1e40af;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;">${recordId}</span></td>
+                                <td><span style="background:${isPending ? '#fef3c7' : '#e0e7ff'};color:${isPending ? '#92400e' : '#1e40af'};padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;${isPending ? 'animation:saving-pulse 1.5s ease-in-out infinite;' : ''}">${recordId}</span></td>
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
                                 <td style="font-size:11px;white-space:nowrap;">${depDate}<br><small>${depTime}</small></td>
@@ -3490,7 +3498,7 @@
                     if (data.records) {
                         let mergedRecords = applyPendingEdits(data.records);
                         
-                        // Check if server confirmed the pending submission (silent — no UI flash)
+                        // Replace optimistic pending_ record with real server record (no flash)
                         if (_pendingOptimisticRecord && _nurseSubmitAt) {
                             const opt = _pendingOptimisticRecord;
                             const serverHasIt = mergedRecords.some(r =>
@@ -3501,11 +3509,13 @@
                                 (r['Patient Name'] || '') === (opt['Patient Name'] || '')
                             );
                             if (serverHasIt || (Date.now() - _nurseSubmitAt > 15000)) {
-                                // Server confirmed or timeout — clear tracking
+                                // Server confirmed or timeout — clear; server data replaces pending
                                 _pendingOptimisticRecord = null;
                                 _nurseSubmitAt = 0;
+                            } else {
+                                // Server hasn't caught up — keep optimistic record at top
+                                mergedRecords.unshift(opt);
                             }
-                            // Never add pending_ record to displayed list
                         }
                         
                         allRecords = mergedRecords;
