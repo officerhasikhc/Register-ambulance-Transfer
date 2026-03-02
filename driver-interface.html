@@ -1274,11 +1274,19 @@
         // ============================================
         // TRIP MANAGEMENT
         // ============================================
+        let _returnCompletedAt = 0; // timestamp when return was last recorded
+        
         function processPendingTripsData(trips) {
             if (!selectedDriver) return;
             
             // CRITICAL: Don't process if a submission is in progress
             if (isSubmittingDeparture || isSubmittingReturn) {
+                return;
+            }
+            
+            // Guard: don't re-show pending card for 10s after return was recorded
+            // (server may still return the trip as 'pending' because it hasn't processed the return yet)
+            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
                 return;
             }
             
@@ -1350,6 +1358,18 @@
 
         async function loadPendingTrip() {
             if (!selectedDriver) return;
+            
+            // Guard: skip if return was just recorded (server hasn't caught up yet)
+            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
+                // Still load history but don't touch pending card
+                const historyKey = `trip_history_${selectedDriver.staffNumber}`;
+                const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
+                if (localHistory.length > 0 && allDriverHistory.length === 0) {
+                    allDriverHistory = localHistory.map(t => ({ ...t, syncing: false }));
+                    renderDriverHistoryPage();
+                }
+                return;
+            }
 
             // === INSTANT LOCAL LOAD FIRST ===
             const pendingKey = `pending_trip_${selectedDriver.staffNumber}`;
@@ -1603,7 +1623,7 @@
             document.getElementById('pendingDate').textContent = date;
             document.getElementById('pendingTime').textContent = time;
             
-            // Add trip to history list with sync indicator
+            // Add trip to history list — no spinner, show clean status immediately
             const newTripEntry = {
                 tripId: '',
                 driverName: selectedDriver.nameEn,
@@ -1615,7 +1635,7 @@
                 returnTime: '',
                 status: 'pending',
                 offlineSaved: !isOnline,
-                syncing: isOnline // Show sync indicator if online
+                syncing: false
             };
             
             const existsInHistory = allDriverHistory.some(t => 
@@ -1627,43 +1647,20 @@
                 renderDriverHistoryPage();
             }
             
-            // === SEND TO SERVER IN BACKGROUND (non-blocking) ===
-            const syncCompleteDeparture = () => {
-                allDriverHistory = allDriverHistory.map(t => {
-                    if (t.departureDate === date && t.departureTime === time) {
-                        return { ...t, syncing: false };
-                    }
-                    return t;
-                });
-                renderDriverHistoryPage();
-                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                // Persist syncing:false to localStorage
-                const histKey = `trip_history_${selectedDriver.staffNumber}`;
-                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
-                const updated = stored.map(t => {
-                    if (t.departureDate === date && t.departureTime === time) {
-                        const { syncing, ...rest } = t;
-                        return rest;
-                    }
-                    return t;
-                });
-                localStorage.setItem(histKey, JSON.stringify(updated));
-            };
-            
+            // === SEND TO SERVER IN BACKGROUND (fire-and-forget) ===
             if (isOnline) {
                 ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 })
                 .then((result) => {
+                    console.log('📤 Departure server response:', result);
                     if (result.offline) {
                         console.warn('⚠️ Departure queued for offline sync');
                     }
-                    setTimeout(syncCompleteDeparture, 800);
+                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
                 }).catch(error => {
                     console.error('Background send failed:', error);
-                    syncCompleteDeparture();
                 });
             } else {
                 queueOfflineData(tripData);
-                syncCompleteDeparture();
             }
 
             // === INSTANT UI UPDATE - NO DELAYS ===
@@ -1776,21 +1773,21 @@
                 returnTime: time
             };
 
-            // === STEP 1: HIDE PENDING TRIP CARD FIRST ===
+            // === STEP 1: HIDE PENDING TRIP CARD INSTANTLY + set guard ===
             document.getElementById('pendingTrip').style.display = 'none';
+            _returnCompletedAt = Date.now(); // Guard: prevent background fetch from re-showing pending card
             
             const tripDepartureDate = pendingTrip.departureDate;
             const tripDepartureTime = pendingTrip.departureTime;
             const key = `pending_trip_${selectedDriver.staffNumber}`;
             
-            // Complete the trip data
+            // Complete the trip data — NO syncing flag, show "مكتملة" instantly
             pendingTrip.returnDate = date;
             pendingTrip.returnTime = time;
             pendingTrip.returnTimestamp = now.getTime();
             pendingTrip.status = 'complete';
-            pendingTrip.syncing = true; // Mark as syncing
 
-            // === STEP 2: UPDATE HISTORY LIST TO "COMPLETE" WITH SYNC INDICATOR ===
+            // === STEP 2: UPDATE HISTORY LIST TO "COMPLETE" INSTANTLY (no spinner) ===
             allDriverHistory = allDriverHistory.map(t => {
                 if (t.staffNumber === selectedDriver.staffNumber && 
                     t.departureDate === tripDepartureDate && 
@@ -1802,13 +1799,13 @@
                         returnTime: time, 
                         status: 'complete',
                         statusText: 'مكتملة ✓',
-                        syncing: true
+                        syncing: false
                     };
                 }
                 return t;
             });
             
-            // Render the updated list IMMEDIATELY (with sync indicator)
+            // Render the updated list IMMEDIATELY — shows "مكتملة ✓" right away
             renderDriverHistoryPage();
 
             // === STEP 3: SAVE TO LOCAL STORAGE ===
@@ -1817,43 +1814,19 @@
             localStorage.removeItem(key);
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
 
-            // === STEP 4: SEND TO SERVER IN BACKGROUND ===
-            const syncComplete = () => {
-                allDriverHistory = allDriverHistory.map(t => {
-                    if (t.departureDate === tripDepartureDate && 
-                        t.departureTime === tripDepartureTime) {
-                        return { ...t, syncing: false };
-                    }
-                    return t;
-                });
-                renderDriverHistoryPage();
-                // Persist syncing:false to localStorage
-                const histKey = `trip_history_${selectedDriver.staffNumber}`;
-                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
-                const updated = stored.map(t => {
-                    if (t.departureDate === tripDepartureDate && t.departureTime === tripDepartureTime) {
-                        const { syncing, ...rest } = t;
-                        return rest;
-                    }
-                    return t;
-                });
-                localStorage.setItem(histKey, JSON.stringify(updated));
-            };
-            
+            // === STEP 4: SEND TO SERVER IN BACKGROUND (fire-and-forget) ===
             if (isOnline) {
                 ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 })
                 .then((result) => {
+                    console.log('📤 Return server response:', result);
                     if (result.offline) {
                         console.warn('⚠️ Return queued for offline sync');
                     }
-                    setTimeout(syncComplete, 1200);
                 }).catch(error => {
                     console.error('Background send failed:', error);
-                    syncComplete();
                 });
             } else {
                 queueOfflineData(returnData);
-                syncComplete();
             }
 
             // === INSTANT UI UPDATE - NO DELAYS ===
@@ -2306,6 +2279,11 @@
             
             // Don't refresh if user is currently submitting a trip
             if (isSubmittingDeparture || isSubmittingReturn) {
+                return;
+            }
+            
+            // Don't refresh if return was just recorded (server hasn't caught up)
+            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
                 return;
             }
             
