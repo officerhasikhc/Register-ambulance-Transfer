@@ -658,13 +658,14 @@
             var month = new Date().getMonth() + 1;
             
             if (userType === 'nurse') {
-                var nurseUrl = url + '?action=getNurseData&year=' + year;
+                // Prefetch CURRENT MONTH only (not full year) — avoids flash of all-year data
+                var nurseUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
                 if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
-                console.log('[Prefetch] Nurse data:', nurseUrl);
+                console.log('[Prefetch] Nurse data (month ' + month + '):', nurseUrl);
                 fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
-                        DataCache.set('cache_nurse_data_' + year + '_all', result);
-                        console.log('[Prefetch] Nurse data cached successfully');
+                        DataCache.set('cache_nurse_data_' + year + '_' + month, result);
+                        console.log('[Prefetch] Nurse data cached for month ' + month);
                     }
                 }).catch(function() {});
             } else if (userType === 'driver') {

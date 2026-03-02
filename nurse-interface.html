@@ -18,9 +18,11 @@
         var s = null; try { s = JSON.parse(localStorage.getItem('userSession') || '{}'); } catch(e) {}
         var staffNum = (s && s.staffNumber) ? s.staffNumber : '';
         var year = new Date().getFullYear();
-        var reqUrl = url + '?action=getNurseData&year=' + year;
+        var month = new Date().getMonth() + 1;
+        var reqUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
         if (staffNum) reqUrl += '&staffNumber=' + encodeURIComponent(staffNum);
         window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).catch(function() { return null; });
+        window.__earlyNurseMonth = month;
     })();
     </script>
     
@@ -2598,9 +2600,12 @@
                 displayRecords(allRecords);
                 console.log('✅ Local record updated for ID:', editId);
             } else {
-                // === NEW RECORD: show instantly with clean "saving" label ===
+                // === NEW RECORD: show instantly with PREDICTED real ID ===
+                const predictedId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
+                    ? SyncManager.predictNextId()
+                    : 'pending_' + Date.now();
                 const optimisticRecord = {
-                    'ID': 'pending_' + Date.now(),
+                    'ID': predictedId,
                     'Timestamp': new Date().toISOString(),
                     'Vehicle Number': formData.vehicleNumber,
                     'Driver Name': formData.driverName,
@@ -2620,7 +2625,11 @@
                 displayRecords(allRecords);
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
-                console.log('✅ New record shown locally — awaiting server confirmation');
+                // Inject predicted ID into formData so server uses it
+                if (predictedId && !predictedId.startsWith('pending_')) {
+                    formData.tripId = predictedId;
+                }
+                console.log('✅ New record shown locally with ID:', predictedId);
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
@@ -3455,7 +3464,7 @@
             const cacheKey = 'cache_nurse_data_' + year + '_' + month;
             
             // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
-            if (window.__earlyNurseFetch && month === 'all') {
+            if (window.__earlyNurseFetch && String(month) === String(window.__earlyNurseMonth || '')) {
                 DataCache._inflight[url] = window.__earlyNurseFetch;
                 window.__earlyNurseFetch = null;
             }
@@ -3490,24 +3499,37 @@
                     
                     // 2. Apply records (after session refresh so name resolution is correct)
                     if (data.records) {
+                        // Update SyncManager's ID tracker with server records
+                        if (typeof SyncManager !== 'undefined') {
+                            SyncManager.updateMaxIdFromRecords(data.records);
+                            if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
+                        }
                         let mergedRecords = applyPendingEdits(data.records);
                         
-                        // Replace optimistic pending_ record with real server record (no flash)
+                        // Replace optimistic record with real server record (no flash)
                         if (_pendingOptimisticRecord && _nurseSubmitAt) {
                             const opt = _pendingOptimisticRecord;
-                            const serverHasIt = mergedRecords.some(r =>
-                                (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
-                                (r['Departure Time'] || '') === (opt['Departure Time'] || '') &&
-                                (r['Return Date'] || '') === (opt['Return Date'] || '') &&
-                                (r['Return Time'] || '') === (opt['Return Time'] || '') &&
-                                (r['Patient Name'] || '') === (opt['Patient Name'] || '')
-                            );
+                            const optId = String(opt.ID || '');
+                            const isPendingPrefix = optId.startsWith('pending_');
+                            // Match by predicted ID (R010) or by field comparison
+                            const serverHasIt = mergedRecords.some(r => {
+                                // Match by exact ID (predicted ID like R010)
+                                if (!isPendingPrefix && optId && String(r.ID || '') === optId) return true;
+                                // Fallback: match by fields
+                                return (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
+                                    (r['Departure Time'] || '') === (opt['Departure Time'] || '') &&
+                                    (r['Return Date'] || '') === (opt['Return Date'] || '') &&
+                                    (r['Return Time'] || '') === (opt['Return Time'] || '') &&
+                                    (r['Patient Name'] || '') === (opt['Patient Name'] || '');
+                            });
                             if (serverHasIt || (Date.now() - _nurseSubmitAt > 15000)) {
                                 // Server confirmed or timeout — clear; server data replaces pending
                                 _pendingOptimisticRecord = null;
                                 _nurseSubmitAt = 0;
                             } else {
                                 // Server hasn't caught up — keep optimistic record at top
+                                // But avoid duplicate if server already has same ID
+                                mergedRecords = mergedRecords.filter(r => String(r.ID || '') !== optId);
                                 mergedRecords.unshift(opt);
                             }
                         }
@@ -3561,6 +3583,28 @@
         // Initial load: session from cache first (instant), then combined server fetch
         loadUserSession();
         loadAllNurseData();
+
+        // Background pre-warming: after current month loads, silently prefetch other months
+        // so switching between months in the filter is instant
+        setTimeout(function() {
+            try {
+                const session = JSON.parse(localStorage.getItem('userSession') || '{}');
+                const staffNum = session.staffNumber || '';
+                const year = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
+                // Prefetch recent months (current-1, current-2) silently
+                for (let m = currentMonth - 1; m >= Math.max(1, currentMonth - 2); m--) {
+                    const key = 'cache_nurse_data_' + year + '_' + m;
+                    const existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data) continue; // already cached
+                    let warmUrl = WEB_APP_URL + '?action=getNurseData&year=' + year + '&month=' + m;
+                    if (staffNum) warmUrl += '&staffNumber=' + encodeURIComponent(staffNum);
+                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success) DataCache.set(key, result);
+                    }).catch(function() {});
+                }
+            } catch(e) {}
+        }, 5000); // Wait 5s after page load to avoid competing with main data fetch
 
         // Initialize SyncManager for instant local saves + background sync
         SyncManager.init(WEB_APP_URL).then(() => {

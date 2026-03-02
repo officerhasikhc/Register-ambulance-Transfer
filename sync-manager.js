@@ -21,6 +21,14 @@ const SyncManager = {
     _listeners: {},
     _webAppUrl: null,
 
+    // ============================================
+    // LOCAL TRIP ID PREDICTION
+    // Predicts the next R-number locally so records
+    // appear with a real ID instantly (no "Saving...")
+    // ============================================
+    _localMaxId: 0,          // highest known ID number
+    _localAssigned: [],       // IDs assigned locally but not yet confirmed by server
+
     /**
      * Initialize SyncManager with the Web App URL
      * Must be called before any other method
@@ -28,6 +36,15 @@ const SyncManager = {
     async init(webAppUrl) {
         this._webAppUrl = webAppUrl;
         await this._openDB();
+
+        // Restore local max ID from localStorage
+        try {
+            const saved = parseInt(localStorage.getItem('sync_local_max_id')) || 0;
+            if (saved > this._localMaxId) this._localMaxId = saved;
+        } catch(e) {}
+
+        // Scan cached data to find the highest known ID
+        this._scanCachedDataForMaxId();
 
         // Auto-sync when coming back online
         if (typeof window !== 'undefined') {
@@ -40,7 +57,68 @@ const SyncManager = {
         // Start initial sync of any pending items
         setTimeout(() => this.syncAll(), 2000);
 
-        console.log('✅ SyncManager initialized');
+        console.log('✅ SyncManager initialized (localMaxId: R' + String(this._localMaxId).padStart(3, '0') + ')');
+    },
+
+    /**
+     * Predict the next trip ID locally.
+     * Call this BEFORE submitting to get an instant ID for display.
+     * Returns e.g. 'R010', 'R011', etc.
+     */
+    predictNextId() {
+        this._localMaxId++;
+        this._localAssigned.push(this._localMaxId);
+        const predicted = 'R' + String(this._localMaxId).padStart(3, '0');
+        // Persist so other pages (driver/nurse) stay in sync
+        try { localStorage.setItem('sync_local_max_id', String(this._localMaxId)); } catch(e) {}
+        console.log('🔮 SyncManager: Predicted next ID:', predicted);
+        return predicted;
+    },
+
+    /**
+     * Update the local max ID tracker when fresh data arrives from server.
+     * Call this from loadAllNurseData / loadAdminData / driver data load.
+     * @param {Array} records - Array of record objects with ID field
+     */
+    updateMaxIdFromRecords(records) {
+        if (!Array.isArray(records)) return;
+        let maxFound = this._localMaxId;
+        for (let i = 0; i < records.length; i++) {
+            const id = records[i].ID || records[i].id || records[i].tripId || '';
+            const num = parseInt(String(id).replace(/\D/g, '')) || 0;
+            if (num > maxFound) maxFound = num;
+        }
+        if (maxFound > this._localMaxId) {
+            this._localMaxId = maxFound;
+            try { localStorage.setItem('sync_local_max_id', String(this._localMaxId)); } catch(e) {}
+            // Clear confirmed assignments
+            this._localAssigned = this._localAssigned.filter(n => n > maxFound);
+            console.log('📊 SyncManager: Updated maxId from server data → R' + String(maxFound).padStart(3, '0'));
+        }
+    },
+
+    /**
+     * Scan DataCache localStorage entries to find the highest ID on init.
+     * Covers nurse records, admin records, and pending trips.
+     */
+    _scanCachedDataForMaxId() {
+        try {
+            const keys = Object.keys(localStorage);
+            for (const key of keys) {
+                if (!key.startsWith('cache_')) continue;
+                try {
+                    const raw = JSON.parse(localStorage.getItem(key));
+                    if (!raw || !raw.data) continue;
+                    const data = raw.data;
+                    // Nurse data: { records: [...], trips: [...] }
+                    if (data.records) this.updateMaxIdFromRecords(data.records);
+                    if (data.trips) this.updateMaxIdFromRecords(data.trips);
+                    // Admin data: { data: [...] } or direct array
+                    if (Array.isArray(data)) this.updateMaxIdFromRecords(data);
+                    if (data.data && Array.isArray(data.data)) this.updateMaxIdFromRecords(data.data);
+                } catch(e) {}
+            }
+        } catch(e) { console.warn('SyncManager: Cache scan error (non-fatal):', e); }
     },
 
     /**

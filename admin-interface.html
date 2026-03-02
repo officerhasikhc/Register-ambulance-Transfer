@@ -3075,6 +3075,11 @@
                 DataCache.EXPIRY.ADMIN_DATA,
                 (data) => {
                     if (!data) return;
+                    // Update SyncManager's ID tracker with server data
+                    if (typeof SyncManager !== 'undefined') {
+                        if (data.records) SyncManager.updateMaxIdFromRecords(data.records);
+                        if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
+                    }
                     applyStats(data.stats);
                     applyRecords(data.records);
                     applyTrips(data.trips);

@@ -272,14 +272,14 @@ const DataCache = {
         const month = String(now.getMonth() + 1);
 
         if (pageType === 'nurse') {
-            // Single combined request for nurse page (replaces 3-4 separate calls)
+            // Fetch CURRENT MONTH only (not full year) — avoids flash of all-year data
             const session = JSON.parse(localStorage.getItem('userSession') || '{}');
             const staffNum = session.staffNumber || '';
-            let url = `${webAppUrl}?action=getNurseData&year=${year}`;
+            let url = `${webAppUrl}?action=getNurseData&year=${year}&month=${month}`;
             if (staffNum) url += `&staffNumber=${encodeURIComponent(staffNum)}`;
             fetches.push(this._preloadFetch(
                 url,
-                'cache_nurse_data_' + year + '_all',
+                'cache_nurse_data_' + year + '_' + month,
                 r => r.success ? r : null
             ));
         }

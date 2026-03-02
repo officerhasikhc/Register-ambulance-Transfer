@@ -1430,6 +1430,8 @@
                     if (now - _lastHistoryRender < _MIN_RENDER_INTERVAL && allDriverHistory.length > 0 && meta?.unchanged) return;
                     
                     _lastHistoryRender = now;
+                    // Update SyncManager's ID tracker with server trips
+                    if (typeof SyncManager !== 'undefined') SyncManager.updateMaxIdFromRecords(trips);
                     processPendingTripsData(trips);
                     renderTripHistoryFromData(trips);
                 },
@@ -1644,9 +1646,16 @@
             document.getElementById('pendingDate').textContent = date;
             document.getElementById('pendingTime').textContent = time;
             
-            // Add trip to history list — show "قيد التنفيذ" immediately
+            // Predict trip ID locally for instant display
+            const predictedTripId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
+                ? SyncManager.predictNextId()
+                : '';
+            // Inject predicted ID into tripData so server uses the same ID
+            if (predictedTripId) tripData.tripId = predictedTripId;
+            
+            // Add trip to history list — show with predicted ID immediately
             const newTripEntry = {
-                tripId: '',
+                tripId: predictedTripId,
                 driverName: selectedDriver.nameEn,
                 driverNameAr: selectedDriver.nameAr,
                 staffNumber: selectedDriver.staffNumber,
