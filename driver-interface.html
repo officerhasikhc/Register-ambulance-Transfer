@@ -1275,6 +1275,7 @@
         // TRIP MANAGEMENT
         // ============================================
         let _returnCompletedAt = 0; // timestamp when return was last recorded
+        let _departureRecordedAt = 0; // timestamp when departure was last recorded
         
         function processPendingTripsData(trips) {
             if (!selectedDriver) return;
@@ -1284,9 +1285,14 @@
                 return;
             }
             
-            // Guard: don't re-show pending card for 10s after return was recorded
-            // (server may still return the trip as 'pending' because it hasn't processed the return yet)
+            // Guard: don't touch UI for 10s after return was recorded
             if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
+                return;
+            }
+            
+            // Guard: don't touch UI for 10s after departure was recorded
+            // (server may not have the trip yet — keep our local pending card as-is)
+            if (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) {
                 return;
             }
             
@@ -1359,9 +1365,11 @@
         async function loadPendingTrip() {
             if (!selectedDriver) return;
             
-            // Guard: skip if return was just recorded (server hasn't caught up yet)
-            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
-                // Still load history but don't touch pending card
+            // Guard: skip if return or departure was just recorded (server hasn't caught up yet)
+            const _guardActive = (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) ||
+                                 (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000));
+            if (_guardActive) {
+                // Still load history from localStorage but don't touch pending card or server data
                 const historyKey = `trip_history_${selectedDriver.staffNumber}`;
                 const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
                 if (localHistory.length > 0 && allDriverHistory.length === 0) {
@@ -1405,6 +1413,12 @@
                 (trips, meta) => {
                     if (meta?.fromCache) return;
                     if (isSubmittingDeparture || isSubmittingReturn) return;
+                    
+                    // Guard: don't overwrite local data while departure/return is settling
+                    if ((_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) ||
+                        (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000))) {
+                        return;
+                    }
                     
                     const now = Date.now();
                     if (now - _lastHistoryRender < _MIN_RENDER_INTERVAL && allDriverHistory.length > 0 && meta?.unchanged) return;
@@ -1614,6 +1628,7 @@
             };
             const key = `pending_trip_${selectedDriver.staffNumber}`;
             localStorage.setItem(key, JSON.stringify(pendingTrip));
+            _departureRecordedAt = Date.now(); // Guard: prevent background fetch from clearing pending card
 
             // === OPTIMISTIC UI ===
             
@@ -1623,7 +1638,7 @@
             document.getElementById('pendingDate').textContent = date;
             document.getElementById('pendingTime').textContent = time;
             
-            // Add trip to history list — no spinner, show clean status immediately
+            // Add trip to history list — show "قيد التنفيذ" immediately
             const newTripEntry = {
                 tripId: '',
                 driverName: selectedDriver.nameEn,
@@ -1638,14 +1653,23 @@
                 syncing: false
             };
             
-            const existsInHistory = allDriverHistory.some(t => 
-                t.departureDate === date && t.departureTime === time
+            // Remove any duplicate (same date AND time) then add new entry at top
+            allDriverHistory = allDriverHistory.filter(t => 
+                !(t.departureDate === date && t.departureTime === time)
             );
-            if (!existsInHistory) {
-                allDriverHistory.unshift(newTripEntry);
-                driverHistoryPage = 1;
-                renderDriverHistoryPage();
-            }
+            allDriverHistory.unshift(newTripEntry);
+            driverHistoryPage = 1;
+            renderDriverHistoryPage();
+            
+            // Persist to localStorage so background refresh won't lose it
+            saveTripToHistoryQuiet(newTripEntry);
+            
+            // Save to nurse pending trips for cross-interface sync
+            savePendingTripForNurse({
+                ...tripData,
+                status: 'pending',
+                departureTimestamp: now.getTime()
+            });
             
             // === SEND TO SERVER IN BACKGROUND (fire-and-forget) ===
             if (isOnline) {
@@ -2282,8 +2306,9 @@
                 return;
             }
             
-            // Don't refresh if return was just recorded (server hasn't caught up)
-            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
+            // Don't refresh if departure or return was just recorded (server hasn't caught up)
+            if ((_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) ||
+                (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000))) {
                 return;
             }
             
