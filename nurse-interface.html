@@ -2588,6 +2588,8 @@
                 allYearRecords.unshift(optimisticRecord);
                 nurseRecordsPage = 1;
                 displayRecords(allRecords);
+                _nurseSubmitAt = Date.now();
+                _pendingOptimisticRecord = optimisticRecord;
                 console.log('✅ Optimistic new record added locally');
             }
 
@@ -2887,6 +2889,8 @@
 
         let editingRecordId = null; // Track which record is being edited
         let pendingEdits = {}; // Track edits not yet confirmed by server { id: { fields, timestamp } }
+        let _nurseSubmitAt = 0; // Guard: timestamp of last new record submission
+        let _pendingOptimisticRecord = null; // The optimistic record waiting for server confirmation
 
         function viewRecord(record) {
             // Show single record in printable format with edit button
@@ -3462,7 +3466,29 @@
                     
                     // 2. Apply records (after session refresh so name resolution is correct)
                     if (data.records) {
-                        allRecords = applyPendingEdits(data.records);
+                        let mergedRecords = applyPendingEdits(data.records);
+                        
+                        // Preserve optimistic new record if server hasn't caught up yet
+                        if (_pendingOptimisticRecord && _nurseSubmitAt && (Date.now() - _nurseSubmitAt < 15000)) {
+                            const opt = _pendingOptimisticRecord;
+                            const serverHasIt = mergedRecords.some(r =>
+                                (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
+                                (r['Departure Time'] || '') === (opt['Departure Time'] || '') &&
+                                (r['Return Date'] || '') === (opt['Return Date'] || '') &&
+                                (r['Return Time'] || '') === (opt['Return Time'] || '') &&
+                                (r['Patient Name'] || '') === (opt['Patient Name'] || '')
+                            );
+                            if (serverHasIt) {
+                                // Server confirmed — clear optimistic record
+                                _pendingOptimisticRecord = null;
+                                _nurseSubmitAt = 0;
+                            } else {
+                                // Server hasn't caught up — keep optimistic record at top
+                                mergedRecords.unshift(opt);
+                            }
+                        }
+                        
+                        allRecords = mergedRecords;
                         nurseRecordsPage = 1;
                         displayRecords(allRecords);
                         
