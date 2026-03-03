@@ -2885,20 +2885,38 @@
                     } catch (e) {}
                 }
 
-                /** تعيين اسم السائق — تشكيل عربي + خط مضمّن */
+                var pdfPage = pdfDoc.getPages()[0];
+
+                /**
+                 * اسم السائق — يُرسم مباشرة على الصفحة بالخط المضمّن
+                 * بدلاً من حقل نموذج، لضمان ظهور عربي متصل في كل العارضات
+                 */
                 function setDriverName(name, driverNameEn) {
                     var driverAr = driverMap[(driverNameEn || '').toUpperCase()] || '';
                     var displayName = driverAr || driverNameEn || '';
                     if (!displayName) return;
-                    try {
-                        var field = form.getTextField(name);
-                        if (arabicFont && /[\u0600-\u06FF]/.test(displayName)) {
-                            field.setText(ArabicReshaper.reshape(displayName));
-                            field.updateAppearances(arabicFont);
-                        } else {
-                            field.setText(displayName);
-                        }
-                    } catch(e) {}
+                    if (arabicFont && /[\u0600-\u06FF]/.test(displayName)) {
+                        try {
+                            var field = form.getTextField(name);
+                            var widgets = field.acroField.getWidgets();
+                            if (widgets.length > 0) {
+                                var rect = widgets[0].getRectangle();
+                                form.removeField(field);
+                                var shaped = ArabicReshaper.reshape(displayName);
+                                var fontSize = Math.min(rect.height * 0.6, 10);
+                                var tw = arabicFont.widthOfTextAtSize(shaped, fontSize);
+                                pdfPage.drawText(shaped, {
+                                    x: rect.x + (rect.width - tw) / 2,
+                                    y: rect.y + (rect.height - fontSize) / 2 + 1,
+                                    size: fontSize,
+                                    font: arabicFont,
+                                    color: lib.rgb(0, 0, 0)
+                                });
+                                return;
+                            }
+                        } catch(e) {}
+                    }
+                    setText(name, displayName);
                 }
 
                 var driverMap = getDriverNameArMap();
