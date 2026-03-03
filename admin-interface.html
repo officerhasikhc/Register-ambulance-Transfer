@@ -1935,8 +1935,9 @@
                     </div>
 
                     <div class="table-container">
-                        <div class="loading-spinner" id="recordsLoadingSpinner">
-                            <div class="spinner"></div>
+                        <div id="recordsLoadingSpinner" style="display:none; text-align:center; padding:18px 0;">
+                            <div class="spinner" style="margin:0 auto 8px;"></div>
+                            <span style="font-size:12px; color:#6b7280;">Loading records...</span>
                         </div>
                         <div id="recordsContainer"></div>
                     </div>
@@ -2106,16 +2107,27 @@
 
         // Nurse name lookup: maps staff number → Arabic name from Users sheet
         let nurseNameMap = {};
+        window._allUsersData = [];
         async function loadNurseNameMap() {
             try {
                 const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
                 const result = await resp.json();
                 if (result.success && (result.users || result.data)) {
+                    var users = result.users || result.data;
+                    window._allUsersData = users;
                     nurseNameMap = {};
-                    (result.users || result.data).forEach(u => {
+                    users.forEach(u => {
                         if (u.staffNumber) nurseNameMap[u.staffNumber.toString().trim()] = (u.nameAr || '').toString().trim();
                         if (u.civilId) nurseNameMap[u.civilId.toString().trim()] = (u.nameAr || '').toString().trim();
                     });
+                    // Also populate ambulance_drivers in localStorage for other pages
+                    var driversList = users.filter(u => u.type === 'driver').map(u => ({
+                        nameAr: u.nameAr || '', nameEn: u.nameEn || '',
+                        staffNumber: u.staffNumber || '', type: u.employeeType || 'employee'
+                    }));
+                    if (driversList.length > 0) {
+                        localStorage.setItem('ambulance_drivers', JSON.stringify(driversList));
+                    }
                 }
             } catch(e) { console.log('Failed to load nurse name map:', e); }
         }
@@ -2379,12 +2391,8 @@
             const month = document.getElementById('monthFilter').value;
 
             // Show loading spinner
-            const tableContainer = document.querySelector('.table-container');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (tableContainer && loadingSpinner) {
-                tableContainer.classList.add('loading');
-                loadingSpinner.classList.add('active');
-            }
+            if (loadingSpinner) loadingSpinner.style.display = 'block';
 
             let url = `${WEB_APP_URL}?action=getAllRecords`;
             if (year !== 'all') url += `&year=${year}`;
@@ -2404,15 +2412,12 @@
                         if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
                         if (currentPage < 1) currentPage = 1;
                         displayRecordsWithPagination();
+                        if (loadingSpinner) loadingSpinner.style.display = 'none';
                     },
                     (result) => (result.success && result.data) ? result.data : null
                 );
             } finally {
-                // Hide loading spinner
-                if (tableContainer && loadingSpinner) {
-                    tableContainer.classList.remove('loading');
-                    loadingSpinner.classList.remove('active');
-                }
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
             }
         }
 
@@ -2664,16 +2669,32 @@
             return value.toString().trim();
         }
 
-        /** ربط اسم السائق الإنجليزي بالعربي من بيانات الإعدادات المحلية */
+        /** ربط اسم السائق الإنجليزي بالعربي — يجمع من كل المصادر المتاحة */
         function getDriverNameArMap() {
             const map = {};
+            // 1. من بيانات المستخدمين (getAllUsers — الأكثر موثوقية)
+            try {
+                if (window._allUsersData && window._allUsersData.length) {
+                    window._allUsersData.forEach(function(u) {
+                        if (u.type === 'driver' && u.nameEn && u.nameAr) {
+                            map[u.nameEn.toUpperCase().trim()] = u.nameAr.trim();
+                            map[u.nameAr.trim()] = u.nameAr.trim();
+                        }
+                    });
+                }
+            } catch(e) {}
+            // 2. من localStorage (fallback)
             try {
                 const drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
                 drivers.forEach(function (d) {
-                    if (d.nameEn) map[d.nameEn.toUpperCase().trim()] = d.nameAr || d.nameEn;
-                    if (d.nameAr) map[d.nameAr.trim()] = d.nameAr;
+                    if (d.nameEn && !map[d.nameEn.toUpperCase().trim()]) {
+                        map[d.nameEn.toUpperCase().trim()] = d.nameAr || d.nameEn;
+                    }
+                    if (d.nameAr && !map[d.nameAr.trim()]) {
+                        map[d.nameAr.trim()] = d.nameAr;
+                    }
                 });
-            } catch (e) { /* لا توجد بيانات سائقين محلية */ }
+            } catch (e) {}
             return map;
         }
 
@@ -2730,7 +2751,7 @@
                     acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
                 } catch (nae) { console.warn('NeedAppearances flag:', nae); }
 
-                /** تعيين نص عادي (إنجليزي/أرقام) في حقل نصي */
+                /** تعيين نص في حقل — يدعم العربي عبر NeedAppearances */
                 function setText(name, value) {
                     try {
                         var v = (value != null && value !== undefined) ? String(value).trim() : '';
@@ -2738,41 +2759,12 @@
                     } catch (e) { /* حقل غير موجود في القالب */ }
                 }
 
-                /**
-                 * اختيار اسم السائق من قائمة منسدلة (Dropdown) في PDF.
-                 * الحقل يجب أن يكون Dropdown في القالب يحتوي أسماء السائقين بالعربي.
-                 */
-                function selectDriver(name, driverNameEn) {
-                    try {
-                        var dropdown = form.getDropdown(name);
-                        var options = dropdown.getOptions();
-                        if (!options || options.length === 0) return;
-
-                        // ابحث عن الاسم العربي المقابل للاسم الإنجليزي
-                        var driverAr = driverMap[driverNameEn.toUpperCase()] || '';
-
-                        // إذا السائق غير موجود في النظام — اترك الحقل فارغاً للإدخال اليدوي لاحقاً
-                        if (!driverAr) return;
-
-                        // حاول مطابقة الاسم العربي مع خيارات القائمة
-                        for (var i = 0; i < options.length; i++) {
-                            var opt = options[i].trim();
-                            if (opt === driverAr) {
-                                dropdown.select(options[i]);
-                                return;
-                            }
-                        }
-
-                        // مطابقة جزئية
-                        for (var j = 0; j < options.length; j++) {
-                            var optTrim = options[j].trim();
-                            if (optTrim && (optTrim.indexOf(driverAr) !== -1 || driverAr.indexOf(optTrim) !== -1)) {
-                                dropdown.select(options[j]);
-                                return;
-                            }
-                        }
-                        // لم يُطابق — يبقى فارغاً للإدخال اليدوي
-                    } catch (e) { /* حقل غير موجود في القالب */ }
+                /** تعيين اسم السائق بالعربي كحقل نصي عادي */
+                function setDriverName(name, driverNameEn) {
+                    var driverAr = driverMap[(driverNameEn || '').toUpperCase()] || '';
+                    var displayName = driverAr || driverNameEn || '';
+                    if (!displayName) return;
+                    setText(name, displayName);
                 }
 
                 // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
@@ -2784,9 +2776,8 @@
                     const n = i + 1;
                     setText('Vehicle_Number_' + n, r['Vehicle Number']);
 
-                    // اسم السائق — اختيار من القائمة المنسدلة
                     const driverEn = (r['Driver Name'] || '').trim();
-                    selectDriver('Driver_Name_' + n, driverEn);
+                    setDriverName('Driver_Name_' + n, driverEn);
 
                     setText('Staff_Number_' + n, r['Staff Number']);
                     setText('Departure_Time_' + n, r['Departure Time']);
@@ -3041,6 +3032,23 @@
         
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
+
+        // Background pre-warming: after current month loads, silently prefetch previous months' records
+        setTimeout(function() {
+            try {
+                const year = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
+                for (let m = currentMonth - 1; m >= Math.max(1, currentMonth - 2); m--) {
+                    const key = DataCache.KEYS.RECORDS + '_' + year + '_' + m + '_';
+                    const existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data) continue;
+                    var warmUrl = WEB_APP_URL + '?action=getAllRecords&year=' + year + '&month=' + m;
+                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success && result.data) DataCache.set(key, result.data);
+                    }).catch(function() {});
+                }
+            } catch(e) {}
+        }, 6000);
 
         // Initialize SyncManager for admin actions (delete, update)
         SyncManager.init(WEB_APP_URL).then(() => {
