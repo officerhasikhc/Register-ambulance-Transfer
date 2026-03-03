@@ -1342,11 +1342,13 @@
                     </button>
                 </div>
             </div>
-            <div id="recordsLoadingSpinner" style="display:none; text-align:center; padding:18px 0;">
-                <div class="spinner" style="margin:0 auto 8px;"></div>
-                <span style="font-size:12px; color:#6b7280;">Loading records...</span>
+            <div id="recordsWrapper" style="position: relative; min-height: 60px;">
+                <div id="recordsLoadingOverlay" style="display:none; position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.85); z-index:5; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; min-height:80px;">
+                    <div class="spinner" style="margin:0 auto 8px;"></div>
+                    <span style="font-size:12px; color:#6b7280;">Loading records...</span>
+                </div>
+                <div id="recordsContainer"></div>
             </div>
-            <div id="recordsContainer"></div>
         </div>
     </div>
 
@@ -2909,21 +2911,25 @@
         }
 
         async function loadRecords(silent = false) {
-            const loadingSpinner = document.getElementById('recordsLoadingSpinner');
+            const overlay = document.getElementById('recordsLoadingOverlay');
+            const section = document.querySelector('.records-section');
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const cacheKey = 'cache_nurse_data_' + year + '_' + month;
-            const hasCachedData = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS);
+            const cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS);
 
-            if (!silent && !hasCachedData && loadingSpinner) {
-                loadingSpinner.style.display = 'block';
+            if (!silent && cached && cached.data) {
+                // Pre-warmed: data will render instantly from cache callback
+            } else if (!silent) {
+                // No cache: dim current records + show loading overlay
+                if (section) section.classList.add('loading');
+                if (overlay) overlay.style.display = 'flex';
             }
 
-            window._recordsLoadingActive = true;
             await loadAllNurseData();
-            window._recordsLoadingActive = false;
 
-            if (loadingSpinner) loadingSpinner.style.display = 'none';
+            if (section) section.classList.remove('loading');
+            if (overlay) overlay.style.display = 'none';
         }
 
         function displayRecords(records) {
@@ -3700,10 +3706,12 @@
                         }
                     }
                     
-                    // Hide loading spinner after DOM has rendered
+                    // Hide loading state after DOM has rendered the new records
                     requestAnimationFrame(() => {
-                        const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-                        if (loadingSpinner) loadingSpinner.style.display = 'none';
+                        const overlay = document.getElementById('recordsLoadingOverlay');
+                        if (overlay) overlay.style.display = 'none';
+                        const sec = document.querySelector('.records-section');
+                        if (sec) sec.classList.remove('loading');
                     });
                 },
                 (result) => result.success ? result : null
