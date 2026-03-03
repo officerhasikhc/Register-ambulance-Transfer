@@ -2763,19 +2763,19 @@
                         var driverAr = driverMap[(driverEn).toUpperCase()] || '';
                         var driverDisplay = driverAr || driverEn;
                         rowsHtml += '<tr>' +
-                            '<td>' + (r['Return Time'] || '') + '</td>' +
-                            '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
-                            '<td>' + (r['Departure Time'] || '') + '</td>' +
-                            '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
-                            '<td>' + (r['Staff Number'] || '') + '</td>' +
-                            '<td>' + driverDisplay + '</td>' +
-                            '<td>' + (r['Vehicle Number'] || '') + '</td>' +
                             '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                            '<td>' + (r['Vehicle Number'] || '') + '</td>' +
+                            '<td>' + driverDisplay + '</td>' +
+                            '<td>' + (r['Staff Number'] || '') + '</td>' +
+                            '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
+                            '<td>' + (r['Departure Time'] || '') + '</td>' +
+                            '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
+                            '<td>' + (r['Return Time'] || '') + '</td>' +
                             '</tr>';
                     } else {
                         rowsHtml += '<tr>' +
-                            '<td></td><td></td><td></td><td></td><td></td><td></td><td></td>' +
-                            '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td></tr>';
+                            '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                            '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
                     }
                 }
 

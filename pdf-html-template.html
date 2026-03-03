@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>كشف حركة سيارات الاسعاف</title>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4 landscape; margin: 6mm 8mm; }
+  @page { size: A4 landscape; margin: 5mm 6mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: "Times New Roman", Arial, serif;
@@ -16,15 +15,14 @@
     width: 277mm;
     max-width: 277mm;
     margin: 0 auto;
-    padding: 4mm 8mm;
+    padding: 3mm 6mm;
   }
 
-  /* ═══════ Header ═══════ */
   .header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 1pt;
+    margin-bottom: 0;
   }
   .header-ar {
     width: 34%;
@@ -32,7 +30,7 @@
     font-family: Arial, sans-serif;
     font-size: 9pt;
     font-weight: bold;
-    line-height: 1.65;
+    line-height: 1.55;
   }
   .header-en {
     width: 34%;
@@ -40,7 +38,7 @@
     direction: ltr;
     font-family: "Times New Roman", serif;
     font-size: 10pt;
-    line-height: 1.65;
+    line-height: 1.55;
   }
   .header-logo {
     width: 32%;
@@ -48,66 +46,64 @@
     padding-top: 2pt;
   }
   .header-logo img {
-    height: 62px;
+    height: 58px;
   }
 
-  /* ═══════ Title ═══════ */
   .title-row {
     text-align: center;
-    margin: 2pt 0;
+    margin: 1pt 0;
     direction: ltr;
   }
   .title-line {
     display: inline-block;
-    text-decoration: underline;
+    border-bottom: 1.5pt solid #F25767;
+    padding-bottom: 1pt;
     color: #F25767;
     font-weight: bold;
   }
   .title-line .en {
     font-family: "Times New Roman", serif;
-    font-size: 15pt;
+    font-size: 14pt;
   }
   .title-line .ar {
     font-family: Arial, sans-serif;
-    font-size: 13pt;
+    font-size: 11pt;
     direction: rtl;
     unicode-bidi: bidi-override;
   }
 
-  /* ═══════ Hospital Name ═══════ */
   .info-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin: 4pt 0 2pt;
+    margin: 3pt 0 1pt;
   }
   .info-ar {
     font-family: "Times New Roman", serif;
     color: #42B895;
-    font-size: 13pt;
+    font-size: 11pt;
   }
   .info-en {
     font-family: "Times New Roman", serif;
     direction: ltr;
     text-align: left;
     color: #42B895;
-    font-size: 12.5pt;
+    font-size: 11pt;
   }
   .info-value {
     font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
     color: #4D38C2;
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: bold;
     display: inline;
     padding: 0 4px;
   }
 
-  /* ═══════ Table ═══════ */
   .trip-table {
     width: 100%;
     border-collapse: collapse;
-    direction: ltr;
-    margin: 3pt auto 0;
+    direction: rtl;
+    margin: 2pt auto 0;
   }
   .trip-table th, .trip-table td {
     border: 1pt solid #131313;
@@ -117,65 +113,64 @@
   }
   .trip-table thead th {
     font-family: Arial, sans-serif;
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: normal;
-    padding: 2pt 2pt;
-    line-height: 1.25;
+    padding: 1pt 2pt;
+    line-height: 1.2;
   }
   .trip-table thead th .en {
     font-family: "Times New Roman", serif;
-    font-size: 12pt;
+    font-size: 10.5pt;
     font-weight: normal;
     display: block;
   }
   .trip-table thead th .sub-en {
     font-family: "Times New Roman", serif;
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: normal;
   }
   .trip-table thead th.sub-header {
-    font-size: 10pt;
+    font-size: 9pt;
     padding: 1pt 2pt;
   }
   .trip-table thead th.sub-header .en {
-    font-size: 12pt;
+    font-size: 10pt;
   }
   .trip-table thead .dest-value {
     font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
     color: #4D38C2;
-    font-size: 13pt;
+    font-size: 12pt;
     font-weight: bold;
   }
   .trip-table tbody td {
-    height: 18pt;
+    height: 17pt;
     font-family: "Times New Roman", serif;
-    font-size: 13pt;
+    font-size: 12pt;
     color: #4D38C2;
     font-weight: bold;
     padding: 0 2pt;
   }
-  .col-r-time  { width: 106pt; }
-  .col-r-date  { width: 93pt; }
-  .col-d-time  { width: 97pt; }
-  .col-d-date  { width: 106pt; }
-  .col-staff   { width: 72pt; }
-  .col-driver  { width: 157pt; }
-  .col-vehicle { width: 62pt; }
-  .col-num     { width: 26pt; }
+  .col-num     { width: 24pt; }
+  .col-vehicle { width: 58pt; }
+  .col-driver  { width: 150pt; }
+  .col-staff   { width: 68pt; }
+  .col-d-date  { width: 96pt; }
+  .col-d-time  { width: 88pt; }
+  .col-r-date  { width: 88pt; }
+  .col-r-time  { width: 96pt; }
   .row-num {
     font-family: "Times New Roman", serif;
-    font-size: 16pt;
+    font-size: 14pt;
     color: #131313;
     font-weight: normal;
   }
 
-  /* ═══════ Footer ═══════ */
   .footer {
     display: flex;
     justify-content: space-between;
-    margin-top: 5pt;
-    font-size: 12.5pt;
-    line-height: 1.8;
+    margin-top: 3pt;
+    font-size: 11pt;
+    line-height: 1.6;
   }
   .footer-en {
     text-align: left;
@@ -184,25 +179,25 @@
   }
   .footer-en .label {
     font-weight: bold;
-    font-size: 12.5pt;
+    font-size: 11pt;
   }
   .footer-ar {
     text-align: right;
     width: 50%;
     font-family: Arial, sans-serif;
-    font-size: 11pt;
+    font-size: 10pt;
   }
   .dots {
     display: inline-block;
-    min-width: 200px;
+    min-width: 180px;
     border-bottom: 1px dotted #131313;
   }
   .footer-note {
     display: flex;
     justify-content: space-between;
-    margin-top: 4pt;
-    font-size: 10pt;
-    line-height: 1.3;
+    margin-top: 2pt;
+    font-size: 9pt;
+    line-height: 1.2;
   }
   .footer-note .ar {
     font-family: "Times New Roman", serif;
@@ -214,13 +209,12 @@
   }
 
   @media print {
-    body { padding: 3mm 6mm; }
+    body { padding: 2mm 5mm; }
   }
 </style>
 </head>
 <body>
 
-<!-- ═══════ Header ═══════ -->
 <div class="header">
   <div class="header-ar">
     سلطنة عمان<br>
@@ -241,12 +235,10 @@
   </div>
 </div>
 
-<!-- ═══════ Title ═══════ -->
 <div class="title-row">
   <span class="title-line"><span class="en">Ambulance Traffic Detection</span>&nbsp;&nbsp;&nbsp;<span class="ar">كشف حركة سيارات الاسعاف</span></span>
 </div>
 
-<!-- ═══════ Hospital Name ═══════ -->
 <div class="info-row">
   <div class="info-ar">
     اسم المركز / مستشفى : <span class="info-value">{{hospital_name}}</span> ......................................................
@@ -256,48 +248,47 @@
   </div>
 </div>
 
-<!-- ═══════ Table ═══════ -->
 <table class="trip-table">
   <thead>
     <tr style="visibility:collapse;height:0;">
-      <th class="col-r-time"></th>
-      <th class="col-r-date"></th>
-      <th class="col-d-time"></th>
-      <th class="col-d-date"></th>
-      <th class="col-staff"></th>
-      <th class="col-driver"></th>
-      <th class="col-vehicle"></th>
       <th class="col-num"></th>
+      <th class="col-vehicle"></th>
+      <th class="col-driver"></th>
+      <th class="col-staff"></th>
+      <th class="col-d-date"></th>
+      <th class="col-d-time"></th>
+      <th class="col-r-date"></th>
+      <th class="col-r-time"></th>
     </tr>
     <tr>
-      <th colspan="2">
-        وقت العودة الى مكان العمل
-        <span class="en">Time To Return To The Workplace</span>
-      </th>
-      <th colspan="2">
-        الجهة المحول اليها<br>
-        <span style="font-size:8pt">(مركز / مستشفى) : <span class="dest-value">{{destination}}</span></span><br>
-        <span class="sub-en" style="font-size:10pt">Transfer to(Center/Hospital).................</span>
-      </th>
-      <th class="col-staff" rowspan="2">
-        الرقم الوظيفي
-        <span class="en">Staff No.</span>
+      <th class="col-num" rowspan="2">م</th>
+      <th class="col-vehicle" rowspan="2">
+        رقم السيارة
+        <span class="en">Vehicle No.</span>
       </th>
       <th class="col-driver" rowspan="2">
         اسم السائق
         <span class="en">Driver Name</span>
       </th>
-      <th class="col-vehicle" rowspan="2">
-        رقم السيارة
-        <span class="en">Vehicle No.</span>
+      <th class="col-staff" rowspan="2">
+        الرقم الوظيفي
+        <span class="en">Staff No.</span>
       </th>
-      <th class="col-num" rowspan="2">م</th>
+      <th colspan="2">
+        الجهة المحول اليها<br>
+        <span style="font-size:7.5pt">(مركز / مستشفى) : <span class="dest-value">{{destination}}</span></span><br>
+        <span class="sub-en" style="font-size:9pt">Transfer to(Center/Hospital).................</span>
+      </th>
+      <th colspan="2">
+        وقت العودة الى مكان العمل
+        <span class="en">Time To Return To The Workplace</span>
+      </th>
     </tr>
     <tr>
-      <th class="sub-header col-r-time">الوقت<br><span class="en">Time</span></th>
-      <th class="sub-header col-r-date">التاريخ<br><span class="en">Date</span></th>
-      <th class="sub-header col-d-time">الوقت<br><span class="en">Time</span></th>
       <th class="sub-header col-d-date">التاريخ<br><span class="en">Date</span></th>
+      <th class="sub-header col-d-time">الوقت<br><span class="en">Time</span></th>
+      <th class="sub-header col-r-date">التاريخ<br><span class="en">Date</span></th>
+      <th class="sub-header col-r-time">الوقت<br><span class="en">Time</span></th>
     </tr>
   </thead>
   <tbody>
@@ -305,10 +296,9 @@
   </tbody>
 </table>
 
-<!-- ═══════ Footer ═══════ -->
 <div class="footer">
   <div class="footer-ar">
-    <div style="font-size:15pt">اعتماد،،،</div>
+    <div style="font-size:13pt">اعتماد،،،</div>
     <div>المسئول المباشر : <span class="dots"></span></div>
     <div>مسئول التمريض : <span class="dots"></span></div>
   </div>
@@ -320,8 +310,8 @@
 </div>
 
 <div class="footer-note">
+  <span class="ar">* ترسل الاستمارة الى مدير الشؤون الادارية نهاية كل اسبوع.</span>
   <span class="en">* The form shall be sent to Director of administrative affairs at the end of each week.</span>
-  <span class="ar">* ترسل الاستمارة الى مدير الشؤون الادارية نهاية كل شهر.</span>
 </div>
 
 </body>
