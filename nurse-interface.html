@@ -2736,6 +2736,8 @@
                 allYearRecords.unshift(optimisticRecord);
                 nurseRecordsPage = 1;
                 displayRecords(allRecords);
+                // Update yearly total instantly (don't wait for server)
+                document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
             }
