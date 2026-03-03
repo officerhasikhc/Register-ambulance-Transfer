@@ -2782,14 +2782,28 @@
             if (_arabicFontBytesCache) return _arabicFontBytesCache;
             var urls = [
                 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiri/Amiri-Regular.ttf',
-                'https://fonts.gstatic.com/s/amiri/v27/J7aRnpd8CGxBHqUpvrIw74NL.ttf'
+                'https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf',
+                'https://mirrors.ibiblio.org/CTAN/fonts/amiri/Amiri-Regular.ttf'
             ];
             for (var i = 0; i < urls.length; i++) {
                 try {
                     var r = await fetch(urls[i], { mode: 'cors' });
-                    if (r.ok) { _arabicFontBytesCache = await r.arrayBuffer(); return _arabicFontBytesCache; }
-                } catch(e) {}
+                    if (!r.ok) continue;
+                    var buf = await r.arrayBuffer();
+                    if (buf.byteLength < 50000) continue;
+                    var sig = new Uint8Array(buf, 0, 4);
+                    if (sig[0] === 0x77 && sig[1] === 0x4F && sig[2] === 0x46) {
+                        console.warn('Font URL returned WOFF/WOFF2, skipping:', urls[i]);
+                        continue;
+                    }
+                    _arabicFontBytesCache = buf;
+                    console.log('Arabic font loaded from:', urls[i], '(' + buf.byteLength + ' bytes)');
+                    return buf;
+                } catch(e) {
+                    console.warn('Font URL failed:', urls[i], e.message);
+                }
             }
+            console.error('Could not load Arabic font from any source');
             return null;
         }
 
@@ -2871,12 +2885,17 @@
                     acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
                 } catch (nae) {}
 
-                // تحميل وتضمين خط عربي (Amiri) للعرض الصحيح في كل المتصفحات
                 var arabicFont = null;
                 try {
                     var fontBytes = await loadArabicFontBytes();
-                    if (fontBytes) arabicFont = await pdfDoc.embedFont(fontBytes);
-                } catch(fe) { console.warn('Arabic font embed failed:', fe); }
+                    if (fontBytes) {
+                        arabicFont = await pdfDoc.embedFont(fontBytes);
+                        console.log('Arabic font embedded in PDF successfully');
+                    }
+                } catch(fe) {
+                    console.error('embedFont failed — font data might not be TTF:', fe);
+                    arabicFont = null;
+                }
 
                 function setText(name, value) {
                     try {
@@ -2901,20 +2920,25 @@
                             var widgets = field.acroField.getWidgets();
                             if (widgets.length > 0) {
                                 var rect = widgets[0].getRectangle();
-                                form.removeField(field);
                                 var shaped = ArabicReshaper.reshape(displayName);
                                 var fontSize = Math.min(rect.height * 0.6, 10);
                                 var tw = arabicFont.widthOfTextAtSize(shaped, fontSize);
-                                pdfPage.drawText(shaped, {
-                                    x: rect.x + (rect.width - tw) / 2,
-                                    y: rect.y + (rect.height - fontSize) / 2 + 1,
-                                    size: fontSize,
-                                    font: arabicFont,
-                                    color: lib.rgb(0, 0, 0)
-                                });
-                                return;
+                                if (tw > 0 && tw < rect.width * 2) {
+                                    pdfPage.drawText(shaped, {
+                                        x: rect.x + (rect.width - tw) / 2,
+                                        y: rect.y + (rect.height - fontSize) / 2 + 1,
+                                        size: fontSize,
+                                        font: arabicFont,
+                                        color: lib.rgb(0, 0, 0)
+                                    });
+                                    form.removeField(field);
+                                    console.log('Drew Arabic name for', name, 'at', Math.round(rect.x) + ',' + Math.round(rect.y));
+                                    return;
+                                }
                             }
-                        } catch(e) {}
+                        } catch(e) {
+                            console.warn('Direct draw failed for ' + name + ':', e.message);
+                        }
                     }
                     setText(name, displayName);
                 }
