@@ -2295,22 +2295,24 @@
                 clickedBtn.style.opacity = '0.7';
             }
 
-            // Scroll immediately to the destination field (no delay)
-            const destinationField = document.getElementById('destination');
-            if (destinationField) {
-                smoothScrollToElement(destinationField, 400);
-                setTimeout(() => destinationField.focus(), 450);
-            }
-            
-            // Gentle pulse on fields to complete (destination, patient name)
-            const destGroup = document.getElementById('destination')?.closest('.form-group');
-            const patientGroup = document.getElementById('patientName')?.closest('.form-group');
-            [destGroup, patientGroup].forEach(g => {
-                if (g) g.classList.add('field-attention');
+            // Wait for layout to settle after form filling, then scroll
+            requestAnimationFrame(() => {
+                const destinationField = document.getElementById('destination');
+                if (destinationField) {
+                    destinationField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => destinationField.focus(), 350);
+                }
+
+                // Gentle pulse on fields to complete
+                const destGroup = document.getElementById('destination')?.closest('.form-group');
+                const patientGroup = document.getElementById('patientName')?.closest('.form-group');
+                [destGroup, patientGroup].forEach(g => {
+                    if (g) g.classList.add('field-attention');
+                });
+                setTimeout(() => {
+                    [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
+                }, 6000);
             });
-            setTimeout(() => {
-                [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
-            }, 6000);
         }
 
         function clearDatePickers() {
@@ -3730,6 +3732,33 @@
             );
         }
         
+        // Show cached pending trips instantly (before server fetch completes)
+        (function showCachedPendingTrips() {
+            try {
+                // Try DataCache first (most reliable - from previous session or login prefetch)
+                var year = new Date().getFullYear();
+                var month = new Date().getMonth() + 1;
+                var cacheKey = 'cache_nurse_data_' + year + '_' + month;
+                var cached = null;
+                try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
+                if (cached && cached.data && cached.data.trips) {
+                    var nurseTrips = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    if (nurseTrips.length > 0) {
+                        displayPendingTrips(nurseTrips);
+                        return;
+                    }
+                }
+                // Fallback: localStorage pending_trips_for_nurse (from driver cross-tab sync)
+                var localTrips = localStorage.getItem('pending_trips_for_nurse');
+                if (localTrips) {
+                    var trips = JSON.parse(localTrips);
+                    if (Array.isArray(trips) && trips.length > 0) {
+                        displayPendingTrips(trips);
+                    }
+                }
+            } catch(e) {}
+        })();
+
         // Initial load: session from cache first (instant), then combined server fetch
         loadUserSession();
         loadAllNurseData();
