@@ -211,17 +211,23 @@
 
         /* Pending Trips Alert */
         .pending-trips-alert {
-            background: var(--warning-light);
-            border: 2px solid var(--warning);
-            border-radius: 16px;
-            padding: 20px;
+            background: #fef8f8;
+            border: 2px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px 16px;
             margin-bottom: 24px;
-            animation: pulse 2s infinite;
+            transition: border-color 0.4s, box-shadow 0.4s, background 0.4s;
         }
 
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+        .pending-trips-alert.has-trips {
+            border-color: #f87171;
+            background: #fef2f2;
+            animation: driverPulse 2.5s ease-in-out infinite;
+        }
+
+        @keyframes driverPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.3); }
+            50% { box-shadow: 0 0 0 8px rgba(248, 113, 113, 0); }
         }
 
         @keyframes saving-pulse {
@@ -230,12 +236,67 @@
         }
 
         .pending-trips-alert h3 {
-            color: #92400e;
-            font-size: 16px;
+            color: #374151;
+            font-size: 15px;
+            font-weight: 700;
             margin-bottom: 12px;
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+
+        .driver-trips-badge {
+            display: none;
+            background: #dc2626;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            flex-shrink: 0;
+            animation: badgeBounce 1s ease-in-out infinite;
+        }
+
+        .pending-trips-alert.has-trips .driver-trips-badge {
+            display: inline-flex;
+        }
+
+        @keyframes badgeBounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .btn-refresh-trips {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+
+        .btn-refresh-trips:hover {
+            background: #e5e7eb;
+            border-color: #9ca3af;
+        }
+
+        .btn-refresh-trips:active {
+            transform: scale(0.96);
+        }
+
+        .btn-refresh-trips.refreshing svg {
+            animation: spin 0.8s linear infinite;
         }
 
         .pending-trip-card {
@@ -1109,12 +1170,18 @@
 
         <!-- Pending Trips from Drivers -->
         <div class="pending-trips-alert" id="pendingTripsAlert">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 data-en="🚗 Driver Trips" data-ar="🚗 رحلات السائقين" style="margin: 0;">🚗 Driver Trips</h3>
-                <button onclick="loadPendingTrips(true, true)" style="background: #92400e; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px;" data-en="🔄 Refresh" data-ar="🔄 تحديث">🔄 Refresh</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin: 0;">
+                    <span data-en="Driver Trips" data-ar="رحلات السائقين">Driver Trips</span>
+                    <span class="driver-trips-badge" id="driverTripsBadge">!</span>
+                </h3>
+                <button class="btn-refresh-trips" id="btnRefreshTrips" onclick="refreshDriverTrips(this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.4-4.3L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.3L2.5 16"/></svg>
+                    <span data-en="Refresh" data-ar="تحديث">Refresh</span>
+                </button>
             </div>
             <div id="pendingTripsContainer">
-                <div style="background: white; padding: 16px; border-radius: 10px; text-align: center; color: #6b7280;">
+                <div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;">
                     <span data-en="No pending trips from drivers" data-ar="لا توجد رحلات قيد الانتظار">No pending trips from drivers</span>
                 </div>
             </div>
@@ -1995,8 +2062,16 @@
                 const month = document.getElementById('monthFilter').value;
                 DataCache.invalidate('cache_nurse_data_' + year + '_' + month);
             }
-            // Route through the combined endpoint — avoids separate request
             await loadAllNurseData();
+        }
+
+        async function refreshDriverTrips(btn) {
+            if (btn) btn.classList.add('refreshing');
+            try {
+                await loadPendingTrips(true, true);
+            } finally {
+                if (btn) setTimeout(() => btn.classList.remove('refreshing'), 600);
+            }
         }
 
         // Store trips globally for usePendingTrip function
@@ -2010,14 +2085,24 @@
             if (_recentlySubmittedTripIds.size > 0) {
                 filtered = filtered.filter(t => !_recentlySubmittedTripIds.has(t.tripId));
             }
-            // Store trips for later use
             currentPendingTrips = filtered;
             localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
 
-            if (!currentPendingTrips || currentPendingTrips.length === 0) {
+            const alertEl = document.getElementById('pendingTripsAlert');
+            const badge = document.getElementById('driverTripsBadge');
+            const hasTrips = currentPendingTrips && currentPendingTrips.length > 0;
+
+            if (alertEl) {
+                alertEl.classList.toggle('has-trips', hasTrips);
+            }
+            if (badge) {
+                badge.textContent = hasTrips ? currentPendingTrips.length : '!';
+            }
+
+            if (!hasTrips) {
                 const container = document.getElementById('pendingTripsContainer');
                 container.innerHTML = `
-                    <div style="background: white; padding: 16px; border-radius: 10px; text-align: center; color: #6b7280;">
+                    <div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;">
                         <span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span>
                     </div>
                 `;
@@ -2825,12 +2910,18 @@
 
         async function loadRecords(silent = false) {
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (!silent && loadingSpinner) {
+            const year = document.getElementById('yearFilter').value;
+            const month = document.getElementById('monthFilter').value;
+            const cacheKey = 'cache_nurse_data_' + year + '_' + month;
+            const hasCachedData = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS);
+
+            if (!silent && !hasCachedData && loadingSpinner) {
                 loadingSpinner.style.display = 'block';
             }
 
-            // Use the combined endpoint — it returns records + yearly total + pending trips all at once
+            window._recordsLoadingActive = true;
             await loadAllNurseData();
+            window._recordsLoadingActive = false;
 
             if (loadingSpinner) loadingSpinner.style.display = 'none';
         }
@@ -3609,9 +3700,11 @@
                         }
                     }
                     
-                    // Hide loading spinner
-                    const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    // Hide loading spinner after DOM has rendered
+                    requestAnimationFrame(() => {
+                        const loadingSpinner = document.getElementById('recordsLoadingSpinner');
+                        if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    });
                 },
                 (result) => result.success ? result : null
             );
@@ -3621,27 +3714,50 @@
         loadUserSession();
         loadAllNurseData();
 
-        // Background pre-warming: after current month loads, silently prefetch other months
-        // so switching between months in the filter is instant
+        // Background pre-warming: after current month loads, silently prefetch ALL months
+        // Priority: recent months first (most likely to be viewed), then older
         setTimeout(function() {
             try {
                 const session = JSON.parse(localStorage.getItem('userSession') || '{}');
                 const staffNum = session.staffNumber || '';
                 const year = new Date().getFullYear();
                 const currentMonth = new Date().getMonth() + 1;
-                // Prefetch recent months (current-1, current-2) silently
-                for (let m = currentMonth - 1; m >= Math.max(1, currentMonth - 2); m--) {
-                    const key = 'cache_nurse_data_' + year + '_' + m;
-                    const existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
-                    if (existing && existing.data) continue; // already cached
-                    let warmUrl = WEB_APP_URL + '?action=getNurseData&year=' + year + '&month=' + m;
+
+                var monthsToWarm = [];
+                // Current year: all months except current (already loaded)
+                for (var m = currentMonth - 1; m >= 1; m--) {
+                    monthsToWarm.push({ y: year, m: m });
+                }
+                // Previous year: last 3 months
+                var prevYear = year - 1;
+                for (var pm = 12; pm >= 10; pm--) {
+                    monthsToWarm.push({ y: prevYear, m: pm });
+                }
+                // Also warm "all" for current year
+                monthsToWarm.push({ y: year, m: 'all' });
+
+                var warmIdx = 0;
+                function warmNext() {
+                    if (warmIdx >= monthsToWarm.length) return;
+                    var item = monthsToWarm[warmIdx++];
+                    var key = 'cache_nurse_data_' + item.y + '_' + item.m;
+                    var existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data) {
+                        setTimeout(warmNext, 200);
+                        return;
+                    }
+                    var warmUrl = WEB_APP_URL + '?action=getNurseData&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
                     if (staffNum) warmUrl += '&staffNumber=' + encodeURIComponent(staffNum);
                     fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
                         if (result && result.success) DataCache.set(key, result);
-                    }).catch(function() {});
+                    }).catch(function() {}).finally(function() {
+                        setTimeout(warmNext, 1500);
+                    });
                 }
+                warmNext();
             } catch(e) {}
-        }, 5000); // Wait 5s after page load to avoid competing with main data fetch
+        }, 3000);
 
         // Initialize SyncManager for instant local saves + background sync
         SyncManager.init(WEB_APP_URL).then(() => {
