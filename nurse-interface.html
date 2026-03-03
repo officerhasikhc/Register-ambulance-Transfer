@@ -1294,12 +1294,14 @@
 
     <!-- Warning Modal — Incomplete Trips -->
     <div id="warningModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-icon" style="background: #fef3c7; color: #d97706;">⚠</div>
-            <h3 id="warningModalTitle" style="color: #92400e;">لا يمكن تسجيل رحلة جديدة</h3>
-            <p id="warningModalMessage" style="color: #78716c; font-size: 14px; line-height: 1.7; margin-bottom: 16px;">توجد رحلات معلقة لم تُكتمل بعد. يرجى إكمال بياناتها أولاً بالنقر على زر "إكمال البيانات" في بطاقة الرحلة أعلاه.</p>
-            <div id="warningTripIds" style="background: #fef3c7; color: #92400e; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; margin-bottom: 18px; direction: ltr;"></div>
-            <button class="btn btn-primary" style="background: #d97706; min-width: 140px;" onclick="closeWarningAndScroll()">حسناً</button>
+        <div class="modal-content" style="padding: 22px 26px; max-width: 380px; border-radius: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <span style="font-size: 20px; color: #d97706;">⚠</span>
+                <h3 id="warningModalTitle" style="color: #1f2937; font-size: 15px; font-weight: 600; margin: 0;">Cannot Submit New Record</h3>
+            </div>
+            <p id="warningModalMessage" style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0 0 12px;">There are incomplete trips pending. Please complete them first using the "Complete Data" button above.</p>
+            <div id="warningTripIds" style="background: #f9fafb; border: 1px solid #e5e7eb; color: #374151; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 14px; direction: ltr; text-align: center;"></div>
+            <button class="btn btn-primary" style="background: #4b5563; font-size: 13px; padding: 8px 28px; border-radius: 8px; min-width: 0;" onclick="closeWarningAndScroll()">OK</button>
         </div>
     </div>
 
