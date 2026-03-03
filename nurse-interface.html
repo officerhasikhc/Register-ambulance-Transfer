@@ -3779,6 +3779,19 @@
             SyncManager.cleanup();
         }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
 
+        // Cross-tab sync: driver writes pending_trips_for_nurse to localStorage
+        // If on same device, nurse sees new trips instantly without waiting for server poll
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'pending_trips_for_nurse' && e.newValue) {
+                try {
+                    var trips = JSON.parse(e.newValue);
+                    if (Array.isArray(trips) && trips.length > 0) {
+                        smartRefreshNurseData();
+                    }
+                } catch(err) {}
+            }
+        });
+
         // Listen for background session refresh (admin changed nurse name on server)
         window.addEventListener('sessionRefreshed', function(e) {
             const nurseField = document.getElementById('nurseName');
@@ -3797,7 +3810,6 @@
         let isRefreshing = false;
         
         async function smartRefreshNurseData() {
-            // Skip if page is hidden (saves bandwidth) or already refreshing
             if (document.hidden || isRefreshing) return;
             isRefreshing = true;
             try {
@@ -3811,8 +3823,14 @@
             }
         }
         
-        // Refresh every 15 seconds (combined endpoint returns everything in 1 request)
-        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 15000);
+        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 10000);
+
+        // Instant refresh when nurse returns to the tab
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                smartRefreshNurseData();
+            }
+        });
 
         // Track if logout is in progress to prevent spinner issues
         let isLoggingOut = false;

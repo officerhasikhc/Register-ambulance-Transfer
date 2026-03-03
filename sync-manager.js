@@ -206,24 +206,21 @@ const SyncManager = {
         const entry = await this._getEntry(localId);
         if (!entry || entry.status === 'synced' || entry.status === 'syncing') return;
 
-        // Mark as syncing
         await this._updateStatus(localId, 'syncing');
 
         try {
-            // Check if online
             if (typeof navigator !== 'undefined' && !navigator.onLine) {
                 await this._updateStatus(localId, 'queued');
-                console.log('📴 SyncManager: Offline, keeping queued:', localId);
+                this._scheduleOnlineRetry(localId);
                 return;
             }
 
             const result = await ReliablePost.send(this._webAppUrl, entry.data, {
                 background: false,
-                timeout: 30000
+                timeout: 45000
             });
 
             if (result.success && !result.offline) {
-                // Server confirmed — mark as synced and store server response
                 await this._updateEntry(localId, {
                     status: 'synced',
                     serverResponse: result,
@@ -232,9 +229,8 @@ const SyncManager = {
                 console.log('✅ SyncManager: Synced to server:', localId);
                 this._emit('synced', { localId, action: entry.action, serverResponse: result, data: entry.data });
             } else if (result.offline || result.queued) {
-                // ReliablePost queued it — keep as queued for our retry
                 await this._updateStatus(localId, 'queued');
-                console.log('📴 SyncManager: Queued for later:', localId);
+                this._scheduleOnlineRetry(localId);
             } else {
                 throw new Error(result.error || 'Unknown sync error');
             }
@@ -242,17 +238,25 @@ const SyncManager = {
             const entry2 = await this._getEntry(localId);
             const retryCount = (entry2 ? entry2.retryCount : 0) + 1;
 
-            if (retryCount >= 5) {
+            if (retryCount >= 8) {
                 await this._updateEntry(localId, { status: 'failed', retryCount: retryCount });
                 console.error('❌ SyncManager: Max retries reached:', localId);
                 this._emit('failed', { localId, action: entry.action, error: error.message });
             } else {
                 await this._updateEntry(localId, { status: 'queued', retryCount: retryCount });
-                console.warn('⚠️ SyncManager: Retry', retryCount, 'for:', localId);
-                // Exponential backoff retry
-                setTimeout(() => this._syncOne(localId), 3000 * Math.pow(2, retryCount - 1));
+                var delay = Math.min(2000 * Math.pow(1.5, retryCount - 1), 30000);
+                console.warn('⚠️ SyncManager: Retry', retryCount, 'in', Math.round(delay/1000) + 's for:', localId);
+                setTimeout(() => this._syncOne(localId), delay);
             }
         }
+    },
+
+    _scheduleOnlineRetry(localId) {
+        var handler = function() {
+            window.removeEventListener('online', handler);
+            setTimeout(function() { SyncManager._syncOne(localId); }, 500);
+        };
+        window.addEventListener('online', handler);
     },
 
     /**
@@ -265,19 +269,25 @@ const SyncManager = {
         try {
             const db = await this._openDB();
             const entries = await this._getByStatus('queued');
+            // Also retry items stuck in 'syncing' (e.g. page closed mid-sync)
+            const stuck = await this._getByStatus('syncing');
+            const stuckOld = stuck.filter(e => Date.now() - e.createdAt > 30000);
+            const allToSync = [...entries, ...stuckOld];
 
-            if (entries.length === 0) {
+            if (allToSync.length === 0) {
                 this._syncing = false;
                 return;
             }
 
-            console.log(`🔄 SyncManager: Syncing ${entries.length} queued items...`);
+            console.log(`🔄 SyncManager: Syncing ${allToSync.length} items...`);
 
-            for (const entry of entries) {
-                // Skip items older than 48 hours
-                if (Date.now() - entry.createdAt > 48 * 60 * 60 * 1000) {
+            for (const entry of allToSync) {
+                if (Date.now() - entry.createdAt > 72 * 60 * 60 * 1000) {
                     await this._updateStatus(entry.localId, 'expired');
                     continue;
+                }
+                if (stuckOld.includes(entry)) {
+                    await this._updateStatus(entry.localId, 'queued');
                 }
                 await this._syncOne(entry.localId);
             }

@@ -16,8 +16,8 @@
 
 const ReliablePost = {
     OFFLINE_QUEUE_KEY: 'reliable_post_queue',
-    MAX_RETRIES: 2,
-    RETRY_DELAY: 1500,
+    MAX_RETRIES: 3,
+    RETRY_DELAY: 1000,
 
     /**
      * Send POST data reliably to Google Apps Script
@@ -29,28 +29,24 @@ const ReliablePost = {
      * @returns {Promise<{success: boolean, data?: any, offline?: boolean, error?: string}>}
      */
     async send(url, data, options = {}) {
-        const timeout = options.timeout || 30000;
+        const timeout = options.timeout || 45000;
         const background = options.background || false;
 
-        // Try CORS mode first (full response visibility)
         for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
             try {
-                const result = await this._postWithTimeout(url, data, 'cors', timeout);
+                var attemptTimeout = timeout + (attempt * 5000);
+                const result = await this._postWithTimeout(url, data, 'cors', attemptTimeout);
                 if (result && result.success !== undefined) {
                     return result;
                 }
-                // If response doesn't have success field, treat as success
-                // (Google Apps Script always returns JSON with success field)
                 return { success: true, data: result };
             } catch (error) {
                 console.warn(`ReliablePost: CORS attempt ${attempt + 1} failed:`, error.message);
                 
-                // Don't retry on certain errors
                 if (error.message && error.message.includes('400')) break;
                 
-                // Wait before retry
                 if (attempt < this.MAX_RETRIES) {
-                    await this._sleep(this.RETRY_DELAY * Math.pow(2, attempt));
+                    await this._sleep(this.RETRY_DELAY * Math.pow(1.5, attempt));
                 }
             }
         }

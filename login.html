@@ -658,32 +658,61 @@
             var month = new Date().getMonth() + 1;
             
             if (userType === 'nurse') {
-                // Prefetch CURRENT MONTH only (not full year) — avoids flash of all-year data
+                // Phase 1: Current month (highest priority - immediate)
                 var nurseUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
                 if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
-                console.log('[Prefetch] Nurse data (month ' + month + '):', nurseUrl);
                 fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_nurse_data_' + year + '_' + month, result);
-                        console.log('[Prefetch] Nurse data cached for month ' + month);
                     }
                 }).catch(function() {});
+
+                // Phase 2: Recent months (staggered to avoid network saturation)
+                var monthsToWarm = [];
+                for (var m = month - 1; m >= 1; m--) {
+                    monthsToWarm.push({ y: year, m: m });
+                }
+                var prevYear = year - 1;
+                for (var pm = 12; pm >= 10; pm--) {
+                    monthsToWarm.push({ y: prevYear, m: pm });
+                }
+
+                var wIdx = 0;
+                function warmNextLogin() {
+                    if (wIdx >= monthsToWarm.length) return;
+                    var item = monthsToWarm[wIdx++];
+                    var key = 'cache_nurse_data_' + item.y + '_' + item.m;
+                    if (typeof DataCache !== 'undefined') {
+                        var existing = DataCache.get(key, 15 * 60 * 1000);
+                        if (existing && existing.data) {
+                            setTimeout(warmNextLogin, 100);
+                            return;
+                        }
+                    }
+                    var warmUrl = url + '?action=getNurseData&year=' + item.y + '&month=' + item.m;
+                    if (staffNumber) warmUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
+                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success && typeof DataCache !== 'undefined') {
+                            DataCache.set(key, result);
+                        }
+                    }).catch(function() {}).finally(function() {
+                        setTimeout(warmNextLogin, 2000);
+                    });
+                }
+                setTimeout(warmNextLogin, 1500);
+
             } else if (userType === 'driver') {
                 var driverUrl = url + '?action=getPendingTrips';
-                console.log('[Prefetch] Driver data:', driverUrl);
                 fetch(driverUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_pending_trips', result.trips || []);
-                        console.log('[Prefetch] Driver data cached successfully');
                     }
                 }).catch(function() {});
             } else if (userType === 'admin') {
                 var adminUrl = url + '?action=getAdminData&year=' + year + '&month=' + month;
-                console.log('[Prefetch] Admin data:', adminUrl);
                 fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_admin_data', result);
-                        console.log('[Prefetch] Admin data cached successfully');
                     }
                 }).catch(function() {});
             }
