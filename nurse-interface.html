@@ -1275,8 +1275,9 @@
                     </button>
                 </div>
             </div>
-            <div class="loading-spinner" id="recordsLoadingSpinner">
-                <div class="spinner"></div>
+            <div id="recordsLoadingSpinner" style="display:none; text-align:center; padding:18px 0;">
+                <div class="spinner" style="margin:0 auto 8px;"></div>
+                <span style="font-size:12px; color:#6b7280;">Loading records...</span>
             </div>
             <div id="recordsContainer"></div>
         </div>
@@ -2609,12 +2610,27 @@
                 displayRecords(allRecords);
                 console.log('✅ Local record updated for ID:', editId);
             } else {
-                // === NEW RECORD: show instantly with PREDICTED real ID ===
-                const predictedId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
-                    ? SyncManager.predictNextId()
-                    : 'pending_' + Date.now();
+                // === NEW RECORD or COMPLETING PENDING TRIP ===
+                // If completing a pending trip, use its existing ID (don't predict a new one)
+                // If truly new record, predict the next ID locally for instant display
+                let displayId;
+                if (formData.tripId) {
+                    // Completing a pending trip — keep its original ID
+                    displayId = formData.tripId;
+                    console.log('✅ Completing pending trip with existing ID:', displayId);
+                } else {
+                    // Truly new record — predict next ID
+                    displayId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
+                        ? SyncManager.predictNextId()
+                        : 'pending_' + Date.now();
+                    // Inject predicted ID into formData so server uses it
+                    if (displayId && !displayId.startsWith('pending_')) {
+                        formData.tripId = displayId;
+                    }
+                    console.log('✅ New record with predicted ID:', displayId);
+                }
                 const optimisticRecord = {
-                    'ID': predictedId,
+                    'ID': displayId,
                     'Timestamp': new Date().toISOString(),
                     'Vehicle Number': formData.vehicleNumber,
                     'Driver Name': formData.driverName,
@@ -2634,11 +2650,6 @@
                 displayRecords(allRecords);
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
-                // Inject predicted ID into formData so server uses it
-                if (predictedId && !predictedId.startsWith('pending_')) {
-                    formData.tripId = predictedId;
-                }
-                console.log('✅ New record shown locally with ID:', predictedId);
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
@@ -2825,15 +2836,15 @@
         }
 
         async function loadRecords(silent = false) {
-            const recordsSection = document.querySelector('.records-section');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (!silent && recordsSection && loadingSpinner) {
-                recordsSection.classList.add('loading');
-                loadingSpinner.classList.add('active');
+            if (!silent && loadingSpinner) {
+                loadingSpinner.style.display = 'block';
             }
 
             // Use the combined endpoint — it returns records + yearly total + pending trips all at once
             await loadAllNurseData();
+
+            if (loadingSpinner) loadingSpinner.style.display = 'none';
         }
 
         function displayRecords(records) {
@@ -3384,9 +3395,9 @@
             }
             
             updateYearlyTotalLabel();
-            loadRecords();
+            loadRecords(false);
         });
-        document.getElementById('monthFilter').addEventListener('change', loadRecords);
+        document.getElementById('monthFilter').addEventListener('change', () => loadRecords(false));
 
         // ============================================
         // INITIALIZE
@@ -3601,11 +3612,9 @@
                         }
                     }
                     
-                    // Hide loading spinners
-                    const recordsSection = document.querySelector('.records-section');
+                    // Hide loading spinner
                     const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-                    if (recordsSection) recordsSection.classList.remove('loading');
-                    if (loadingSpinner) loadingSpinner.classList.remove('active');
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
                 },
                 (result) => result.success ? result : null
             );
