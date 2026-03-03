@@ -2669,144 +2669,6 @@
             return value.toString().trim();
         }
 
-        /* ═══════════════ Arabic Reshaper ═══════════════ */
-        var ArabicReshaper = (function() {
-            var FORMS = {
-                '\u0621':['\uFE80'],
-                '\u0622':['\uFE81','\uFE82'],
-                '\u0623':['\uFE83','\uFE84'],
-                '\u0624':['\uFE85','\uFE86'],
-                '\u0625':['\uFE87','\uFE88'],
-                '\u0626':['\uFE89','\uFE8A','\uFE8B','\uFE8C'],
-                '\u0627':['\uFE8D','\uFE8E'],
-                '\u0628':['\uFE8F','\uFE90','\uFE91','\uFE92'],
-                '\u0629':['\uFE93','\uFE94'],
-                '\u062A':['\uFE95','\uFE96','\uFE97','\uFE98'],
-                '\u062B':['\uFE99','\uFE9A','\uFE9B','\uFE9C'],
-                '\u062C':['\uFE9D','\uFE9E','\uFE9F','\uFEA0'],
-                '\u062D':['\uFEA1','\uFEA2','\uFEA3','\uFEA4'],
-                '\u062E':['\uFEA5','\uFEA6','\uFEA7','\uFEA8'],
-                '\u062F':['\uFEA9','\uFEAA'],
-                '\u0630':['\uFEAB','\uFEAC'],
-                '\u0631':['\uFEAD','\uFEAE'],
-                '\u0632':['\uFEAF','\uFEB0'],
-                '\u0633':['\uFEB1','\uFEB2','\uFEB3','\uFEB4'],
-                '\u0634':['\uFEB5','\uFEB6','\uFEB7','\uFEB8'],
-                '\u0635':['\uFEB9','\uFEBA','\uFEBB','\uFEBC'],
-                '\u0636':['\uFEBD','\uFEBE','\uFEBF','\uFEC0'],
-                '\u0637':['\uFEC1','\uFEC2','\uFEC3','\uFEC4'],
-                '\u0638':['\uFEC5','\uFEC6','\uFEC7','\uFEC8'],
-                '\u0639':['\uFEC9','\uFECA','\uFECB','\uFECC'],
-                '\u063A':['\uFECD','\uFECE','\uFECF','\uFED0'],
-                '\u0640':['\u0640','\u0640','\u0640','\u0640'],
-                '\u0641':['\uFED1','\uFED2','\uFED3','\uFED4'],
-                '\u0642':['\uFED5','\uFED6','\uFED7','\uFED8'],
-                '\u0643':['\uFED9','\uFEDA','\uFEDB','\uFEDC'],
-                '\u0644':['\uFEDD','\uFEDE','\uFEDF','\uFEE0'],
-                '\u0645':['\uFEE1','\uFEE2','\uFEE3','\uFEE4'],
-                '\u0646':['\uFEE5','\uFEE6','\uFEE7','\uFEE8'],
-                '\u0647':['\uFEE9','\uFEEA','\uFEEB','\uFEEC'],
-                '\u0648':['\uFEED','\uFEEE'],
-                '\u0649':['\uFEEF','\uFEF0'],
-                '\u064A':['\uFEF1','\uFEF2','\uFEF3','\uFEF4']
-            };
-            var LAM_ALEF = {
-                '\u0622':['\uFEF5','\uFEF6'],
-                '\u0623':['\uFEF7','\uFEF8'],
-                '\u0625':['\uFEF9','\uFEFA'],
-                '\u0627':['\uFEFB','\uFEFC']
-            };
-            var LAM = '\u0644';
-
-            function isDual(ch)  { var f = FORMS[ch]; return f && f.length === 4; }
-            function isRight(ch) { var f = FORMS[ch]; return f && f.length >= 2; }
-            function isMark(ch)  { var c = ch.charCodeAt(0); return (c >= 0x064B && c <= 0x065F) || c === 0x0670; }
-
-            function reshape(text) {
-                if (!text) return '';
-                var base = [];
-                for (var i = 0; i < text.length; i++) {
-                    if (isMark(text[i])) {
-                        if (base.length) base[base.length - 1].m += text[i];
-                    } else {
-                        base.push({ c: text[i], m: '' });
-                    }
-                }
-                var chars = [];
-                for (var i = 0; i < base.length; i++) {
-                    if (base[i].c === LAM && i + 1 < base.length && LAM_ALEF[base[i + 1].c]) {
-                        chars.push({ c: LAM, alef: base[i + 1].c, la: true, m: base[i].m + base[i + 1].m });
-                        i++;
-                    } else {
-                        chars.push(base[i]);
-                    }
-                }
-                var out = '';
-                for (var i = 0; i < chars.length; i++) {
-                    var e = chars[i];
-                    if (e.la) {
-                        var pj = (i > 0 && !chars[i - 1].la && isDual(chars[i - 1].c));
-                        out += (pj ? LAM_ALEF[e.alef][1] : LAM_ALEF[e.alef][0]) + e.m;
-                        continue;
-                    }
-                    var f = FORMS[e.c];
-                    if (!f) { out += e.c + e.m; continue; }
-                    var pj = false;
-                    if (i > 0) {
-                        var p = chars[i - 1];
-                        if (!p.la && isDual(p.c)) pj = isRight(e.c);
-                    }
-                    var nj = false;
-                    if (i + 1 < chars.length && isDual(e.c)) {
-                        var nx = chars[i + 1];
-                        if (nx.la || isRight(nx.c)) nj = true;
-                    }
-                    var fi = (pj && nj) ? 3 : pj ? 1 : nj ? 2 : 0;
-                    out += (fi < f.length ? f[fi] : f[0]) + e.m;
-                }
-                var clusters = [], cur = '';
-                for (var i = 0; i < out.length; i++) {
-                    if (isMark(out[i])) { cur += out[i]; }
-                    else { if (cur) clusters.push(cur); cur = out[i]; }
-                }
-                if (cur) clusters.push(cur);
-                clusters.reverse();
-                return clusters.join('');
-            }
-            return { reshape: reshape };
-        })();
-
-        /* ═══════════════ Arabic Font Loader ═══════════════ */
-        var _arabicFontBytesCache = null;
-        async function loadArabicFontBytes() {
-            if (_arabicFontBytesCache) return _arabicFontBytesCache;
-            var urls = [
-                'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiri/Amiri-Regular.ttf',
-                'https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf',
-                'https://mirrors.ibiblio.org/CTAN/fonts/amiri/Amiri-Regular.ttf'
-            ];
-            for (var i = 0; i < urls.length; i++) {
-                try {
-                    var r = await fetch(urls[i], { mode: 'cors' });
-                    if (!r.ok) continue;
-                    var buf = await r.arrayBuffer();
-                    if (buf.byteLength < 50000) continue;
-                    var sig = new Uint8Array(buf, 0, 4);
-                    if (sig[0] === 0x77 && sig[1] === 0x4F && sig[2] === 0x46) {
-                        console.warn('Font URL returned WOFF/WOFF2, skipping:', urls[i]);
-                        continue;
-                    }
-                    _arabicFontBytesCache = buf;
-                    console.log('Arabic font loaded from:', urls[i], '(' + buf.byteLength + ' bytes)');
-                    return buf;
-                } catch(e) {
-                    console.warn('Font URL failed:', urls[i], e.message);
-                }
-            }
-            console.error('Could not load Arabic font from any source');
-            return null;
-        }
-
         /** ربط اسم السائق الإنجليزي بالعربي — يجمع من كل المصادر المتاحة */
         function getDriverNameArMap() {
             const map = {};
@@ -2849,10 +2711,7 @@
             return DESTINATION_MAP[v] || DESTINATION_MAP[v.toUpperCase()] || v;
         }
 
-        /**
-         * تنزيل كشف حركة الإسعاف PDF — حقول Driver_Name_1…10 نص عادي.
-         * يضمّن خط Amiri للعربي ويعيد تشكيل الحروف (Presentation Forms) للعرض الصحيح في كل المتصفحات.
-         */
+        /** تنزيل كشف حركة الإسعاف PDF — يُفتح في Adobe Acrobat للعرض الصحيح للعربي والطباعة. */
         async function downloadPdfForm() {
             const completed = (allRecords || []).filter(function (r) {
                 return r['Return Date'] && r['Return Time'];
@@ -2885,18 +2744,6 @@
                     acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
                 } catch (nae) {}
 
-                var arabicFont = null;
-                try {
-                    var fontBytes = await loadArabicFontBytes();
-                    if (fontBytes) {
-                        arabicFont = await pdfDoc.embedFont(fontBytes);
-                        console.log('Arabic font embedded in PDF successfully');
-                    }
-                } catch(fe) {
-                    console.error('embedFont failed — font data might not be TTF:', fe);
-                    arabicFont = null;
-                }
-
                 function setText(name, value) {
                     try {
                         var v = (value != null && value !== undefined) ? String(value).trim() : '';
@@ -2904,42 +2751,10 @@
                     } catch (e) {}
                 }
 
-                var pdfPage = pdfDoc.getPages()[0];
-
-                /**
-                 * اسم السائق — يُرسم مباشرة على الصفحة بالخط المضمّن
-                 * بدلاً من حقل نموذج، لضمان ظهور عربي متصل في كل العارضات
-                 */
                 function setDriverName(name, driverNameEn) {
                     var driverAr = driverMap[(driverNameEn || '').toUpperCase()] || '';
                     var displayName = driverAr || driverNameEn || '';
                     if (!displayName) return;
-                    if (arabicFont && /[\u0600-\u06FF]/.test(displayName)) {
-                        try {
-                            var field = form.getTextField(name);
-                            var widgets = field.acroField.getWidgets();
-                            if (widgets.length > 0) {
-                                var rect = widgets[0].getRectangle();
-                                var shaped = ArabicReshaper.reshape(displayName);
-                                var fontSize = Math.min(rect.height * 0.6, 10);
-                                var tw = arabicFont.widthOfTextAtSize(shaped, fontSize);
-                                if (tw > 0 && tw < rect.width * 2) {
-                                    pdfPage.drawText(shaped, {
-                                        x: rect.x + (rect.width - tw) / 2,
-                                        y: rect.y + (rect.height - fontSize) / 2 + 1,
-                                        size: fontSize,
-                                        font: arabicFont,
-                                        color: lib.rgb(0, 0, 0)
-                                    });
-                                    form.removeField(field);
-                                    console.log('Drew Arabic name for', name, 'at', Math.round(rect.x) + ',' + Math.round(rect.y));
-                                    return;
-                                }
-                            }
-                        } catch(e) {
-                            console.warn('Direct draw failed for ' + name + ':', e.message);
-                        }
-                    }
                     setText(name, displayName);
                 }
 
