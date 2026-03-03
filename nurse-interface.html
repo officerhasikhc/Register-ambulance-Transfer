@@ -235,6 +235,15 @@
             50% { opacity: 0.5; }
         }
 
+        .record-just-saved {
+            animation: justSavedGlow 1.5s ease-in-out 2;
+        }
+
+        @keyframes justSavedGlow {
+            0%, 100% { background: transparent; }
+            50% { background: #dbeafe; }
+        }
+
         .pending-trips-alert h3 {
             color: #374151;
             font-size: 15px;
@@ -1970,21 +1979,23 @@
         /** Smooth sliding scroll - feels like movement rather than jump */
         function smoothScrollToElement(element, duration = 700) {
             if (!element) return;
-            const offset = 24;
-            const targetPos = element.getBoundingClientRect().top + window.pageYOffset - offset;
-            const startPos = window.pageYOffset;
-            const distance = targetPos - startPos;
-            const startTime = performance.now();
-            
+            var offset = 80;
+            var scrollY = window.scrollY || window.pageYOffset || 0;
+            var targetPos = element.getBoundingClientRect().top + scrollY - offset;
+            var startPos = scrollY;
+            var distance = targetPos - startPos;
+            if (Math.abs(distance) < 5) { element.focus(); return; }
+            var startTime = performance.now();
+
             function easeInOutCubic(t) {
                 return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
             }
-            
+
             function scrollStep() {
-                const elapsed = performance.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easeProgress = easeInOutCubic(progress);
-                window.scrollTo({ top: startPos + distance * easeProgress, behavior: 'auto' });
+                var elapsed = performance.now() - startTime;
+                var progress = Math.min(elapsed / duration, 1);
+                var easeProgress = easeInOutCubic(progress);
+                window.scrollTo(0, startPos + distance * easeProgress);
                 if (progress < 1) {
                     requestAnimationFrame(scrollStep);
                 } else {
@@ -2973,6 +2984,9 @@
                     <tbody>
                         ${pageRecords.map(record => {
                             const isPending = String(record.ID || '').startsWith('pending_');
+                            const isJustSaved = _pendingOptimisticRecord && _nurseSubmitAt &&
+                                (Date.now() - _nurseSubmitAt < 8000) &&
+                                String(record.ID || '') === String(_pendingOptimisticRecord.ID || '');
                             const recordId = isPending ? (currentLang === 'en' ? 'Saving...' : 'جاري الحفظ...') : (record.ID || '-');
                             const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
                             const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
@@ -2980,8 +2994,6 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             let fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
-                            // Resolve nurse name: use current name from session if this is the logged-in nurse's record
-                            // Handles: (1) employee number stored as name, (2) admin changed nurse name after record was saved
                             if (fullNurse !== '-') {
                                 const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
                                 const loggedUser = window.loggedInUser || {};
@@ -2992,7 +3004,7 @@
                                 }
                             }
                             return `
-                            <tr>
+                            <tr class="${isJustSaved ? 'record-just-saved' : ''}">
                                 <td><span style="background:${isPending ? '#fef3c7' : '#e0e7ff'};color:${isPending ? '#92400e' : '#1e40af'};padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;${isPending ? 'animation:saving-pulse 1.5s ease-in-out infinite;' : ''}">${recordId}</span></td>
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
@@ -3769,13 +3781,12 @@
 
         // Initialize SyncManager for instant local saves + background sync
         SyncManager.init(WEB_APP_URL).then(() => {
-            // When server confirms a save, refresh records to get real ID
             SyncManager.on('synced', (detail) => {
                 if (detail.action === 'submitCase' || detail.action === 'updateRecord') {
                     console.log('✅ SyncManager: Server confirmed, refreshing records...');
-                    // Clear optimistic record tracking
-                    _pendingOptimisticRecord = null;
-                    _nurseSubmitAt = 0;
+                    // Don't clear _pendingOptimisticRecord here — let the callback
+                    // in loadAllNurseData detect server confirmation and clear it,
+                    // preventing the record from flashing/disappearing during reload
                     DataCache.invalidateAll();
                     loadAllNurseData();
                 }
