@@ -2729,15 +2729,21 @@
                 var tplHtml = await tplRes.text();
 
                 var logoDataUri = '';
+                async function fetchLogoAsDataUri(url) {
+                    var res = await fetch(url);
+                    if (!res.ok) return '';
+                    var blob = await res.blob();
+                    return new Promise(function (resolve) {
+                        var reader = new FileReader();
+                        reader.onload = function () { resolve(reader.result); };
+                        reader.onerror = function () { resolve(''); };
+                        reader.readAsDataURL(blob);
+                    });
+                }
                 try {
-                    var logoRes = await fetch('ambulancelogo.png');
-                    if (logoRes.ok) {
-                        var logoBlob = await logoRes.blob();
-                        logoDataUri = await new Promise(function (resolve) {
-                            var reader = new FileReader();
-                            reader.onload = function () { resolve(reader.result); };
-                            reader.readAsDataURL(logoBlob);
-                        });
+                    logoDataUri = await fetchLogoAsDataUri('ambulancelogo.png');
+                    if (!logoDataUri) {
+                        logoDataUri = await fetchLogoAsDataUri(window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'ambulancelogo.png');
                     }
                 } catch (le) { console.warn('Logo load skipped', le); }
 
