@@ -1043,6 +1043,51 @@
                 SyncManager.cleanup();
             }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
             
+            // Listen for sync events to reconcile predicted vs server trip IDs
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'driverDeparture' && detail.serverResponse) {
+                    const serverTripId = detail.serverResponse.tripId || detail.serverResponse.id || '';
+                    const clientTripId = detail.data ? detail.data.tripId : '';
+                    if (serverTripId && clientTripId && serverTripId !== clientTripId) {
+                        console.log('🔄 Trip ID reconciliation: local=' + clientTripId + ' → server=' + serverTripId);
+                        // Update local history with server's actual ID
+                        if (selectedDriver) {
+                            const histKey = 'trip_history_' + selectedDriver.staffNumber;
+                            try {
+                                const hist = JSON.parse(localStorage.getItem(histKey) || '[]');
+                                let updated = false;
+                                for (let i = 0; i < hist.length; i++) {
+                                    if (hist[i].tripId === clientTripId) {
+                                        hist[i].tripId = serverTripId;
+                                        updated = true;
+                                        break;
+                                    }
+                                }
+                                if (updated) {
+                                    localStorage.setItem(histKey, JSON.stringify(hist));
+                                    // Update in-memory array too
+                                    for (let i = 0; i < allDriverHistory.length; i++) {
+                                        if (allDriverHistory[i].tripId === clientTripId) {
+                                            allDriverHistory[i].tripId = serverTripId;
+                                            break;
+                                        }
+                                    }
+                                    renderDriverHistoryPage();
+                                }
+                            } catch(e) {}
+                        }
+                        // Update SyncManager's max ID tracker
+                        const serverNum = parseInt(String(serverTripId).replace(/\D/g, '')) || 0;
+                        if (serverNum > 0) SyncManager.updateMaxIdFromRecords([{tripId: serverTripId}]);
+                    }
+                    // Also update pending trip display with server ID
+                    if (serverTripId && pendingTrip) {
+                        pendingTrip.tripId = serverTripId;
+                        try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify(pendingTrip)); } catch(e) {}
+                    }
+                }
+            });
+            
             // Request notification permission
             requestNotificationPermission();
         }
