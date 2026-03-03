@@ -5,7 +5,7 @@
 <title>كشف حركة سيارات الاسعاف</title>
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4 landscape; margin: 8mm 10mm; }
+  @page { size: A4 landscape; margin: 6mm 8mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: "Times New Roman", Arial, serif;
@@ -16,7 +16,7 @@
     width: 277mm;
     max-width: 277mm;
     margin: 0 auto;
-    padding: 6mm 10mm;
+    padding: 4mm 8mm;
   }
 
   /* ═══════ Header ═══════ */
@@ -24,7 +24,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 2pt;
+    margin-bottom: 1pt;
   }
   .header-ar {
     width: 34%;
@@ -32,7 +32,7 @@
     font-family: Arial, sans-serif;
     font-size: 9pt;
     font-weight: bold;
-    line-height: 1.7;
+    line-height: 1.65;
   }
   .header-en {
     width: 34%;
@@ -40,45 +40,46 @@
     direction: ltr;
     font-family: "Times New Roman", serif;
     font-size: 10pt;
-    line-height: 1.7;
+    line-height: 1.65;
   }
   .header-logo {
     width: 32%;
     text-align: center;
-    padding-top: 4pt;
+    padding-top: 2pt;
   }
   .header-logo img {
-    height: 68px;
+    height: 62px;
   }
 
   /* ═══════ Title ═══════ */
   .title-row {
     text-align: center;
-    margin: 4pt 0;
-  }
-  .title-ar {
-    font-family: "Times New Roman", serif;
-    font-size: 18pt;
-    font-weight: bold;
-    color: #F25767;
-    text-decoration: underline;
-  }
-  .title-en {
-    font-family: "Times New Roman", serif;
-    font-size: 17pt;
-    font-weight: bold;
-    color: #F25767;
-    text-decoration: underline;
+    margin: 2pt 0;
     direction: ltr;
-    display: inline;
+  }
+  .title-line {
+    display: inline-block;
+    text-decoration: underline;
+    color: #F25767;
+    font-weight: bold;
+  }
+  .title-line .en {
+    font-family: "Times New Roman", serif;
+    font-size: 15pt;
+  }
+  .title-line .ar {
+    font-family: Arial, sans-serif;
+    font-size: 13pt;
+    direction: rtl;
+    unicode-bidi: bidi-override;
   }
 
-  /* ═══════ Hospital / Destination ═══════ */
+  /* ═══════ Hospital Name ═══════ */
   .info-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin: 6pt 0 2pt;
+    margin: 4pt 0 2pt;
   }
   .info-ar {
     font-family: "Times New Roman", serif;
@@ -95,37 +96,18 @@
   .info-value {
     font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
     color: #4D38C2;
-    font-size: 20pt;
+    font-size: 14pt;
     font-weight: bold;
-    display: inline-block;
-    padding: 0 6px;
-  }
-  .dest-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin: 0 0 5pt;
-  }
-  .dest-ar {
-    font-family: "Times New Roman", serif;
-    color: #42B895;
-    font-size: 12pt;
-  }
-  .dest-value {
-    font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
-    color: #4D38C2;
-    font-size: 20pt;
-    font-weight: bold;
-    display: inline-block;
-    padding: 0 6px;
+    display: inline;
+    padding: 0 4px;
   }
 
   /* ═══════ Table ═══════ */
   .trip-table {
     width: 100%;
     border-collapse: collapse;
-    direction: rtl;
-    margin: 0 auto;
+    direction: ltr;
+    margin: 3pt auto 0;
   }
   .trip-table th, .trip-table td {
     border: 1pt solid #131313;
@@ -135,48 +117,54 @@
   }
   .trip-table thead th {
     font-family: Arial, sans-serif;
-    font-size: 11pt;
+    font-size: 10pt;
     font-weight: normal;
-    padding: 2pt 3pt;
-    line-height: 1.3;
+    padding: 2pt 2pt;
+    line-height: 1.25;
   }
   .trip-table thead th .en {
     font-family: "Times New Roman", serif;
-    font-size: 12.5pt;
+    font-size: 12pt;
     font-weight: normal;
     display: block;
   }
   .trip-table thead th .sub-en {
     font-family: "Times New Roman", serif;
-    font-size: 11pt;
+    font-size: 10pt;
     font-weight: normal;
   }
   .trip-table thead th.sub-header {
-    font-size: 11pt;
+    font-size: 10pt;
     padding: 1pt 2pt;
   }
   .trip-table thead th.sub-header .en {
-    font-size: 12.5pt;
+    font-size: 12pt;
+  }
+  .trip-table thead .dest-value {
+    font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
+    color: #4D38C2;
+    font-size: 13pt;
+    font-weight: bold;
   }
   .trip-table tbody td {
-    height: 19pt;
+    height: 18pt;
     font-family: "Times New Roman", serif;
-    font-size: 14pt;
+    font-size: 13pt;
     color: #4D38C2;
     font-weight: bold;
-    padding: 0 3pt;
+    padding: 0 2pt;
   }
-  .col-num     { width: 26pt; }
-  .col-vehicle { width: 62pt; }
-  .col-driver  { width: 157pt; }
-  .col-staff   { width: 72pt; }
-  .col-d-date  { width: 106pt; }
-  .col-d-time  { width: 97pt; }
-  .col-r-date  { width: 93pt; }
   .col-r-time  { width: 106pt; }
+  .col-r-date  { width: 93pt; }
+  .col-d-time  { width: 97pt; }
+  .col-d-date  { width: 106pt; }
+  .col-staff   { width: 72pt; }
+  .col-driver  { width: 157pt; }
+  .col-vehicle { width: 62pt; }
+  .col-num     { width: 26pt; }
   .row-num {
     font-family: "Times New Roman", serif;
-    font-size: 18pt;
+    font-size: 16pt;
     color: #131313;
     font-weight: normal;
   }
@@ -185,9 +173,9 @@
   .footer {
     display: flex;
     justify-content: space-between;
-    margin-top: 8pt;
+    margin-top: 5pt;
     font-size: 12.5pt;
-    line-height: 2;
+    line-height: 1.8;
   }
   .footer-en {
     text-align: left;
@@ -206,14 +194,15 @@
   }
   .dots {
     display: inline-block;
-    min-width: 220px;
+    min-width: 200px;
     border-bottom: 1px dotted #131313;
   }
   .footer-note {
     display: flex;
     justify-content: space-between;
-    margin-top: 6pt;
-    font-size: 11pt;
+    margin-top: 4pt;
+    font-size: 10pt;
+    line-height: 1.3;
   }
   .footer-note .ar {
     font-family: "Times New Roman", serif;
@@ -225,7 +214,7 @@
   }
 
   @media print {
-    body { padding: 4mm 6mm; }
+    body { padding: 3mm 6mm; }
   }
 </style>
 </head>
@@ -241,7 +230,7 @@
     دائرة الشؤون الادارية
   </div>
   <div class="header-logo">
-    <img src="{{logo_src}}" alt="شعار">
+    <img src="{{logo_src}}" alt="">
   </div>
   <div class="header-en">
     Sultanate Of Oman<br>
@@ -254,28 +243,16 @@
 
 <!-- ═══════ Title ═══════ -->
 <div class="title-row">
-  <span class="title-en">Ambulance Traffic Detection</span>
-  &nbsp;&nbsp;
-  <span class="title-ar">كشف حركة سيارات الاسعاف</span>
+  <span class="title-line"><span class="en">Ambulance Traffic Detection</span>&nbsp;&nbsp;&nbsp;<span class="ar">كشف حركة سيارات الاسعاف</span></span>
 </div>
 
 <!-- ═══════ Hospital Name ═══════ -->
 <div class="info-row">
   <div class="info-ar">
-    اسم المركز / مستشفى : <span class="info-value">{{hospital_name}}</span>
+    اسم المركز / مستشفى : <span class="info-value">{{hospital_name}}</span> ......................................................
   </div>
   <div class="info-en">
     Name Center / Hospital.......................................................
-  </div>
-</div>
-
-<!-- ═══════ Destination ═══════ -->
-<div class="dest-row">
-  <div class="dest-ar">
-    الجهة المحول اليها (مركز / مستشفى) : <span class="dest-value">{{destination}}</span>
-  </div>
-  <div style="direction:ltr;text-align:left;color:#42B895;font-size:11pt;font-family:'Times New Roman',serif;">
-    Transfer to (Center/Hospital)
   </div>
 </div>
 
@@ -298,8 +275,9 @@
         <span class="en">Time To Return To The Workplace</span>
       </th>
       <th colspan="2">
-        التاريخ والوقت
-        <span class="en">Date &amp; Time</span>
+        الجهة المحول اليها<br>
+        <span style="font-size:8pt">(مركز / مستشفى) : <span class="dest-value">{{destination}}</span></span><br>
+        <span class="sub-en" style="font-size:10pt">Transfer to(Center/Hospital).................</span>
       </th>
       <th class="col-staff" rowspan="2">
         الرقم الوظيفي
@@ -316,10 +294,10 @@
       <th class="col-num" rowspan="2">م</th>
     </tr>
     <tr>
-      <th class="sub-header col-r-time">الوقت<br><span class="en" style="font-size:12.5pt">Time</span></th>
-      <th class="sub-header col-r-date">التاريخ<br><span class="en" style="font-size:12.5pt">Date</span></th>
-      <th class="sub-header col-d-time">الوقت<br><span class="en" style="font-size:12.5pt">Time</span></th>
-      <th class="sub-header col-d-date">التاريخ<br><span class="en" style="font-size:12.5pt">Date</span></th>
+      <th class="sub-header col-r-time">الوقت<br><span class="en">Time</span></th>
+      <th class="sub-header col-r-date">التاريخ<br><span class="en">Date</span></th>
+      <th class="sub-header col-d-time">الوقت<br><span class="en">Time</span></th>
+      <th class="sub-header col-d-date">التاريخ<br><span class="en">Date</span></th>
     </tr>
   </thead>
   <tbody>
@@ -330,7 +308,7 @@
 <!-- ═══════ Footer ═══════ -->
 <div class="footer">
   <div class="footer-ar">
-    <div style="font-size:16pt">اعتماد،،،</div>
+    <div style="font-size:15pt">اعتماد،،،</div>
     <div>المسئول المباشر : <span class="dots"></span></div>
     <div>مسئول التمريض : <span class="dots"></span></div>
   </div>
