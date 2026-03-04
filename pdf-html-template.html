@@ -18,6 +18,9 @@
     padding: 3mm 6mm;
   }
 
+  /* ══════════════════════════════════════════
+     HEADER - الترويسة
+     ══════════════════════════════════════════ */
   .header {
     display: flex;
     justify-content: space-between;
@@ -49,6 +52,9 @@
     height: 58px;
   }
 
+  /* ══════════════════════════════════════════
+     TITLE - العنوان الرئيسي
+     ══════════════════════════════════════════ */
   .title-row {
     text-align: center;
     margin: 1pt 0;
@@ -56,49 +62,60 @@
   }
   .title-line {
     display: inline-block;
-    border-bottom: 1.5pt solid #F25767;
+    border-bottom: 0.5pt solid #F25767;
     padding-bottom: 1pt;
     color: #F25767;
     font-weight: bold;
   }
-  .title-line .en {
+  .title-en {
     font-family: "Times New Roman", serif;
     font-size: 14pt;
   }
-  .title-line .ar {
+  .title-ar {
     font-family: Arial, sans-serif;
     font-size: 11pt;
     direction: rtl;
     unicode-bidi: bidi-override;
   }
 
+  /* ══════════════════════════════════════════
+     INFO ROW - سطر اسم المركز
+     ══════════════════════════════════════════ */
   .info-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     margin: 3pt 0 1pt;
   }
-  .info-ar {
+  .info-label-ar {
     font-family: "Times New Roman", serif;
     color: #42B895;
     font-size: 11pt;
   }
-  .info-en {
+  .info-label-en {
     font-family: "Times New Roman", serif;
     direction: ltr;
+    unicode-bidi: isolate;
     text-align: left;
     color: #42B895;
     font-size: 11pt;
   }
+  .info-dots {
+    color: #42B895;
+    font-size: 10pt;
+  }
   .info-value {
     font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
-    color: #4D38C2;
-    font-size: 13pt;
+    color: #323d79;
+    font-size: 11pt;
     font-weight: bold;
     display: inline;
     padding: 0 4px;
   }
 
+  /* ══════════════════════════════════════════
+     TABLE - الجدول
+     ══════════════════════════════════════════ */
   .trip-table {
     width: 100%;
     border-collapse: collapse;
@@ -111,45 +128,82 @@
     vertical-align: middle;
     color: #131313;
   }
-  .trip-table thead th {
+
+  /* Arabic header labels */
+  .th-label-ar {
     font-family: Arial, sans-serif;
-    font-size: 9pt;
+    font-size: 12pt;
     font-weight: normal;
-    padding: 1pt 2pt;
-    line-height: 1.2;
   }
-  .trip-table thead th .en {
+
+  /* English header labels */
+  .th-label-en {
     font-family: "Times New Roman", serif;
     font-size: 10.5pt;
     font-weight: normal;
     display: block;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
-  .trip-table thead th .sub-en {
+
+  .trip-table thead th {
+    padding: 1pt 2pt;
+    line-height: 1.2;
+  }
+
+  /* Sub-header cells (الوقت / التاريخ) */
+  .trip-table thead th.sub-header {
+    padding: 1pt 2pt;
+  }
+  .sub-label-ar {
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    font-weight: normal;
+  }
+  .sub-label-en {
+    font-family: "Times New Roman", serif;
+    font-size: 10pt;
+    font-weight: normal;
+    display: block;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  /* Destination header area */
+  .dest-label-ar {
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: normal;
+  }
+  .dest-sub-label {
+    font-size: 12.5pt;
+    font-weight: normal;
+  }
+  .dest-value {
+    font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
+    color: #2e1f80;
+    font-size: 12pt;
+    font-weight: bold;
+  }
+  .dest-label-en {
     font-family: "Times New Roman", serif;
     font-size: 9pt;
     font-weight: normal;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
-  .trip-table thead th.sub-header {
-    font-size: 9pt;
-    padding: 1pt 2pt;
-  }
-  .trip-table thead th.sub-header .en {
-    font-size: 10pt;
-  }
-  .trip-table thead .dest-value {
-    font-family: "Andalus", "Amiri", "Traditional Arabic", serif;
-    color: #4D38C2;
-    font-size: 12pt;
-    font-weight: bold;
-  }
+
+  /* Data cells */
   .trip-table tbody td {
     height: 17pt;
     font-family: "Times New Roman", serif;
-    font-size: 12pt;
-    color: #4D38C2;
+    font-size: 10ٍpt;
+    color: #1c5291;
     font-weight: bold;
     padding: 0 2pt;
   }
+
+  /* Column widths */
   .col-num     { width: 24pt; }
   .col-vehicle { width: 58pt; }
   .col-driver  { width: 150pt; }
@@ -158,6 +212,7 @@
   .col-d-time  { width: 88pt; }
   .col-r-date  { width: 88pt; }
   .col-r-time  { width: 96pt; }
+
   .row-num {
     font-family: "Times New Roman", serif;
     font-size: 14pt;
@@ -165,11 +220,13 @@
     font-weight: normal;
   }
 
+  /* ══════════════════════════════════════════
+     FOOTER - التذييل
+     ══════════════════════════════════════════ */
   .footer {
     display: flex;
     justify-content: space-between;
     margin-top: 3pt;
-    font-size: 11pt;
     line-height: 1.6;
   }
   .footer-en {
@@ -177,13 +234,24 @@
     direction: ltr;
     width: 50%;
   }
-  .footer-en .label {
+  .footer-label-en {
+    font-family: "Times New Roman", serif;
+    font-size: 11pt;
     font-weight: bold;
+  }
+  .footer-text-en {
+    font-family: "Times New Roman", serif;
     font-size: 11pt;
   }
   .footer-ar {
     text-align: right;
     width: 50%;
+  }
+  .footer-title-ar {
+    font-family: Arial, sans-serif;
+    font-size: 13pt;
+  }
+  .footer-label-ar {
     font-family: Arial, sans-serif;
     font-size: 10pt;
   }
@@ -192,20 +260,22 @@
     min-width: 180px;
     border-bottom: 1px dotted #131313;
   }
+
   .footer-note {
     display: flex;
     justify-content: space-between;
     margin-top: 2pt;
-    font-size: 9pt;
-    line-height: 1.2;
   }
-  .footer-note .ar {
+  .footer-note-ar {
     font-family: "Times New Roman", serif;
+    font-size: 9pt;
   }
-  .footer-note .en {
+  .footer-note-en {
     direction: ltr;
+    unicode-bidi: isolate;
     text-align: left;
     font-family: "Times New Roman", serif;
+    font-size: 9pt;
   }
 
   @media print {
@@ -236,15 +306,17 @@
 </div>
 
 <div class="title-row">
-  <span class="title-line"><span class="en">Ambulance Traffic Detection</span>&nbsp;&nbsp;&nbsp;<span class="ar">كشف حركة سيارات الاسعاف</span></span>
+  <span class="title-line"><span class="title-en">Ambulance Traffic Detection</span>&nbsp;&nbsp;&nbsp;<span class="title-ar">كشف حركة سيارات الاسعاف</span></span>
 </div>
 
 <div class="info-row">
-  <div class="info-ar">
-    اسم المركز / مستشفى : <span class="info-value">{{hospital_name}}</span> ......................................................
+  <div>
+    <span class="info-label-ar">اسم المركز / مستشفى :</span>
+    <span class="info-value">{{hospital_name}}</span>
+    <span class="info-dots">......................................................</span>
   </div>
-  <div class="info-en">
-    Name Center / Hospital.......................................................
+  <div>
+    <span class="info-label-en">Name Center / Hospital.......................................................</span>
   </div>
 </div>
 
@@ -261,34 +333,34 @@
       <th class="col-r-time"></th>
     </tr>
     <tr>
-      <th class="col-num" rowspan="2">م</th>
+      <th class="col-num" rowspan="2"><span class="th-label-ar">م</span></th>
       <th class="col-vehicle" rowspan="2">
-        رقم السيارة
-        <span class="en">Vehicle No.</span>
+        <span class="th-label-ar">رقم السيارة</span>
+        <span class="th-label-en">Vehicle No.</span>
       </th>
       <th class="col-driver" rowspan="2">
-        اسم السائق
-        <span class="en">Driver Name</span>
+        <span class="th-label-ar">اسم السائق</span>
+        <span class="th-label-en">Driver Name</span>
       </th>
       <th class="col-staff" rowspan="2">
-        الرقم الوظيفي
-        <span class="en">Staff No.</span>
+        <span class="th-label-ar">الرقم الوظيفي</span>
+        <span class="th-label-en">Staff No.</span>
       </th>
       <th colspan="2">
-        الجهة المحول اليها<br>
-        <span style="font-size:7.5pt">(مركز / مستشفى) : <span class="dest-value">{{destination}}</span></span><br>
-        <span class="sub-en" style="font-size:9pt">Transfer to(Center/Hospital).................</span>
+        <span class="dest-label-ar">الجهة المحول اليها</span><br>
+        <span class="dest-sub-label">(مركز / مستشفى) : <span class="dest-value">{{destination}}</span></span><br>
+        <span class="dest-label-en">Transfer to(Center/Hospital).................</span>
       </th>
       <th colspan="2">
-        وقت العودة الى مكان العمل
-        <span class="en">Time To Return To The Workplace</span>
+        <span class="th-label-ar">وقت العودة الى مكان العمل</span>
+        <span class="th-label-en">Time To Return To The Workplace</span>
       </th>
     </tr>
     <tr>
-      <th class="sub-header col-d-date">التاريخ<br><span class="en">Date</span></th>
-      <th class="sub-header col-d-time">الوقت<br><span class="en">Time</span></th>
-      <th class="sub-header col-r-date">التاريخ<br><span class="en">Date</span></th>
-      <th class="sub-header col-r-time">الوقت<br><span class="en">Time</span></th>
+      <th class="sub-header col-d-date"><span class="sub-label-ar">التاريخ</span><br><span class="sub-label-en">Date</span></th>
+      <th class="sub-header col-d-time"><span class="sub-label-ar">الوقت</span><br><span class="sub-label-en">Time</span></th>
+      <th class="sub-header col-r-date"><span class="sub-label-ar">التاريخ</span><br><span class="sub-label-en">Date</span></th>
+      <th class="sub-header col-r-time"><span class="sub-label-ar">الوقت</span><br><span class="sub-label-en">Time</span></th>
     </tr>
   </thead>
   <tbody>
@@ -298,20 +370,20 @@
 
 <div class="footer">
   <div class="footer-ar">
-    <div style="font-size:13pt">اعتماد،،،</div>
-    <div>المسئول المباشر : <span class="dots"></span></div>
-    <div>مسئول التمريض : <span class="dots"></span></div>
+    <div class="footer-title-ar">اعتماد،،،</div>
+    <div><span class="footer-label-ar">المسئول المباشر :</span> <span class="dots"></span></div>
+    <div><span class="footer-label-ar">مسئول التمريض :</span> <span class="dots"></span></div>
   </div>
   <div class="footer-en">
-    <div><span class="label">Approval</span> ,,,</div>
-    <div>Direct responsible : <span class="dots"></span></div>
-    <div>Nursing Incharge : <span class="dots"></span></div>
+    <div><span class="footer-label-en">Approval</span> <span class="footer-text-en">,,,</span></div>
+    <div><span class="footer-text-en">Direct responsible :</span> <span class="dots"></span></div>
+    <div><span class="footer-text-en">Nursing Incharge :</span> <span class="dots"></span></div>
   </div>
 </div>
 
 <div class="footer-note">
-  <span class="ar">* ترسل الاستمارة الى مدير الشؤون الادارية نهاية كل اسبوع.</span>
-  <span class="en">* The form shall be sent to Director of administrative affairs at the end of each week.</span>
+  <span class="footer-note-ar">* ترسل الاستمارة الى مدير الشؤون الادارية نهاية كل اسبوع.</span>
+  <span class="footer-note-en">* The form shall be sent to Director of administrative affairs at the end of each week.</span>
 </div>
 
 </body>
