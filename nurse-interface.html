@@ -340,19 +340,18 @@
         }
 
         .btn-use-trip {
-            padding: 10px 20px;
-            background: var(--primary-blue);
-            color: var(--white);
+            padding: 8px 18px;
+            background: #374151;
+            color: #fff;
             border: none;
-            border-radius: 8px;
-            font-weight: 600;
+            border-radius: 6px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
 
         .btn-use-trip:hover {
-            background: var(--dark-blue);
-            transform: translateY(-2px);
+            background: #1f2937;
         }
 
         /* Form Card */
@@ -638,14 +637,12 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
+            background: #374151;
             color: var(--white);
-            box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+            background: #1f2937;
         }
 
         .btn-primary:disabled {
@@ -655,12 +652,13 @@
         }
 
         .btn-secondary {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .btn-secondary:hover {
-            background: var(--bg-blue);
+            background: #e5e7eb;
         }
 
         .form-actions {
@@ -873,32 +871,36 @@
         }
 
         .action-btn {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
+            padding: 6px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            background: #f9fafb;
+            color: #374151;
         }
 
         .action-btn.view {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
+            border-color: #d1d5db;
         }
 
         .action-btn.edit {
-            background: #10b981;
-            color: white;
+            background: #f3f4f6;
+            color: #374151;
+            border-color: #d1d5db;
         }
 
         .action-btn.edit:hover {
-            background: #059669;
+            background: #e5e7eb;
         }
 
         .action-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .empty-state {
@@ -971,13 +973,14 @@
         }
 
         .report-actions .btn-print {
-            background: #1e40af;
+            background: #374151;
             color: white;
         }
 
         .report-actions .btn-close {
-            background: #e5e7eb;
+            background: #f3f4f6;
             color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .report-content {
@@ -1199,13 +1202,13 @@
         <!-- Registration Form -->
         <div class="form-card">
             <div class="form-header">
-                <div class="form-header-icon">🚑</div>
+                <div class="form-header-icon" style="font-size:20px;color:#6b7280;">+</div>
                 <h2 data-en="Register New Ambulance Case" data-ar="تسجيل حالة إسعاف جديدة">Register New Ambulance Case</h2>
             </div>
 
             <!-- Validation Message -->
             <div class="validation-message" id="validationMessage">
-                <span>⚠️</span>
+                <span style="font-weight:700;color:#92400e;">!</span>
                 <span id="validationText"></span>
             </div>
 
@@ -1314,7 +1317,7 @@
         <!-- Records Section -->
         <div class="records-section">
             <div class="records-header">
-                <h2 data-en="📋 Previous Records" data-ar="📋 السجلات السابقة">📋 Previous Records</h2>
+                <h2 data-en="Previous Records" data-ar="السجلات السابقة">Previous Records</h2>
                 <div class="filter-group">
                     <select id="yearFilter">
                         <!-- Populated by initializeYearFilter() -->
@@ -1346,11 +1349,11 @@
                         </div>
                         <span style="font-size:12px;color:#6b7280;font-weight:500;">cases</span>
                     </div>
-                    <button onclick="viewAllRecords()" style="padding: 8px 16px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
+                    <button onclick="viewAllRecords()" style="padding: 7px 15px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
                         View Report
                     </button>
-                    <button onclick="exportToExcel()" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; display:inline-flex; align-items:center; gap:4px;">
-                        <span style="font-size:15px;">📊</span> Export Excel
+                    <button onclick="exportToExcel()" style="padding: 7px 15px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
+                        Export Excel
                     </button>
                 </div>
             </div>
@@ -1378,7 +1381,7 @@
     <div id="warningModal" class="modal">
         <div class="modal-content" style="padding: 22px 26px; max-width: 380px; border-radius: 14px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                <span style="font-size: 20px; color: #d97706;">⚠</span>
+                <span style="font-size: 16px; font-weight: 700; color: #d97706;">!</span>
                 <h3 id="warningModalTitle" style="color: #1f2937; font-size: 15px; font-weight: 600; margin: 0;">Cannot Submit New Record</h3>
             </div>
             <p id="warningModalMessage" style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0 0 12px;">There are incomplete trips pending. Please complete them first using the "Complete Data" button above.</p>
@@ -2153,9 +2156,9 @@
                                 ${tripIdDisplay}
                             </span>
                             <span style="background: ${hasReturn ? '#d1fae5' : '#fef3c7'}; color: ${hasReturn ? '#065f46' : '#92400e'}; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                                ${hasReturn ? 
-                                    (currentLang === 'en' ? '✓ Departure & Return Recorded' : '✓ تم تسجيل الذهاب والعودة') : 
-                                    (currentLang === 'en' ? '⏳ Departure Only - Waiting Return' : '⏳ ذهاب فقط - العودة لم تُسجل بعد')}
+                                ${hasReturn ?
+                                    (currentLang === 'en' ? 'Departure & Return Recorded' : 'تم تسجيل الذهاب والعودة') :
+                                    (currentLang === 'en' ? 'Departure Only - Waiting Return' : 'ذهاب فقط - العودة لم تُسجل بعد')}
                             </span>
                         </div>
                         <div>
@@ -2957,7 +2960,7 @@
             if (records.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-icon" style="color:#9ca3af;">—</div>
                         <p>${currentLang === 'en' ? 'No records found' : 'لا توجد سجلات'}</p>
                     </div>
                 `;
@@ -3025,7 +3028,7 @@
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
                                             ${currentLang === 'en' ? 'View' : 'عرض'}
                                         </button>
-                                        <button class="action-btn edit" onclick='editRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="background: #10b981; margin-left: 8px;">
+                                        <button class="action-btn edit" onclick='editRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="margin-left: 6px;">
                                             ${currentLang === 'en' ? 'Edit' : 'تعديل'}
                                         </button>
                                     </div>
@@ -3084,7 +3087,7 @@
                 const editBtn = document.createElement('button');
                 editBtn.id = 'editRecordBtn';
                 editBtn.className = 'btn-print';
-                editBtn.style.background = '#10b981';
+                editBtn.style.background = '#374151';
                 editBtn.style.marginRight = '10px';
                 editBtn.textContent = 'Edit Record';
                 editBtn.onclick = () => editRecord(record);
@@ -3133,7 +3136,7 @@
             // Update form header to show edit mode
             const formHeader = document.querySelector('.form-header h2');
             formHeader.textContent = 'Edit Ambulance Case';
-            formHeader.style.color = '#10b981';
+            formHeader.style.color = '#374151';
             
             // Fill vehicle number
             if (record['Vehicle Number']) {
@@ -3260,7 +3263,7 @@
             // Update submit button text
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.textContent = 'Update Record';
-            submitBtn.style.background = '#10b981';
+            submitBtn.style.background = '#374151';
         }
 
         function parseDate(dateValue) {

@@ -491,22 +491,22 @@
         }
 
         .btn-primary {
-            background: var(--primary-blue);
+            background: #374151;
             color: var(--white);
         }
 
         .btn-primary:hover {
-            background: var(--dark-blue);
-            transform: translateY(-1px);
+            background: #1f2937;
         }
 
         .btn-export {
-            background: var(--success);
-            color: var(--white);
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .btn-export:hover {
-            background: #059669;
+            background: #e5e7eb;
         }
 
         .table-container {
@@ -602,43 +602,45 @@
         }
 
         .action-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
+            padding: 5px 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
             font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
             font-family: inherit;
+            background: #f9fafb;
+            color: #374151;
         }
 
         .action-btn.view {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.print {
-            background: #fef3c7;
-            color: #92400e;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.archive {
-            background: #e0e7ff;
-            color: #4338ca;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.edit {
-            background: #d1fae5;
-            color: #065f46;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.delete {
-            background: #fee2e2;
-            color: #dc2626;
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .action-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .status-archived {
@@ -1218,14 +1220,14 @@
         }
 
         .pagination-btn:hover:not(:disabled) {
-            background: var(--lighter-blue);
-            border-color: var(--primary-blue);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .pagination-btn.active {
-            background: var(--primary-blue);
-            color: var(--white);
-            border-color: var(--primary-blue);
+            background: #374151;
+            color: #fff;
+            border-color: #374151;
         }
 
         .pagination-btn:disabled {
@@ -1931,7 +1933,7 @@
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
-                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة" style="background:#2196F3;">طباعة كشف PDF</button>
+                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة">طباعة كشف PDF</button>
                         </div>
                     </div>
 
@@ -2648,7 +2650,7 @@
                         <div class="item"><div class="label">المسجل (الممرضة)</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                     </div>
-                    <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #1e40af; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
+                    <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
                 </body>
                 </html>
             `);
@@ -2779,7 +2781,7 @@
                         '</tr>';
                 } else {
                     rowsHtml += '<tr>' +
-                        '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                        '<td></td>' +
                         '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
                 }
             }
