@@ -689,6 +689,13 @@
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_nurse_data_' + year + '_' + month, result);
                     }
+                    // Also store pending trips in dedicated key for instant display on nurse page
+                    if (result && result.trips) {
+                        try {
+                            var nurseTrips = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nurseTrips));
+                        } catch(e) {}
+                    }
                 }).catch(function() {});
 
                 // Phase 2: "all" + adjacent months + rest (parallel batches, faster intervals)

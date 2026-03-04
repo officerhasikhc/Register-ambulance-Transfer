@@ -21,7 +21,16 @@
         var month = new Date().getMonth() + 1;
         var reqUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
         if (staffNum) reqUrl += '&staffNumber=' + encodeURIComponent(staffNum);
-        window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).catch(function() { return null; });
+        window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).then(function(result) {
+            // Save pending trips to dedicated key ASAP so they display instantly on next visit
+            if (result && result.trips) {
+                try {
+                    var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                } catch(e) {}
+            }
+            return result;
+        }).catch(function() { return null; });
         window.__earlyNurseMonth = month;
     })();
     </script>
@@ -3903,9 +3912,10 @@
         }
         
         // Show cached pending trips instantly (before server fetch completes)
+        // Uses multiple sources: DataCache → dedicated localStorage → skeleton
         (function showCachedPendingTrips() {
             try {
-                // Try DataCache first (most reliable - from previous session or login prefetch)
+                // Source 1: DataCache nurse data (has trips embedded)
                 var year = new Date().getFullYear();
                 var month = new Date().getMonth() + 1;
                 var cacheKey = 'cache_nurse_data_' + year + '_' + month;
@@ -3913,18 +3923,26 @@
                 try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
                 if (cached && cached.data && cached.data.trips) {
                     var nurseTrips = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
-                    if (nurseTrips.length > 0) {
-                        displayPendingTrips(nurseTrips);
-                        return;
-                    }
+                    displayPendingTrips(nurseTrips);
+                    return;
                 }
-                // Fallback: localStorage pending_trips_for_nurse (from driver cross-tab sync)
+
+                // Source 2: Dedicated persistent trips cache (survives cache invalidation)
                 var localTrips = localStorage.getItem('pending_trips_for_nurse');
                 if (localTrips) {
                     var trips = JSON.parse(localTrips);
-                    if (Array.isArray(trips) && trips.length > 0) {
+                    if (Array.isArray(trips)) {
                         displayPendingTrips(trips);
+                        return;
                     }
+                }
+
+                // Source 3: No cached data — show loading skeleton
+                var container = document.getElementById('pendingTripsContainer');
+                if (container) {
+                    container.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;">' +
+                        '<div style="display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#6b7280;border-radius:50%;animation:spin 0.8s linear infinite;margin-left:8px;vertical-align:middle;"></div> ' +
+                        '<span>' + (currentLang === 'en' ? 'Loading trips...' : 'جاري تحميل الرحلات...') + '</span></div>';
                 }
             } catch(e) {}
         })();
