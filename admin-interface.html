@@ -2122,28 +2122,49 @@
          * (preserving it for instant display on next load) and clears
          * only month-specific records caches.
          */
-        function invalidateAdminCaches() {
+        function invalidateAdminCaches(modifiedRecordId, isUpdate) {
             var y = document.getElementById('yearFilter').value;
             var m = document.getElementById('monthFilter').value;
             
-            // Update cache_admin_data in-place with current allRecords
-            // so next page load still shows data instantly (minus deleted records)
+            // 1. Update cache_admin_data in-place
             try {
                 var cached = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 100);
                 if (cached && cached.data) {
                     cached.data.records = allRecords;
                     DataCache.set(DataCache.KEYS.ADMIN_DATA, cached.data);
-                    // Also update the instant-display fallback
                     try { localStorage.setItem('admin_instant_data', JSON.stringify(cached.data)); } catch(e) {}
                 }
             } catch(e) {}
             
-            // Clear month-specific records caches (force fresh data on month switch)
-            DataCache.invalidate(
-                DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_',
-                DataCache.KEYS.RECORDS + '_' + y + '_all_',
-                DataCache.KEYS.PENDING_TRIPS
-            );
+            // 2. Save current view's records to its cache key (preserves instant display on month switch)
+            var currentKey = DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_';
+            DataCache.set(currentKey, allRecords);
+            
+            // 3. Surgically update "all" records cache when viewing a specific month
+            if (m !== 'all' && modifiedRecordId) {
+                var allKey = DataCache.KEYS.RECORDS + '_' + y + '_all_';
+                try {
+                    var allCached = DataCache.get(allKey, DataCache.EXPIRY.RECORDS * 100);
+                    if (allCached && allCached.data && Array.isArray(allCached.data)) {
+                        var strId = String(modifiedRecordId).trim();
+                        var updated = allCached.data.filter(function(r) {
+                            return String(r.ID || r.id).trim() !== strId;
+                        });
+                        if (isUpdate) {
+                            var updatedRec = allRecords.find(function(r) {
+                                return String(r.ID || r.id).trim() === strId;
+                            });
+                            if (updatedRec) updated.push(updatedRec);
+                        }
+                        DataCache.set(allKey, updated);
+                    }
+                } catch(e) {
+                    DataCache.invalidate(allKey);
+                }
+            }
+            
+            // 4. Invalidate pending trips
+            DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
         }
 
         // Nurse name lookup: maps staff number → Arabic name from Users sheet
@@ -2435,7 +2456,10 @@
             const thisRequestId = ++_adminRecordsRequestId;
 
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (loadingSpinner) loadingSpinner.style.display = 'block';
+            const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
+            if (loadingSpinner && !DataCache.has(cacheKey, DataCache.EXPIRY.RECORDS)) {
+                loadingSpinner.style.display = 'block';
+            }
 
             let url = `${WEB_APP_URL}?action=getAllRecords`;
             if (year !== 'all') url += `&year=${year}`;
@@ -2443,7 +2467,6 @@
             if (search) url += `&search=${encodeURIComponent(search)}`;
 
             try {
-                const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
                 await DataCache.fetchWithCache(
                     url,
                     cacheKey,
@@ -3198,7 +3221,7 @@
         SyncManager.init(WEB_APP_URL).then(() => {
             SyncManager.on('synced', (detail) => {
                 if (detail.action === 'deleteRecord' || detail.action === 'updateRecord' || detail.action === 'archiveRecord') {
-                    invalidateAdminCaches();
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                     loadAdminData();
                 }
             });
@@ -3242,6 +3265,12 @@
                     // Save to dedicated fallback for instant display on next load
                     if (!meta || !meta.fromCache) {
                         try { localStorage.setItem('admin_instant_data', JSON.stringify(data)); } catch(e) {}
+                    }
+                    // Also update records cache for current view so month switching stays instant
+                    if (data.records) {
+                        var ry = document.getElementById('yearFilter').value;
+                        var rm = document.getElementById('monthFilter').value;
+                        DataCache.set(DataCache.KEYS.RECORDS + '_' + ry + '_' + rm + '_', data.records);
                     }
                 },
                 (result) => result.success ? result : null
@@ -3447,7 +3476,7 @@
                 
                 if (result.success) {
                     showToast(`تم حذف الطلب ${tripId} بنجاح`, 'success');
-                    invalidateAdminCaches();
+                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
                     clearLocalPendingTripCaches();
                     
                     // Re-render after animation completes
@@ -3528,7 +3557,7 @@
                     vehicleNumber: vehicleNumber
                 });
                 showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                invalidateAdminCaches();
+                invalidateAdminCaches(id, false);
                 clearLocalPendingTripCaches();
             } catch (error) {
                 console.error('SyncManager direct delete error:', error);
@@ -3538,7 +3567,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                        invalidateAdminCaches();
+                        invalidateAdminCaches(id, false);
                         clearLocalPendingTripCaches();
                     } else {
                         showToast(result.error || 'فشل في الحذف', 'error');
@@ -3592,33 +3621,35 @@
             btn.disabled = false;
 
             // Remove from local array for instant UI update
-            allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(pendingRecordId).trim());
+            var confirmedRecordId = pendingRecordId;
+            var confirmedVehicle = pendingVehicleNumber;
+            var confirmedAction = pendingAction;
+            allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(confirmedRecordId).trim());
             displayRecordsWithPagination();
 
-            invalidateAdminCaches();
-            if (pendingAction === 'delete') {
+            invalidateAdminCaches(confirmedRecordId, false);
+            if (confirmedAction === 'delete') {
                 clearLocalPendingTripCaches();
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
             SyncManager.save(actionType, {
                 action: actionType,
-                id: pendingRecordId,
-                vehicleNumber: pendingVehicleNumber,
+                id: confirmedRecordId,
+                vehicleNumber: confirmedVehicle,
                 reason: reason
             }).catch(err => {
                 console.error('SyncManager admin action error:', err);
-                // Fallback to direct ReliablePost
                 ReliablePost.send(WEB_APP_URL, {
                     action: actionType,
-                    id: pendingRecordId,
-                    vehicleNumber: pendingVehicleNumber,
+                    id: confirmedRecordId,
+                    vehicleNumber: confirmedVehicle,
                     reason: reason
                 }, { background: true, timeout: 30000 }).catch(() => {});
             });
 
             setTimeout(() => {
-                invalidateAdminCaches();
+                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 loadAdminData();
             }, 3000);
         }
@@ -3758,9 +3789,9 @@
                 ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 }).catch(() => {});
             });
 
-            invalidateAdminCaches();
+            invalidateAdminCaches(recordId, true);
             setTimeout(() => {
-                invalidateAdminCaches();
+                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 loadAdminData();
                 loadNurseNameMap();
             }, 5000);
