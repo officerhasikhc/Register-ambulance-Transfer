@@ -2107,6 +2107,21 @@
         let viewMode = 'current'; // 'current', 'archive', 'all'
         let notificationData = [];
 
+        /**
+         * Smart cache invalidation: only clears current context caches,
+         * preserving pre-warmed data for other months.
+         */
+        function invalidateAdminCaches() {
+            var y = document.getElementById('yearFilter').value;
+            var m = document.getElementById('monthFilter').value;
+            DataCache.invalidate(
+                DataCache.KEYS.ADMIN_DATA,
+                DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_',
+                DataCache.KEYS.RECORDS + '_' + y + '_all_',
+                DataCache.KEYS.PENDING_TRIPS
+            );
+        }
+
         // Nurse name lookup: maps staff number → Arabic name from Users sheet
         let nurseNameMap = {};
         window._allUsersData = [];
@@ -3151,7 +3166,7 @@
         SyncManager.init(WEB_APP_URL).then(() => {
             SyncManager.on('synced', (detail) => {
                 if (detail.action === 'deleteRecord' || detail.action === 'updateRecord' || detail.action === 'archiveRecord') {
-                    DataCache.invalidateAll();
+                    invalidateAdminCaches();
                     loadAdminData();
                 }
             });
@@ -3398,7 +3413,7 @@
                 
                 if (result.success) {
                     showToast(`تم حذف الطلب ${tripId} بنجاح`, 'success');
-                    DataCache.invalidateAll();
+                    invalidateAdminCaches();
                     clearLocalPendingTripCaches();
                     
                     // Re-render after animation completes
@@ -3479,7 +3494,7 @@
                     vehicleNumber: vehicleNumber
                 });
                 showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                DataCache.invalidateAll();
+                invalidateAdminCaches();
                 clearLocalPendingTripCaches();
             } catch (error) {
                 console.error('SyncManager direct delete error:', error);
@@ -3489,7 +3504,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                        DataCache.invalidateAll();
+                        invalidateAdminCaches();
                         clearLocalPendingTripCaches();
                     } else {
                         showToast(result.error || 'فشل في الحذف', 'error');
@@ -3546,8 +3561,7 @@
             allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(pendingRecordId).trim());
             displayRecordsWithPagination();
 
-            // Invalidate all caches so driver/nurse pages get fresh data
-            DataCache.invalidateAll();
+            invalidateAdminCaches();
             if (pendingAction === 'delete') {
                 clearLocalPendingTripCaches();
             }
@@ -3569,9 +3583,8 @@
                 }, { background: true, timeout: 30000 }).catch(() => {});
             });
 
-            // Safety fallback refresh after 5s
             setTimeout(() => {
-                DataCache.invalidateAll();
+                invalidateAdminCaches();
                 loadAdminData();
             }, 3000);
         }
@@ -3711,10 +3724,9 @@
                 ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 }).catch(() => {});
             });
 
-            // Safety fallback refresh after 5s
-            DataCache.invalidateAll();
+            invalidateAdminCaches();
             setTimeout(() => {
-                DataCache.invalidateAll();
+                invalidateAdminCaches();
                 loadAdminData();
                 loadNurseNameMap();
             }, 5000);

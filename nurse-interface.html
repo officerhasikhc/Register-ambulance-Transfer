@@ -515,18 +515,27 @@
             50% { border-color: #dc2626; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
         }
         
+        @keyframes pulse-error {
+            0% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); background: #fef2f2; }
+            25% { border-color: #dc2626; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18); background: #fee2e2; }
+            50% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); background: #fef2f2; }
+            75% { border-color: #dc2626; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18); background: #fee2e2; }
+            100% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); background: #fef2f2; }
+        }
+
         .field-error,
         .time-select.field-error,
         select.field-error,
         input.field-error,
         textarea.field-error {
-            animation: shake 0.5s ease-in-out, pulse-border 1s ease-in-out 2 !important;
+            animation: shake 0.5s ease-in-out, pulse-error 1.2s ease-in-out 3 !important;
             border-color: #ef4444 !important;
             background: #fef2f2 !important;
         }
-        
+
         .field-error-label {
             color: #ef4444 !important;
+            animation: shake 0.5s ease-in-out;
         }
         
         /* Gentle pulse for fields awaiting completion (destination, patient name) */
@@ -542,7 +551,6 @@
         /* Ensure validation message is visible */
         .validation-message.show {
             display: flex !important;
-            animation: shake 0.3s ease-in-out;
         }
 
         .date-input {
@@ -670,21 +678,32 @@
         }
 
         /* Validation Message */
+        @keyframes validation-appear {
+            0% { opacity: 0; transform: translateY(-8px) scale(0.97); }
+            50% { opacity: 1; transform: translateY(2px) scale(1.01); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes validation-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+            50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.0); }
+        }
         .validation-message {
             display: none;
-            background: var(--error-light);
-            border: 1px solid var(--error);
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border: 2px solid #ef4444;
             color: #991b1b;
-            padding: 12px 16px;
-            border-radius: 10px;
+            padding: 14px 18px;
+            border-radius: 12px;
             margin-bottom: 20px;
-            font-size: 14px;
+            font-size: 15px;
+            font-weight: 600;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .validation-message.show {
             display: flex;
+            animation: validation-appear 0.4s ease-out, validation-pulse 1.5s ease-in-out 3;
         }
 
         /* Modal */
@@ -1924,14 +1943,16 @@
             const retDate = document.getElementById('returnDate').value;
 
             if (depDate && retDate && retDate < depDate) {
-                showValidation(currentLang === 'en' 
-                    ? 'Return date cannot be before departure date!' 
-                    : 'تاريخ العودة لا يمكن أن يكون قبل تاريخ المغادرة!');
-                document.getElementById('returnDate').classList.add('error');
+                showValidation(
+                    currentLang === 'en' 
+                        ? 'Return date cannot be before departure date!' 
+                        : 'تاريخ العودة لا يمكن أن يكون قبل تاريخ المغادرة!',
+                    ['returnDate', 'departureDate']
+                );
                 return false;
             }
 
-            document.getElementById('returnDate').classList.remove('error');
+            document.getElementById('returnDate').classList.remove('error', 'field-error');
             hideValidation();
             return true;
         }
@@ -1942,7 +1963,6 @@
             const depDate = document.getElementById('departureDate').value;
             const retDate = document.getElementById('returnDate').value;
             
-            // Only validate time when both dates are the same day
             if (depDate && retDate && depDate === retDate) {
                 const depHour = document.getElementById('departureTimeHour').value;
                 const depMin = document.getElementById('departureTimeMinute').value;
@@ -1956,9 +1976,12 @@
                     const retMinutes = convertTo24Hour(retHour, retMin, retAmPm);
                     
                     if (retMinutes <= depMinutes) {
-                        showValidation(currentLang === 'en'
-                            ? 'Return time must be after departure time when on the same day!'
-                            : 'وقت العودة يجب أن يكون بعد وقت المغادرة عندما يكون في نفس اليوم!');
+                        showValidation(
+                            currentLang === 'en'
+                                ? 'Return time must be after departure time when on the same day!'
+                                : 'وقت العودة يجب أن يكون بعد وقت المغادرة عندما يكون في نفس اليوم!',
+                            ['returnTimeHour', 'returnTimeMinute', 'returnTimeAmPm', 'departureTimeHour', 'departureTimeMinute', 'departureTimeAmPm']
+                        );
                         return false;
                     }
                 }
@@ -1984,15 +2007,64 @@
             }
         }
 
-        function showValidation(message) {
+        /**
+         * Show validation message with scroll-to-top, and optionally pulse specific fields.
+         * @param {string} message - The error message to display
+         * @param {string[]} [fieldIds] - IDs of fields to highlight with pulse effect
+         */
+        function showValidation(message, fieldIds) {
             const msgDiv = document.getElementById('validationMessage');
             document.getElementById('validationText').textContent = message;
+            
+            // Reset animation by removing and re-adding class
+            msgDiv.classList.remove('show');
+            void msgDiv.offsetWidth; // force reflow
             msgDiv.classList.add('show');
-            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            // Scroll to validation message at top of form
+            smoothScrollToElement(msgDiv, 500);
+            
+            // Pulse the specific error fields
+            if (fieldIds && fieldIds.length > 0) {
+                fieldIds.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (!el) return;
+                    el.classList.remove('field-error');
+                    void el.offsetWidth;
+                    el.classList.add('field-error');
+                    // Also highlight label
+                    var fg = el.closest('.form-group') || (el.closest('.time-picker-container') && el.closest('.time-picker-container').closest('.form-group'));
+                    if (fg) {
+                        var label = fg.querySelector('label');
+                        if (label) {
+                            label.classList.remove('field-error-label');
+                            void label.offsetWidth;
+                            label.classList.add('field-error-label');
+                        }
+                    }
+                });
+                // Auto-clear pulse after animation completes
+                setTimeout(function() {
+                    fieldIds.forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) el.classList.remove('field-error');
+                    });
+                    document.querySelectorAll('.field-error-label').forEach(function(el) {
+                        el.classList.remove('field-error-label');
+                    });
+                }, 5000);
+            }
         }
 
         function hideValidation() {
             document.getElementById('validationMessage').classList.remove('show');
+            // Also clear any field-error highlights
+            document.querySelectorAll('.field-error').forEach(function(el) {
+                el.classList.remove('field-error');
+            });
+            document.querySelectorAll('.field-error-label').forEach(function(el) {
+                el.classList.remove('field-error-label');
+            });
         }
         
         // Scroll to field with error and focus it
@@ -2033,58 +2105,30 @@
             requestAnimationFrame(scrollStep);
         }
         
-        // Show ALL field errors at once with shake animation
+        // Show ALL field errors at once with pulse animation + scroll to top
         function showAllFieldErrors(emptyFields) {
-            // Remove previous error classes
-            document.querySelectorAll('.field-error').forEach(el => {
-                el.classList.remove('field-error');
-            });
-            document.querySelectorAll('.field-error-label').forEach(el => {
-                el.classList.remove('field-error-label');
-            });
+            // Collect field IDs and names
+            var fieldIds = [];
+            var fieldNames = [];
+            var uniqueNames = new Set();
             
-            // Collect field names for message
-            const fieldNames = [];
-            const uniqueNames = new Set();
-            
-            // Add error class to ALL empty elements
-            emptyFields.forEach(({ element, name }) => {
-                element.classList.add('field-error');
-                
-                // Find and highlight the label
-                let formGroup = element.closest('.form-group');
-                if (!formGroup) {
-                    formGroup = element.closest('.time-picker-container')?.closest('.form-group');
+            emptyFields.forEach(function(item) {
+                if (item.element && item.element.id) {
+                    fieldIds.push(item.element.id);
                 }
-                
-                if (formGroup) {
-                    const label = formGroup.querySelector('label');
-                    if (label) label.classList.add('field-error-label');
-                }
-                
-                // Add unique field names
-                if (!uniqueNames.has(name)) {
-                    uniqueNames.add(name);
-                    fieldNames.push(name);
+                if (!uniqueNames.has(item.name)) {
+                    uniqueNames.add(item.name);
+                    fieldNames.push(item.name);
                 }
             });
             
-            const patientNameMissing = fieldNames.some(name => name === 'Patient Name');
-            const message = patientNameMissing 
-                ? 'Patient name is required' 
-                : `Please fill in: ${fieldNames.join(', ')}`;
-            showValidation(message);
+            var patientNameMissing = fieldNames.some(function(name) { return name === 'Patient Name'; });
+            var message = patientNameMissing 
+                ? (currentLang === 'en' ? 'Patient name is required' : 'اسم المريض مطلوب')
+                : (currentLang === 'en' ? 'Please fill in: ' : 'يرجى ملء: ') + fieldNames.join(', ');
             
-            // Remove error classes after animation
-            setTimeout(() => {
-                document.querySelectorAll('.field-error').forEach(el => {
-                    el.classList.remove('field-error');
-                });
-                document.querySelectorAll('.field-error-label').forEach(el => {
-                    el.classList.remove('field-error-label');
-                });
-                hideValidation();
-            }, 4000);
+            // showValidation handles scroll + pulse + auto-clear
+            showValidation(message, fieldIds);
         }
 
         // ============================================
@@ -2542,14 +2586,12 @@
                 }
             }
 
-            // Validate before submit and scroll to first error field
+            // Validate before submit — showValidation handles scroll + field pulse
             if (!validateDates()) {
-                scrollToField('returnDate');
                 return;
             }
             
             if (!validateTimes()) {
-                scrollToField('returnTimeHour');
                 return;
             }
 
@@ -2624,12 +2666,12 @@
                 const otherInput = document.getElementById('destinationOther');
                 destinationValue = otherInput.value.trim();
                 if (!destinationValue) {
-                    showValidation(currentLang === 'en' 
-                        ? 'Please enter the other destination!' 
-                        : 'يرجى إدخال الوجهة الأخرى!');
-                    otherInput.classList.add('error');
-                    otherInput.focus();
-                    scrollToField('destinationOther');
+                    showValidation(
+                        currentLang === 'en' 
+                            ? 'Please enter the other destination!' 
+                            : 'يرجى إدخال الوجهة الأخرى!',
+                        ['destinationOther']
+                    );
                     return;
                 }
             }
@@ -2799,8 +2841,14 @@
             
             resetForm();
             
-            // Invalidate cache so next background refresh gets fresh server data
-            DataCache.invalidateAll();
+            // Invalidate ONLY current month + "all" cache (not every month!)
+            // This preserves pre-warmed data for other months
+            var _invYear = document.getElementById('yearFilter').value;
+            var _invMonth = document.getElementById('monthFilter').value;
+            DataCache.invalidate(
+                'cache_nurse_data_' + _invYear + '_' + _invMonth,
+                'cache_nurse_data_' + _invYear + '_all'
+            );
             
             // Scroll to records to show the entry
             setTimeout(() => {
@@ -2811,7 +2859,12 @@
             if (!isEditing) {
                 setTimeout(() => {
                     if (_pendingOptimisticRecord) {
-                        DataCache.invalidateAll();
+                        var fy = document.getElementById('yearFilter').value;
+                        var fm = document.getElementById('monthFilter').value;
+                        DataCache.invalidate(
+                            'cache_nurse_data_' + fy + '_' + fm,
+                            'cache_nurse_data_' + fy + '_all'
+                        );
                         loadAllNurseData();
                     }
                 }, 10000);
@@ -3932,10 +3985,13 @@
             SyncManager.on('synced', (detail) => {
                 if (detail.action === 'submitCase' || detail.action === 'updateRecord') {
                     console.log('✅ SyncManager: Server confirmed, refreshing records...');
-                    // Don't clear _pendingOptimisticRecord here — let the callback
-                    // in loadAllNurseData detect server confirmation and clear it,
-                    // preventing the record from flashing/disappearing during reload
-                    DataCache.invalidateAll();
+                    // Only invalidate current month + "all" — preserve other months' cache
+                    var sy = document.getElementById('yearFilter').value;
+                    var sm = document.getElementById('monthFilter').value;
+                    DataCache.invalidate(
+                        'cache_nurse_data_' + sy + '_' + sm,
+                        'cache_nurse_data_' + sy + '_all'
+                    );
                     loadAllNurseData();
                 }
             });
