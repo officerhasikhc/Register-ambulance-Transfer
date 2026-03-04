@@ -1931,6 +1931,7 @@
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
+                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة" style="background:#2196F3;">طباعة كشف PDF</button>
                         </div>
                     </div>
 
@@ -2712,96 +2713,112 @@
 
         const ARABIC_NUMS = ['', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
 
-        async function downloadPdfForm() {
-            const completed = (allRecords || []).filter(function (r) {
+        var _pdfTemplateCache = null;
+        var _logoDataUriCache = null;
+
+        async function fetchLogoAsDataUri(url) {
+            var res = await fetch(url);
+            if (!res.ok) return '';
+            var blob = await res.blob();
+            return new Promise(function (resolve) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { resolve(''); };
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function buildPdfHtml() {
+            var completed = (allRecords || []).filter(function (r) {
                 return r['Return Date'] && r['Return Time'];
             });
             if (completed.length === 0) {
                 showToast('لا توجد رحلات مكتملة في الفترة المحددة لملء كشف PDF', 'warning');
-                return;
+                return null;
             }
-            const records = completed.slice(0, 10);
-            const btn = document.getElementById('btnDownloadPdf');
-            if (btn) { btn.disabled = true; btn.textContent = 'جاري إنشاء PDF...'; }
-            try {
+            var records = completed.slice(0, 10);
+
+            if (!_pdfTemplateCache) {
                 var tplRes = await fetch(PDF_TEMPLATE_PATH);
                 if (!tplRes.ok) throw new Error('تعذر تحميل قالب HTML');
-                var tplHtml = await tplRes.text();
+                _pdfTemplateCache = await tplRes.text();
+            }
 
-                var logoDataUri = '';
-                async function fetchLogoAsDataUri(url) {
-                    var res = await fetch(url);
-                    if (!res.ok) return '';
-                    var blob = await res.blob();
-                    return new Promise(function (resolve) {
-                        var reader = new FileReader();
-                        reader.onload = function () { resolve(reader.result); };
-                        reader.onerror = function () { resolve(''); };
-                        reader.readAsDataURL(blob);
-                    });
-                }
+            if (!_logoDataUriCache) {
                 try {
-                    logoDataUri = await fetchLogoAsDataUri('ambulancelogo.png');
-                    if (!logoDataUri) {
-                        logoDataUri = await fetchLogoAsDataUri(window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'ambulancelogo.png');
+                    _logoDataUriCache = await fetchLogoAsDataUri('ambulancelogo.png');
+                    if (!_logoDataUriCache) {
+                        _logoDataUriCache = await fetchLogoAsDataUri(window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'ambulancelogo.png');
                     }
                 } catch (le) { console.warn('Logo load skipped', le); }
+            }
 
-                var driverMap = getDriverNameArMap();
+            var driverMap = getDriverNameArMap();
+            var destination = '';
+            for (var d = 0; d < records.length; d++) {
+                var dest = mapDestinationToAr(records[d]['Destination']);
+                if (dest) { destination = dest; break; }
+            }
 
-                var destination = '';
-                for (var d = 0; d < records.length; d++) {
-                    var dest = mapDestinationToAr(records[d]['Destination']);
-                    if (dest) { destination = dest; break; }
+            var rowsHtml = '';
+            for (var i = 0; i < 10; i++) {
+                var r = records[i];
+                if (r) {
+                    var driverEn = (r['Driver Name'] || '').trim();
+                    var driverAr = driverMap[(driverEn).toUpperCase()] || '';
+                    var driverDisplay = driverAr || driverEn;
+                    rowsHtml += '<tr>' +
+                        '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                        '<td>' + (r['Vehicle Number'] || '') + '</td>' +
+                        '<td>' + driverDisplay + '</td>' +
+                        '<td>' + (r['Staff Number'] || '') + '</td>' +
+                        '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
+                        '<td>' + (r['Departure Time'] || '') + '</td>' +
+                        '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
+                        '<td>' + (r['Return Time'] || '') + '</td>' +
+                        '</tr>';
+                } else {
+                    rowsHtml += '<tr>' +
+                        '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                        '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
                 }
+            }
 
-                var rowsHtml = '';
-                for (var i = 0; i < 10; i++) {
-                    var r = records[i];
-                    if (r) {
-                        var driverEn = (r['Driver Name'] || '').trim();
-                        var driverAr = driverMap[(driverEn).toUpperCase()] || '';
-                        var driverDisplay = driverAr || driverEn;
-                        rowsHtml += '<tr>' +
-                            '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
-                            '<td>' + (r['Vehicle Number'] || '') + '</td>' +
-                            '<td>' + driverDisplay + '</td>' +
-                            '<td>' + (r['Staff Number'] || '') + '</td>' +
-                            '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
-                            '<td>' + (r['Departure Time'] || '') + '</td>' +
-                            '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
-                            '<td>' + (r['Return Time'] || '') + '</td>' +
-                            '</tr>';
-                    } else {
-                        rowsHtml += '<tr>' +
-                            '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
-                            '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
-                    }
-                }
-
-                var finalHtml = tplHtml
-                    .replace('{{logo_src}}', logoDataUri || 'ambulancelogo.png')
+            return {
+                html: _pdfTemplateCache
+                    .replace('{{logo_src}}', _logoDataUriCache || 'ambulancelogo.png')
                     .replace('{{hospital_name}}', PDF_CENTER_NAME)
                     .replace('{{destination}}', destination)
-                    .replace('{{table_rows}}', rowsHtml);
+                    .replace('{{table_rows}}', rowsHtml),
+                count: records.length
+            };
+        }
 
-                if (btn) { btn.textContent = 'جاري توليد PDF من السيرفر...'; }
+        async function downloadPdfForm() {
+            var btn = document.getElementById('btnDownloadPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
+            try {
+                var result = await buildPdfHtml();
+                if (!result) return;
+
+                if (btn) { btn.textContent = 'جاري التنزيل...'; }
 
                 var apiRes = await fetch(WEB_APP_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'generatePdf', html: finalHtml })
+                    body: JSON.stringify({ action: 'generatePdf', html: result.html })
                 });
-                var result = await apiRes.json();
-                if (!result.success) throw new Error(result.error || 'فشل توليد PDF');
+                var apiResult = await apiRes.json();
+                if (!apiResult.success) throw new Error(apiResult.error || 'فشل توليد PDF');
 
-                var byteStr = atob(result.pdf);
+                var byteStr = atob(apiResult.pdf);
                 var bytes = new Uint8Array(byteStr.length);
                 for (var b = 0; b < byteStr.length; b++) bytes[b] = byteStr.charCodeAt(b);
 
                 var pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+                var blobUrl = URL.createObjectURL(pdfBlob);
                 var link = document.createElement('a');
-                link.href = URL.createObjectURL(pdfBlob);
+                link.href = blobUrl;
 
                 var month = document.getElementById('monthFilter').value;
                 var year = document.getElementById('yearFilter').value;
@@ -2814,13 +2831,42 @@
 
                 link.download = 'كشف-حركة-سيارات-الاسعاف_' + fileSuffix + '.pdf';
                 link.click();
-                URL.revokeObjectURL(link.href);
-                showToast('تم تنزيل كشف PDF بنجاح (' + records.length + ' رحلة)', 'success');
+                setTimeout(function () {
+                    URL.revokeObjectURL(blobUrl);
+                    showToast('تم تنزيل كشف PDF بنجاح (' + result.count + ' رحلة)', 'success');
+                }, 3000);
             } catch (err) {
                 console.error('downloadPdfForm error', err);
                 showToast('حدث خطأ أثناء إنشاء PDF: ' + err.message, 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = 'تنزيل كشف PDF'; }
+            }
+        }
+
+        async function printPdfForm() {
+            var btn = document.getElementById('btnPrintPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
+            try {
+                var result = await buildPdfHtml();
+                if (!result) return;
+
+                var printWindow = window.open('', '_blank', 'width=1100,height=750');
+                if (!printWindow) {
+                    showToast('يرجى السماح بالنوافذ المنبثقة للطباعة', 'warning');
+                    return;
+                }
+                printWindow.document.open();
+                printWindow.document.write(result.html);
+                printWindow.document.close();
+                printWindow.onload = function () {
+                    printWindow.focus();
+                    printWindow.print();
+                };
+            } catch (err) {
+                console.error('printPdfForm error', err);
+                showToast('حدث خطأ أثناء التجهيز للطباعة: ' + err.message, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'طباعة كشف PDF'; }
             }
         }
 
