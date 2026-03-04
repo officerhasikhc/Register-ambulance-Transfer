@@ -2117,6 +2117,17 @@
         let viewMode = 'current'; // 'current', 'archive', 'all'
         let notificationData = [];
 
+        var _recentlyDeletedIds = new Set();
+        function markAsDeleted(id) {
+            var s = String(id).trim();
+            _recentlyDeletedIds.add(s);
+            setTimeout(function() { _recentlyDeletedIds.delete(s); }, 30000);
+        }
+        function filterDeleted(arr) {
+            if (!arr || !_recentlyDeletedIds.size) return arr;
+            return arr.filter(function(r) { return !_recentlyDeletedIds.has(String(r.ID || r.id).trim()); });
+        }
+
         /**
          * Smart cache invalidation: updates admin data cache in-place
          * (preserving it for instant display on next load) and clears
@@ -2472,14 +2483,12 @@
                     cacheKey,
                     DataCache.EXPIRY.RECORDS,
                     (records, meta) => {
-                        // Stale guard: skip if user already switched filters
                         if (thisRequestId !== _adminRecordsRequestId) return;
-                        // Skip re-render if background revalidation found no changes
                         if (meta && !meta.fromCache && meta.unchanged) {
                             if (loadingSpinner) loadingSpinner.style.display = 'none';
                             return;
                         }
-                        allRecords = records || [];
+                        allRecords = filterDeleted(records || []);
                         const totalPages = Math.ceil(allRecords.length / recordsPerPage);
                         if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
                         if (currentPage < 1) currentPage = 1;
@@ -3138,7 +3147,7 @@
         }
 
         function applyRecords(records) {
-            allRecords = records || [];
+            allRecords = filterDeleted(records || []);
             const totalPages = Math.ceil(allRecords.length / recordsPerPage);
             if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
@@ -3539,7 +3548,8 @@
                 }, 300);
             }
             
-            // Remove from local array immediately
+            // Remove from local array immediately and prevent server resurrection
+            markAsDeleted(id);
             allRecords = allRecords.filter(r => r.id !== id && r.ID !== id);
             
             showToast('جاري حذف السجل...', 'info');
@@ -3620,10 +3630,10 @@
             showToast(actionLabel, 'success');
             btn.disabled = false;
 
-            // Remove from local array for instant UI update
             var confirmedRecordId = pendingRecordId;
             var confirmedVehicle = pendingVehicleNumber;
             var confirmedAction = pendingAction;
+            markAsDeleted(confirmedRecordId);
             allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(confirmedRecordId).trim());
             displayRecordsWithPagination();
 
