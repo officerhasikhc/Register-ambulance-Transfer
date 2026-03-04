@@ -3091,22 +3091,53 @@
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
 
-        // Background pre-warming: after current month loads, silently prefetch previous months' records
+        // Background pre-warming: aggressively prefetch ALL months' records
+        // Priority: adjacent months first, then "all", then the rest
+        // Uses batches of 2 with short delays to avoid network saturation
         setTimeout(function() {
             try {
                 const year = new Date().getFullYear();
                 const currentMonth = new Date().getMonth() + 1;
-                for (let m = currentMonth - 1; m >= Math.max(1, currentMonth - 2); m--) {
-                    const key = DataCache.KEYS.RECORDS + '_' + year + '_' + m + '_';
-                    const existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
-                    if (existing && existing.data) continue;
-                    var warmUrl = WEB_APP_URL + '?action=getAllRecords&year=' + year + '&month=' + m;
-                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                var prevYear = year - 1;
+
+                var monthsToWarm = [];
+                // "all" for current year (common admin view)
+                monthsToWarm.push({ y: year, m: 'all' });
+                // Adjacent months first
+                if (currentMonth > 1) monthsToWarm.push({ y: year, m: currentMonth - 1 });
+                if (currentMonth < 12) monthsToWarm.push({ y: year, m: currentMonth + 1 });
+                // Rest of current year
+                for (var m = currentMonth - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = currentMonth + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
+                // Previous year recent months
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
+                monthsToWarm.push({ y: prevYear, m: 'all' });
+
+                function fetchAdminRecords(item) {
+                    var key = DataCache.KEYS.RECORDS + '_' + item.y + '_' + item.m + '_';
+                    var existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data && !existing.isExpired) return Promise.resolve();
+                    var warmUrl = WEB_APP_URL + '?action=getAllRecords&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
                         if (result && result.success && result.data) DataCache.set(key, result.data);
                     }).catch(function() {});
                 }
+
+                var warmIdx = 0;
+                function warmAdminBatch() {
+                    if (warmIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && warmIdx < monthsToWarm.length) {
+                        batch.push(fetchAdminRecords(monthsToWarm[warmIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmAdminBatch, 500);
+                    });
+                }
+                warmAdminBatch();
             } catch(e) {}
-        }, 6000);
+        }, 2000);
 
         // Initialize SyncManager for admin actions (delete, update)
         SyncManager.init(WEB_APP_URL).then(() => {

@@ -3871,50 +3871,52 @@
         loadUserSession();
         loadAllNurseData();
 
-        // Background pre-warming: after current month loads, silently prefetch ALL months
-        // Priority: recent months first (most likely to be viewed), then older
+        // Background pre-warming: aggressively prefetch ALL months right after page load
+        // "all" is fetched first (most useful), then adjacent months, then the rest
+        // Uses parallel batches of 2 for speed, with short delays to avoid saturation
         setTimeout(function() {
             try {
                 const session = JSON.parse(localStorage.getItem('userSession') || '{}');
                 const staffNum = session.staffNumber || '';
                 const year = new Date().getFullYear();
                 const currentMonth = new Date().getMonth() + 1;
+                var prevYear = year - 1;
 
                 var monthsToWarm = [];
-                // Current year: all months except current (already loaded)
-                for (var m = currentMonth - 1; m >= 1; m--) {
-                    monthsToWarm.push({ y: year, m: m });
-                }
-                // Previous year: last 3 months
-                var prevYear = year - 1;
-                for (var pm = 12; pm >= 10; pm--) {
-                    monthsToWarm.push({ y: prevYear, m: pm });
-                }
-                // Also warm "all" for current year
                 monthsToWarm.push({ y: year, m: 'all' });
+                if (currentMonth > 1) monthsToWarm.push({ y: year, m: currentMonth - 1 });
+                if (currentMonth < 12) monthsToWarm.push({ y: year, m: currentMonth + 1 });
+                for (var m = currentMonth - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = currentMonth + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
+                monthsToWarm.push({ y: prevYear, m: 'all' });
 
-                var warmIdx = 0;
-                function warmNext() {
-                    if (warmIdx >= monthsToWarm.length) return;
-                    var item = monthsToWarm[warmIdx++];
+                function fetchAndCache(item) {
                     var key = 'cache_nurse_data_' + item.y + '_' + item.m;
                     var existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
-                    if (existing && existing.data) {
-                        setTimeout(warmNext, 200);
-                        return;
-                    }
+                    if (existing && existing.data && !existing.isExpired) return Promise.resolve();
                     var warmUrl = WEB_APP_URL + '?action=getNurseData&year=' + item.y;
                     if (item.m !== 'all') warmUrl += '&month=' + item.m;
                     if (staffNum) warmUrl += '&staffNumber=' + encodeURIComponent(staffNum);
-                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
                         if (result && result.success) DataCache.set(key, result);
-                    }).catch(function() {}).finally(function() {
-                        setTimeout(warmNext, 1500);
+                    }).catch(function() {});
+                }
+
+                var warmIdx = 0;
+                function warmBatch() {
+                    if (warmIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && warmIdx < monthsToWarm.length) {
+                        batch.push(fetchAndCache(monthsToWarm[warmIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmBatch, 400);
                     });
                 }
-                warmNext();
+                warmBatch();
             } catch(e) {}
-        }, 3000);
+        }, 1000);
 
         // Initialize SyncManager for instant local saves + background sync
         SyncManager.init(WEB_APP_URL).then(() => {

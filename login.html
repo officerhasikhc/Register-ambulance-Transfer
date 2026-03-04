@@ -619,6 +619,29 @@
             loadSavedCredentials();
             checkInstallPrompt();
             prefetchOnPageLoad();
+
+            // Speculative prefetch: when user types a known staff number, start loading data early
+            var specPrefetchDone = {};
+            var specDebounce = null;
+            document.getElementById('staffNumber').addEventListener('input', function() {
+                var val = this.value.trim();
+                if (val.length < 3 || specPrefetchDone[val]) return;
+                clearTimeout(specDebounce);
+                specDebounce = setTimeout(function() {
+                    var user = USERS[val] || findUserInLocalStorage(val);
+                    if (user && !specPrefetchDone[val]) {
+                        specPrefetchDone[val] = true;
+                        prefetchForUserType(user.type, val);
+                        // Prefetch target page HTML
+                        try {
+                            var link = document.createElement('link');
+                            link.rel = 'prefetch';
+                            link.href = user.redirect;
+                            document.head.appendChild(link);
+                        } catch(e) {}
+                    }
+                }, 300);
+            });
         });
 
         /**
@@ -651,6 +674,7 @@
         /**
          * Prefetch full page data based on user type.
          * Stores in DataCache localStorage so target page loads instantly.
+         * Returns a Promise that resolves when the FIRST (highest priority) fetch completes.
          */
         function prefetchForUserType(userType, staffNumber) {
             var url = WEB_APP_URL;
@@ -661,61 +685,98 @@
                 // Phase 1: Current month (highest priority - immediate)
                 var nurseUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
                 if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
-                fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
+                var firstFetch = fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_nurse_data_' + year + '_' + month, result);
                     }
                 }).catch(function() {});
 
-                // Phase 2: Recent months (staggered to avoid network saturation)
+                // Phase 2: "all" + adjacent months + rest (parallel batches, faster intervals)
                 var monthsToWarm = [];
-                for (var m = month - 1; m >= 1; m--) {
-                    monthsToWarm.push({ y: year, m: m });
-                }
+                monthsToWarm.push({ y: year, m: 'all' });
+                if (month > 1) monthsToWarm.push({ y: year, m: month - 1 });
+                if (month < 12) monthsToWarm.push({ y: year, m: month + 1 });
+                for (var m = month - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = month + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
                 var prevYear = year - 1;
-                for (var pm = 12; pm >= 10; pm--) {
-                    monthsToWarm.push({ y: prevYear, m: pm });
-                }
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
 
-                var wIdx = 0;
-                function warmNextLogin() {
-                    if (wIdx >= monthsToWarm.length) return;
-                    var item = monthsToWarm[wIdx++];
+                function fetchNurseMonth(item) {
                     var key = 'cache_nurse_data_' + item.y + '_' + item.m;
                     if (typeof DataCache !== 'undefined') {
                         var existing = DataCache.get(key, 15 * 60 * 1000);
-                        if (existing && existing.data) {
-                            setTimeout(warmNextLogin, 100);
-                            return;
-                        }
+                        if (existing && existing.data && !existing.isExpired) return Promise.resolve();
                     }
-                    var warmUrl = url + '?action=getNurseData&year=' + item.y + '&month=' + item.m;
+                    var warmUrl = url + '?action=getNurseData&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
                     if (staffNumber) warmUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
-                    fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
                         if (result && result.success && typeof DataCache !== 'undefined') {
                             DataCache.set(key, result);
                         }
-                    }).catch(function() {}).finally(function() {
-                        setTimeout(warmNextLogin, 2000);
+                    }).catch(function() {});
+                }
+
+                var wIdx = 0;
+                function warmLoginBatch() {
+                    if (wIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && wIdx < monthsToWarm.length) {
+                        batch.push(fetchNurseMonth(monthsToWarm[wIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmLoginBatch, 500);
                     });
                 }
-                setTimeout(warmNextLogin, 1500);
+                setTimeout(warmLoginBatch, 800);
+
+                return firstFetch;
 
             } else if (userType === 'driver') {
                 var driverUrl = url + '?action=getPendingTrips';
-                fetch(driverUrl).then(function(r) { return r.json(); }).then(function(result) {
+                return fetch(driverUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_pending_trips', result.trips || []);
                     }
                 }).catch(function() {});
             } else if (userType === 'admin') {
                 var adminUrl = url + '?action=getAdminData&year=' + year + '&month=' + month;
-                fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
+                var firstAdminFetch = fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_admin_data', result);
                     }
                 }).catch(function() {});
+
+                // Also prefetch "all" and adjacent months' records for admin
+                setTimeout(function() {
+                    var adminMonths = [{ y: year, m: 'all' }];
+                    if (month > 1) adminMonths.push({ y: year, m: month - 1 });
+                    if (month < 12) adminMonths.push({ y: year, m: month + 1 });
+                    for (var am = month - 2; am >= 1; am--) adminMonths.push({ y: year, m: am });
+                    
+                    var aIdx = 0;
+                    function warmAdminLogin() {
+                        if (aIdx >= adminMonths.length) return;
+                        var itm = adminMonths[aIdx++];
+                        var key = 'cache_records_' + itm.y + '_' + itm.m + '_';
+                        if (typeof DataCache !== 'undefined') {
+                            var ex = DataCache.get(key, 15 * 60 * 1000);
+                            if (ex && ex.data) { setTimeout(warmAdminLogin, 100); return; }
+                        }
+                        var wUrl = url + '?action=getAllRecords&year=' + itm.y;
+                        if (itm.m !== 'all') wUrl += '&month=' + itm.m;
+                        fetch(wUrl).then(function(r) { return r.json(); }).then(function(result) {
+                            if (result && result.success && result.data && typeof DataCache !== 'undefined') {
+                                DataCache.set(key, result.data);
+                            }
+                        }).catch(function() {}).finally(function() { setTimeout(warmAdminLogin, 600); });
+                    }
+                    warmAdminLogin();
+                }, 1000);
+
+                return firstAdminFetch;
             }
+            return Promise.resolve();
         }
 
         // Load saved credentials (Remember Me)
@@ -947,14 +1008,34 @@
                     localStorage.setItem('userSession', JSON.stringify(sessionData));
                     localStorage.setItem('appLanguage', currentLang);
                     
-                    // Pre-warm target page with FULL data (not just getPendingTrips)
-                    // This stores data in DataCache localStorage so target page loads instantly
+                    // Pre-warm target page data before redirect
+                    var prefetchDone = false;
                     try {
-                        prefetchForUserType(user.type, sessionData.staffNumber);
+                        var firstFetch = prefetchForUserType(user.type, sessionData.staffNumber);
+                        if (firstFetch && firstFetch.then) {
+                            firstFetch.then(function() { prefetchDone = true; }).catch(function() {});
+                        }
                     } catch(e) {}
                     
-                    // Redirect based on user type
-                    window.location.href = user.redirect;
+                    // Prefetch target page HTML so browser has it cached
+                    try {
+                        var link = document.createElement('link');
+                        link.rel = 'prefetch';
+                        link.href = user.redirect;
+                        document.head.appendChild(link);
+                    } catch(e) {}
+                    
+                    // Wait for first data fetch to complete (up to 600ms max)
+                    // This ensures the target page has data in cache on arrival
+                    var redirectTimer = setTimeout(function() {
+                        window.location.href = user.redirect;
+                    }, 600);
+                    if (firstFetch && firstFetch.then) {
+                        firstFetch.then(function() {
+                            clearTimeout(redirectTimer);
+                            setTimeout(function() { window.location.href = user.redirect; }, 50);
+                        }).catch(function() {});
+                    }
                 } else {
                     // User not found
                     resetLoginButton();

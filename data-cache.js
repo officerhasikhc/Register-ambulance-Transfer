@@ -272,7 +272,6 @@ const DataCache = {
         const month = String(now.getMonth() + 1);
 
         if (pageType === 'nurse') {
-            // Fetch CURRENT MONTH only (not full year) — avoids flash of all-year data
             const session = JSON.parse(localStorage.getItem('userSession') || '{}');
             const staffNum = session.staffNumber || '';
             let url = `${webAppUrl}?action=getNurseData&year=${year}&month=${month}`;
@@ -280,6 +279,14 @@ const DataCache = {
             fetches.push(this._preloadFetch(
                 url,
                 'cache_nurse_data_' + year + '_' + month,
+                r => r.success ? r : null
+            ));
+            // Also preload "all" immediately (high priority for quick switching)
+            let allUrl = `${webAppUrl}?action=getNurseData&year=${year}`;
+            if (staffNum) allUrl += `&staffNumber=${encodeURIComponent(staffNum)}`;
+            fetches.push(this._preloadFetch(
+                allUrl,
+                'cache_nurse_data_' + year + '_all',
                 r => r.success ? r : null
             ));
         }
@@ -299,9 +306,24 @@ const DataCache = {
                 this.KEYS.ADMIN_DATA,
                 r => r.success ? r : null
             ));
+            // Also preload "all" records for admin (common view)
+            fetches.push(this._preloadFetch(
+                `${webAppUrl}?action=getAllRecords&year=${year}`,
+                this.KEYS.RECORDS + '_' + year + '_all_',
+                r => (r.success && r.data) ? r.data : null
+            ));
         }
 
         return Promise.allSettled(fetches);
+    },
+
+    /**
+     * Check if a cache key has valid (non-expired) data
+     * Useful for UI to decide whether to show loading indicator
+     */
+    has(key, expiryMs) {
+        const cached = this.get(key, expiryMs);
+        return cached && cached.data && !cached.isExpired;
     },
 
     /**
