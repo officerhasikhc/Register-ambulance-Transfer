@@ -17,7 +17,13 @@
         var now = new Date();
         var year = now.getFullYear();
         var month = now.getMonth() + 1;
-        window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).catch(function() { return null; });
+        window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).then(function(result) {
+            // Save to dedicated key ASAP so instant display works even after cache invalidation
+            if (result && result.success) {
+                try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
+            }
+            return result;
+        }).catch(function() { return null; });
     })();
     </script>
     
@@ -2097,8 +2103,12 @@
         const PDF_TEMPLATE_PATH = 'pdf-html-template.html';
 
         
-        // Start fetching data immediately (before DOM ready) for faster loading
-        DataCache.preload(WEB_APP_URL, 'admin');
+        // Attach early fetch to DataCache inflight map (prevents duplicate requests)
+        // preload() is NOT called — the early fetch in <head> already covers it
+        if (window.__earlyAdminFetch) {
+            var _earlyUrl = WEB_APP_URL + '?action=getAdminData&year=' + new Date().getFullYear() + '&month=' + (new Date().getMonth() + 1);
+            DataCache._inflight[_earlyUrl] = window.__earlyAdminFetch;
+        }
 
         let currentRecord = null;
         let allRecords = [];
@@ -2108,14 +2118,28 @@
         let notificationData = [];
 
         /**
-         * Smart cache invalidation: only clears current context caches,
-         * preserving pre-warmed data for other months.
+         * Smart cache invalidation: updates admin data cache in-place
+         * (preserving it for instant display on next load) and clears
+         * only month-specific records caches.
          */
         function invalidateAdminCaches() {
             var y = document.getElementById('yearFilter').value;
             var m = document.getElementById('monthFilter').value;
+            
+            // Update cache_admin_data in-place with current allRecords
+            // so next page load still shows data instantly (minus deleted records)
+            try {
+                var cached = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 100);
+                if (cached && cached.data) {
+                    cached.data.records = allRecords;
+                    DataCache.set(DataCache.KEYS.ADMIN_DATA, cached.data);
+                    // Also update the instant-display fallback
+                    try { localStorage.setItem('admin_instant_data', JSON.stringify(cached.data)); } catch(e) {}
+                }
+            } catch(e) {}
+            
+            // Clear month-specific records caches (force fresh data on month switch)
             DataCache.invalidate(
-                DataCache.KEYS.ADMIN_DATA,
                 DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_',
                 DataCache.KEYS.RECORDS + '_' + y + '_all_',
                 DataCache.KEYS.PENDING_TRIPS
@@ -3099,15 +3123,23 @@
         }
 
         // === INSTANT DISPLAY: Show cached data immediately on page load ===
-        const cachedAdminData = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 2);
-        if (cachedAdminData && cachedAdminData.data) {
-            // Show ALL cached data instantly (stats + records + trips)
-            const data = cachedAdminData.data;
-            if (data.stats) applyStats(data.stats);
-            if (data.records) applyRecords(data.records);
-            if (data.trips) applyTrips(data.trips);
+        // Source 1: DataCache (primary)
+        // Source 2: Dedicated localStorage fallback (survives cache invalidation)
+        var _instantData = null;
+        var _cachedAdmin = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 10);
+        if (_cachedAdmin && _cachedAdmin.data) {
+            _instantData = _cachedAdmin.data;
         } else {
-            // No cache available - show skeleton
+            try {
+                var _raw = localStorage.getItem('admin_instant_data');
+                if (_raw) _instantData = JSON.parse(_raw);
+            } catch(e) {}
+        }
+        if (_instantData) {
+            if (_instantData.stats) applyStats(_instantData.stats);
+            if (_instantData.records) applyRecords(_instantData.records);
+            if (_instantData.trips) applyTrips(_instantData.trips);
+        } else {
             showTripsSkeleton();
         }
         
@@ -3198,9 +3230,7 @@
                 DataCache.EXPIRY.ADMIN_DATA,
                 (data, meta) => {
                     if (!data) return;
-                    // Stale guard: skip UI update if user already navigated away
                     if (thisRequestId !== _adminDataRequestId) return;
-                    // Skip re-render if background revalidation found no changes
                     if (meta && !meta.fromCache && meta.unchanged) return;
                     if (typeof SyncManager !== 'undefined') {
                         if (data.records) SyncManager.updateMaxIdFromRecords(data.records);
@@ -3209,6 +3239,10 @@
                     applyStats(data.stats);
                     applyRecords(data.records);
                     applyTrips(data.trips);
+                    // Save to dedicated fallback for instant display on next load
+                    if (!meta || !meta.fromCache) {
+                        try { localStorage.setItem('admin_instant_data', JSON.stringify(data)); } catch(e) {}
+                    }
                 },
                 (result) => result.success ? result : null
             );
