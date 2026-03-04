@@ -2387,12 +2387,14 @@
             return `منذ ${Math.floor(diff / 86400)} يوم`;
         }
 
+        var _adminRecordsRequestId = 0;
+
         async function loadRecords() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
+            const thisRequestId = ++_adminRecordsRequestId;
 
-            // Show loading spinner
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
             if (loadingSpinner) loadingSpinner.style.display = 'block';
 
@@ -2402,13 +2404,19 @@
             if (search) url += `&search=${encodeURIComponent(search)}`;
 
             try {
-                // Use DataCache: show cached records instantly, fetch fresh in background
                 const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
                 await DataCache.fetchWithCache(
                     url,
                     cacheKey,
                     DataCache.EXPIRY.RECORDS,
-                    (records) => {
+                    (records, meta) => {
+                        // Stale guard: skip if user already switched filters
+                        if (thisRequestId !== _adminRecordsRequestId) return;
+                        // Skip re-render if background revalidation found no changes
+                        if (meta && !meta.fromCache && meta.unchanged) {
+                            if (loadingSpinner) loadingSpinner.style.display = 'none';
+                            return;
+                        }
                         allRecords = records || [];
                         const totalPages = Math.ceil(allRecords.length / recordsPerPage);
                         if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
@@ -3150,10 +3158,13 @@
             SyncManager.cleanup();
         }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
 
+        var _adminDataRequestId = 0;
+
         async function loadAdminData() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
+            const thisRequestId = ++_adminDataRequestId;
             
             // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
             if (window.__earlyAdminFetch && !search) {
@@ -3170,9 +3181,12 @@
                 url,
                 DataCache.KEYS.ADMIN_DATA,
                 DataCache.EXPIRY.ADMIN_DATA,
-                (data) => {
+                (data, meta) => {
                     if (!data) return;
-                    // Update SyncManager's ID tracker with server data
+                    // Stale guard: skip UI update if user already navigated away
+                    if (thisRequestId !== _adminDataRequestId) return;
+                    // Skip re-render if background revalidation found no changes
+                    if (meta && !meta.fromCache && meta.unchanged) return;
                     if (typeof SyncManager !== 'undefined') {
                         if (data.records) SyncManager.updateMaxIdFromRecords(data.records);
                         if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);

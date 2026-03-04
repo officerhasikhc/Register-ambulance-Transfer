@@ -3700,11 +3700,16 @@
         // COMBINED DATA LOADING - ONE request for everything
         // Eliminates 3-4 separate round-trips that caused severe delays
         // ============================================
+        // Request counter prevents stale background callbacks from overwriting
+        // current month data when user switches months rapidly
+        var _nurseDataRequestId = 0;
+
         async function loadAllNurseData(options = {}) {
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const session = JSON.parse(localStorage.getItem('userSession') || '{}');
             const staffNum = session.staffNumber || '';
+            const thisRequestId = ++_nurseDataRequestId;
             
             let url = `${WEB_APP_URL}?action=getNurseData&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
@@ -3723,8 +3728,23 @@
                 (data, meta) => {
                     if (!data) return;
                     
+                    // STALE GUARD: if user already switched to another month,
+                    // skip UI updates (cache is still saved by fetchWithCache)
+                    if (thisRequestId !== _nurseDataRequestId) return;
+                    
+                    // UNCHANGED GUARD: if background revalidation found no changes,
+                    // skip expensive DOM re-render (data already displayed from cache)
+                    if (meta && !meta.fromCache && meta.unchanged) {
+                        requestAnimationFrame(() => {
+                            const overlay = document.getElementById('recordsLoadingOverlay');
+                            if (overlay) overlay.style.display = 'none';
+                            const sec = document.querySelector('.records-section');
+                            if (sec) sec.classList.remove('loading');
+                        });
+                        return;
+                    }
+                    
                     // 1. Refresh user session data FIRST (admin may have changed nurse name)
-                    //    Must happen before displaying records so name resolution uses fresh data
                     if (data.userData) {
                         const serverNameAr = (data.userData.nameAr || '').toString().trim();
                         const serverNameEn = (data.userData.nameEn || '').toString().trim();
@@ -3733,12 +3753,10 @@
                             nameEn: serverNameEn || session.nameEn,
                             type: data.userData.type || session.type
                         });
-                        // Clean up: if nameEn/nameAr still looks like employee number, clear it
                         if (looksLikeEmployeeNumber(updated.nameEn)) updated.nameEn = serverNameEn;
                         if (looksLikeEmployeeNumber(updated.nameAr)) updated.nameAr = serverNameAr;
                         localStorage.setItem('userSession', JSON.stringify(updated));
                         window.loggedInUser = updated;
-                        // Re-populate nurse name field if not editing someone else's trip
                         const nurseField = document.getElementById('nurseName');
                         if (nurseField && !nurseField.readOnly) {
                             const freshName = getValidDisplayName(updated);
@@ -3748,23 +3766,18 @@
                     
                     // 2. Apply records (after session refresh so name resolution is correct)
                     if (data.records) {
-                        // Update SyncManager's ID tracker with server records
                         if (typeof SyncManager !== 'undefined') {
                             SyncManager.updateMaxIdFromRecords(data.records);
                             if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
                         }
                         let mergedRecords = applyPendingEdits(data.records);
                         
-                        // Replace optimistic record with real server record (no flash)
                         if (_pendingOptimisticRecord && _nurseSubmitAt) {
                             const opt = _pendingOptimisticRecord;
                             const optId = String(opt.ID || '');
                             const isPendingPrefix = optId.startsWith('pending_');
-                            // Match by predicted ID (R010) or by field comparison
                             const serverHasIt = mergedRecords.some(r => {
-                                // Match by exact ID (predicted ID like R010)
                                 if (!isPendingPrefix && optId && String(r.ID || '') === optId) return true;
-                                // Fallback: match by fields
                                 return (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
                                     (r['Departure Time'] || '') === (opt['Departure Time'] || '') &&
                                     (r['Return Date'] || '') === (opt['Return Date'] || '') &&
@@ -3772,12 +3785,9 @@
                                     (r['Patient Name'] || '') === (opt['Patient Name'] || '');
                             });
                             if (serverHasIt || (Date.now() - _nurseSubmitAt > 15000)) {
-                                // Server confirmed or timeout — clear; server data replaces pending
                                 _pendingOptimisticRecord = null;
                                 _nurseSubmitAt = 0;
                             } else {
-                                // Server hasn't caught up — keep optimistic record at top
-                                // But avoid duplicate if server already has same ID
                                 mergedRecords = mergedRecords.filter(r => String(r.ID || '') !== optId);
                                 mergedRecords.unshift(opt);
                             }
@@ -3801,7 +3811,6 @@
                     // 4. Apply pending trips
                     if (data.trips) {
                         const nurseTrips = data.trips.filter(t => t.status !== 'submitted');
-                        // Clean up _recentlySubmittedTripIds: if server already filtered out the trip, remove from local set
                         if (_recentlySubmittedTripIds.size > 0) {
                             const serverTripIds = new Set(data.trips.map(t => t.tripId));
                             _recentlySubmittedTripIds.forEach(id => {
