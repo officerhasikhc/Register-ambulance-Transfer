@@ -3307,23 +3307,9 @@
             var monthFilter = document.getElementById('monthFilter').value;
 
             var filtered = (allRecords || []).slice();
-            if (yearFilter !== 'all') {
-                filtered = filtered.filter(function (r) {
-                    var date = r['Departure Date'];
-                    return date && date.includes(yearFilter);
-                });
-            }
-            if (monthFilter !== 'all') {
-                filtered = filtered.filter(function (r) {
-                    var date = r['Departure Date'];
-                    if (!date) return false;
-                    var m = parseInt(date.split('-')[1] || date.split('/')[1]);
-                    return m === parseInt(monthFilter);
-                });
-            }
 
             if (filtered.length === 0) {
-                alert(currentLang === 'en' ? 'No records to export for the selected period.' : 'لا توجد سجلات للتصدير في الفترة المحددة.');
+                alert(currentLang === 'en' ? 'No records to export. Please wait for records to load first.' : 'لا توجد سجلات للتصدير. يرجى الانتظار حتى يتم تحميل السجلات.');
                 return;
             }
 
