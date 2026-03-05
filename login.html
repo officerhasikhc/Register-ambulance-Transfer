@@ -1065,38 +1065,33 @@
             errorMessage.classList.add('show');
         }
 
-        // Register Service Worker for PWA with auto-update
+        // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
-                    
-                    // Check for updates every 60 seconds
-                    setInterval(() => {
-                        reg.update();
-                    }, 60000);
-                    
-                    // Listen for updates
+                    reg.update().catch(() => {});
+                    setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
                         console.log('[App] New Service Worker found, installing...');
-                        
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                 console.log('[App] New version available! Reloading...');
-                                // Auto-reload to get the new version
                                 setTimeout(() => window.location.reload(), 1000);
                             }
                         });
                     });
                 })
                 .catch(err => console.error('[App] Service Worker registration failed:', err));
-            
-            // Listen for messages from Service Worker
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }

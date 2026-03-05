@@ -212,7 +212,7 @@ function getAllFromStore(store) {
 
 // Activate event - Take control immediately and clean old caches
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating Service Worker v32...');
+  console.log('[SW] Activating Service Worker v33...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),

@@ -4224,11 +4224,13 @@
             document.getElementById(id).addEventListener('change', updateTimeInputs);
         });
 
-        // Register Service Worker for PWA with auto-update
+        // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
+                    // Force immediate update check on load (catches stale PWAs)
+                    reg.update().catch(() => {});
                     setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
@@ -4242,10 +4244,15 @@
                     });
                 })
                 .catch(err => console.error('[App] SW registration failed:', err));
+            // Reload when a new SW takes control (most reliable update signal)
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }
