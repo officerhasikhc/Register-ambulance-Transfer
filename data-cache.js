@@ -274,6 +274,18 @@ const DataCache = {
         if (pageType === 'nurse') {
             const session = JSON.parse(localStorage.getItem('userSession') || '{}');
             const staffNum = session.staffNumber || '';
+
+            // Fast: lightweight pending trips (1-2s) for instant display
+            fetches.push(
+                fetch(`${webAppUrl}?action=getPendingTrips`).then(r => r.json()).then(result => {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        const nt = result.trips.filter(t => t.status !== 'submitted');
+                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                    }
+                }).catch(() => {})
+            );
+
+            // Heavy: full nurse data (records + trips + stats)
             let url = `${webAppUrl}?action=getNurseData&year=${year}&month=${month}`;
             if (staffNum) url += `&staffNumber=${encodeURIComponent(staffNum)}`;
             fetches.push(this._preloadFetch(
@@ -281,7 +293,6 @@ const DataCache = {
                 'cache_nurse_data_' + year + '_' + month,
                 r => r.success ? r : null
             ));
-            // Also preload "all" immediately (high priority for quick switching)
             let allUrl = `${webAppUrl}?action=getNurseData&year=${year}`;
             if (staffNum) allUrl += `&staffNumber=${encodeURIComponent(staffNum)}`;
             fetches.push(this._preloadFetch(

@@ -679,14 +679,23 @@
             var month = new Date().getMonth() + 1;
             
             if (userType === 'nurse') {
-                // Phase 1: Current month (highest priority - immediate)
+                // Fast fetch: lightweight pending trips ONLY (1-2s) — returned as firstFetch so login waits for it
+                var firstFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try {
+                            var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        } catch(e) {}
+                    }
+                }).catch(function() {});
+
+                // Heavy fetch: full nurse data (records + trips + stats) — runs in background
                 var nurseUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
                 if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
-                var firstFetch = fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
+                fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && typeof DataCache !== 'undefined') {
                         DataCache.set('cache_nurse_data_' + year + '_' + month, result);
                     }
-                    // Also store pending trips in dedicated key for instant display on nurse page
                     if (result && result.trips) {
                         try {
                             var nurseTrips = result.trips.filter(function(t) { return t.status !== 'submitted'; });
@@ -1029,11 +1038,11 @@
                         document.head.appendChild(link);
                     } catch(e) {}
                     
-                    // Wait for first data fetch to complete (up to 600ms max)
-                    // This ensures the target page has data in cache on arrival
+                    // Wait for fast data fetch to complete (up to 2s max)
+                    // This ensures pending trips are in localStorage before nurse page loads
                     var redirectTimer = setTimeout(function() {
                         window.location.href = user.redirect;
-                    }, 600);
+                    }, 2000);
                     if (firstFetch && firstFetch.then) {
                         firstFetch.then(function() {
                             clearTimeout(redirectTimer);

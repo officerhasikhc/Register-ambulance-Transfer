@@ -21,15 +21,14 @@
         var month = new Date().getMonth() + 1;
         var reqUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
         if (staffNum) reqUrl += '&staffNumber=' + encodeURIComponent(staffNum);
+        // Heavy fetch: full nurse data (records + trips + stats) — slow, 5-15s
         window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).then(function(result) {
-            // Update local caches IMMEDIATELY so page shows fresh data (no stale trips)
             if (result && result.trips) {
                 try {
                     var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
                     localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
                 } catch(e) {}
             }
-            // Also update DataCache so instant display reads fresh data
             if (result && result.success) {
                 try {
                     var ck = 'cache_nurse_data_' + year + '_' + month;
@@ -40,6 +39,18 @@
             return result;
         }).catch(function() { return null; });
         window.__earlyNurseMonth = month;
+        
+        // Fast fetch: pending trips ONLY — lightweight, 1-2s
+        window.__earlyNursePendingTrips = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.success && Array.isArray(result.trips)) {
+                try {
+                    var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                } catch(e) {}
+                return nt;
+            }
+            return null;
+        }).catch(function() { return null; });
     })();
     </script>
     
@@ -3916,52 +3927,58 @@
             );
         }
         
-        // Show pending trips — prefer fresh early fetch over stale cache.
-        // The early fetch started in <head> (2-5 seconds ago), so it likely finished.
+        // Show pending trips — prioritise the FAST lightweight fetch over the heavy one.
         (async function showPendingTripsFromBestSource() {
             try {
-                // Strategy: Race the early fetch (already in-flight) against a short timer.
-                // If the fetch wins (likely — it had a head start), we show 100% fresh data.
-                // If the timer wins, we fall back to cached data.
-                if (window.__earlyNurseFetch) {
-                    var result = await Promise.race([
-                        window.__earlyNurseFetch,
-                        new Promise(function(r) { setTimeout(function() { r(null); }, 800); })
+                // Step 1: Show cached data immediately (zero-delay) so the section is never empty
+                var shownFromCache = false;
+                var localTrips = localStorage.getItem('pending_trips_for_nurse');
+                if (localTrips) {
+                    try {
+                        var trips = JSON.parse(localTrips);
+                        if (Array.isArray(trips)) { displayPendingTrips(trips); shownFromCache = true; }
+                    } catch(e) {}
+                }
+                if (!shownFromCache) {
+                    var year = new Date().getFullYear();
+                    var month = new Date().getMonth() + 1;
+                    var cacheKey = 'cache_nurse_data_' + year + '_' + month;
+                    var cached = null;
+                    try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
+                    if (cached && cached.data && cached.data.trips) {
+                        var ct = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        displayPendingTrips(ct);
+                        shownFromCache = true;
+                    }
+                }
+
+                // Step 2: Wait for the FAST pending-trips fetch (1-2s) to replace stale cache
+                if (window.__earlyNursePendingTrips) {
+                    var freshTrips = await Promise.race([
+                        window.__earlyNursePendingTrips,
+                        new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
                     ]);
-                    if (result && result.trips) {
-                        var nurseTrips = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                        displayPendingTrips(nurseTrips);
+                    if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
+                        displayPendingTrips(freshTrips);
                         return;
                     }
                 }
-                
-                // Fallback: check if early fetch already updated localStorage
-                if (window.__earlyNurseFetchDone) {
-                    var localTrips = localStorage.getItem('pending_trips_for_nurse');
-                    if (localTrips) {
-                        var trips = JSON.parse(localTrips);
-                        if (Array.isArray(trips)) { displayPendingTrips(trips); return; }
+
+                // Step 3: If fast fetch timed out, try the heavy fetch briefly
+                if (window.__earlyNurseFetch) {
+                    var result = await Promise.race([
+                        window.__earlyNurseFetch,
+                        new Promise(function(r) { setTimeout(function() { r(null); }, 500); })
+                    ]);
+                    if (result && result.trips) {
+                        var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        displayPendingTrips(nt);
+                        return;
                     }
                 }
 
-                // Fallback: DataCache (may be stale but better than nothing)
-                var year = new Date().getFullYear();
-                var month = new Date().getMonth() + 1;
-                var cacheKey = 'cache_nurse_data_' + year + '_' + month;
-                var cached = null;
-                try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
-                if (cached && cached.data && cached.data.trips) {
-                    var nurseTrips2 = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
-                    displayPendingTrips(nurseTrips2);
-                    return;
-                }
-
-                // Fallback: dedicated localStorage cache
-                var localTrips2 = localStorage.getItem('pending_trips_for_nurse');
-                if (localTrips2) {
-                    var trips2 = JSON.parse(localTrips2);
-                    if (Array.isArray(trips2)) { displayPendingTrips(trips2); return; }
-                }
+                // If we already showed cache, that's fine — background fetches will update later
+                if (shownFromCache) return;
 
                 // No data at all — show loading
                 var container = document.getElementById('pendingTripsContainer');
@@ -4095,6 +4112,15 @@
         // Instant refresh when nurse returns to the tab
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
+                // Fast: refresh pending trips immediately via lightweight endpoint
+                fetch(WEB_APP_URL + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        displayPendingTrips(nt);
+                    }
+                }).catch(function() {});
+                // Heavy: full data refresh in background
                 smartRefreshNurseData();
             }
         });
