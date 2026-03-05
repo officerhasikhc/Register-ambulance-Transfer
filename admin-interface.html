@@ -3182,8 +3182,7 @@
         }
 
         // === INSTANT DISPLAY: Show cached data immediately on page load ===
-        // Source 1: DataCache (primary)
-        // Source 2: Dedicated localStorage fallback (survives cache invalidation)
+        // === INSTANT DISPLAY: show whatever we have cached, then replace with fresh data ===
         var _instantData = null;
         var _cachedAdmin = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 10);
         if (_cachedAdmin && _cachedAdmin.data) {
@@ -3202,7 +3201,17 @@
             if (_instantData.trips) { applyTrips(_instantData.trips); _tripsDisplayed = true; }
         }
         
-        // If trips weren't in admin data, try separate pending trips cache
+        // Try separate pending trips cache (updated by login page or previous visit)
+        if (!_tripsDisplayed) {
+            try {
+                var _rawTrips = localStorage.getItem('cache_pending_trips');
+                if (_rawTrips) {
+                    var _parsed = JSON.parse(_rawTrips);
+                    var _tripsArr = _parsed.data || _parsed;
+                    if (Array.isArray(_tripsArr)) { applyTrips(_tripsArr); _tripsDisplayed = true; }
+                }
+            } catch(e) {}
+        }
         if (!_tripsDisplayed) {
             var _cachedTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 10);
             if (_cachedTrips && _cachedTrips.data) {
@@ -3210,24 +3219,28 @@
                 _tripsDisplayed = true;
             }
         }
-        
-        // Show skeleton only for sections that haven't loaded yet
+
+        // If still no trips: show skeleton, then wait for the FAST early fetch (1-2s)
         if (!_tripsDisplayed) {
             showTripsSkeleton();
-            // Race: use early pending trips fetch for fast display
-            if (window.__earlyPendingTrips) {
-                window.__earlyPendingTrips.then(function(trips) {
-                    if (trips && !_tripsDisplayed) {
-                        applyTrips(trips);
-                        _tripsDisplayed = true;
-                    }
-                });
-            }
         }
+        
+        // Always wait for the fast early fetch to replace stale cache with fresh data
+        (async function() {
+            if (window.__earlyPendingTrips) {
+                var freshTrips = await Promise.race([
+                    window.__earlyPendingTrips,
+                    new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
+                ]);
+                if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
+                    applyTrips(freshTrips);
+                    _tripsDisplayed = true;
+                }
+            }
+        })();
         
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
-        // Also fetch pending trips via fast lightweight endpoint
         loadPendingTrips();
 
         // Background pre-warming: aggressively prefetch ALL months' records
@@ -3904,6 +3917,25 @@
                 isAdminRefreshing = false;
             }
         }, 15000);
+
+        // Instant refresh when admin returns to the tab
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                // Fast: refresh pending trips immediately via lightweight endpoint
+                fetch(WEB_APP_URL + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                        applyTrips(result.trips);
+                    }
+                }).catch(function() {});
+                // Heavy: full data refresh in background
+                if (!isAdminRefreshing) {
+                    isAdminRefreshing = true;
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    loadAdminData().finally(function() { isAdminRefreshing = false; });
+                }
+            }
+        });
 
         // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
