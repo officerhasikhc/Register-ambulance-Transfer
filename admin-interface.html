@@ -3110,14 +3110,29 @@
         let pendingPage = 1;
         let approvedPage = 1;
         const TRIPS_PER_PAGE = 5;
+        
+        // Optimistic deletion: track recently deleted trip IDs so server
+        // responses don't resurrect them before the delete is processed.
+        const _recentlyDeletedTrips = new Map(); // tripId → timestamp
 
         function applyTrips(trips) {
-            updateNotificationBadges(trips);
-            if (trips && trips.length > 0) {
-                pendingTripsArr = trips.filter(t => t.status === 'pending');
+            // Filter out recently deleted trips (optimistic deletion protection)
+            let filtered = trips || [];
+            if (_recentlyDeletedTrips.size > 0) {
+                const now = Date.now();
+                // Clean up old entries (older than 30 seconds — server should have processed by then)
+                _recentlyDeletedTrips.forEach((ts, id) => {
+                    if (now - ts > 30000) _recentlyDeletedTrips.delete(id);
+                });
+                filtered = filtered.filter(t => !_recentlyDeletedTrips.has(t.tripId || t.id));
+            }
+            
+            updateNotificationBadges(filtered);
+            if (filtered.length > 0) {
+                pendingTripsArr = filtered.filter(t => t.status === 'pending');
                 // Only show trips waiting for nurse completion (driver returned but nurse hasn't submitted yet).
                 // 'submitted' trips are already in the Records table — no need to duplicate here.
-                approvedTripsArr = trips.filter(t => t.status === 'complete');
+                approvedTripsArr = filtered.filter(t => t.status === 'complete');
             } else {
                 pendingTripsArr = [];
                 approvedTripsArr = [];
@@ -3497,7 +3512,7 @@
             keysToRemove.forEach(key => localStorage.removeItem(key));
         }
 
-        // Delete pending trip
+        // Delete pending trip — optimistic instant deletion
         async function deletePendingTrip(tripId) {
             const confirmed = await sysConfirm({
                 title: 'حذف الرحلة',
@@ -3508,47 +3523,54 @@
             });
             if (!confirmed) return;
             
-            // Find and animate the card immediately
+            // === INSTANT UI (0ms) ===
+            
+            // Mark as recently deleted so background fetches don't resurrect it
+            _recentlyDeletedTrips.set(tripId, Date.now());
+            
+            // Animate the card out
             const tripCard = document.querySelector(`[data-trip-id="${tripId}"]`);
             if (tripCard) {
                 tripCard.classList.add('deleting');
             }
             
-            // Remove from local arrays immediately for instant feedback
+            // Remove from local arrays
             pendingTripsArr = pendingTripsArr.filter(t => (t.tripId || t.id) !== tripId);
             approvedTripsArr = approvedTripsArr.filter(t => (t.tripId || t.id) !== tripId);
             
-            // Update counts immediately
+            // Update counts and re-render after animation
             document.getElementById('pendingCount').textContent = pendingTripsArr.length;
             document.getElementById('approvedCount').textContent = approvedTripsArr.length;
             
-            showToast('جاري حذف الطلب...', 'info');
+            setTimeout(() => {
+                const pendingSection = document.getElementById('pendingTripsContainer').parentElement;
+                const approvedSection = document.getElementById('approvedTripsContainer').parentElement;
+                pendingSection.querySelector('.trip-section-pagination')?.remove();
+                approvedSection.querySelector('.trip-section-pagination')?.remove();
+                renderTripSection('pendingTripsContainer', getFilteredTrips('pending'), pendingPage, 'pending');
+                renderTripSection('approvedTripsContainer', getFilteredTrips('approved'), approvedPage, 'approved');
+            }, 350);
             
+            // Update local caches to reflect deletion
+            clearLocalPendingTripCaches();
+            
+            showToast(`تم حذف الطلب ${tripId}`, 'success');
+            
+            // === BACKGROUND SERVER SYNC (silent) ===
             try {
                 const response = await fetch(`${WEB_APP_URL}?action=deletePendingTrip&tripId=${encodeURIComponent(tripId)}`);
                 const result = await response.json();
-                
                 if (result.success) {
-                    showToast(`تم حذف الطلب ${tripId} بنجاح`, 'success');
                     DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                    clearLocalPendingTripCaches();
-                    
-                    // Re-render after animation completes
-                    setTimeout(() => {
-                        const pendingSection = document.getElementById('pendingTripsContainer').parentElement;
-                        const approvedSection = document.getElementById('approvedTripsContainer').parentElement;
-                        pendingSection.querySelector('.trip-section-pagination')?.remove();
-                        approvedSection.querySelector('.trip-section-pagination')?.remove();
-                        renderTripSection('pendingTripsContainer', getFilteredTrips('pending'), pendingPage, 'pending');
-                        renderTripSection('approvedTripsContainer', getFilteredTrips('approved'), approvedPage, 'approved');
-                    }, 400);
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 } else {
-                    showToast(result.error || 'فشل في الحذف', 'error');
-                    // Reload to restore state on error
+                    showToast(result.error || 'فشل حذف الطلب من السيرفر', 'error');
+                    _recentlyDeletedTrips.delete(tripId);
                     loadPendingTrips();
                 }
             } catch (error) {
-                showToast('خطأ في الاتصال: ' + error.message, 'error');
+                showToast('خطأ في الاتصال - سيُعاد المحاولة', 'error');
+                _recentlyDeletedTrips.delete(tripId);
                 loadPendingTrips();
             }
         }
@@ -3564,7 +3586,7 @@
             pendingVehicleNumber = vehicleNumber;
             
             document.getElementById('actionModalTitle').textContent = 'تأكيد الأرشفة';
-            document.getElementById('actionModalMessage').textContent = `هل تريد أرشفة الطلب رقم: ${id}؟ سيتم إرسال إشعار للممرضات.`;
+            document.getElementById('actionModalMessage').textContent = `هل تريد أرشفة الطلب رقم: ${id}؟`;
             document.getElementById('confirmActionBtn').textContent = 'أرشفة';
             document.getElementById('confirmActionBtn').style.background = '#4338ca';
             document.getElementById('actionReason').value = '';
@@ -3641,7 +3663,7 @@
             pendingVehicleNumber = vehicleNumber;
             
             document.getElementById('actionModalTitle').textContent = 'تأكيد الحذف';
-            document.getElementById('actionModalMessage').textContent = `هل تريد حذف الطلب رقم: ${id}؟ سيتم إرسال إشعار للممرضات. هذا الإجراء لا يمكن التراجع عنه!`;
+            document.getElementById('actionModalMessage').textContent = `هل تريد حذف الطلب رقم: ${id}؟ هذا الإجراء لا يمكن التراجع عنه!`;
             document.getElementById('confirmActionBtn').textContent = 'حذف';
             document.getElementById('confirmActionBtn').style.background = '#dc2626';
             document.getElementById('actionReason').value = '';
