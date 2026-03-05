@@ -1879,12 +1879,12 @@
 
                 <!-- Trips Sections: Pending & Approved -->
                 <div id="pendingSection" class="trips-grid">
-                    <!-- Pending Trips (معلقة) -->
+                    <!-- Pending Trips - بانتظار عودة السائق -->
                     <div class="trip-section">
                         <div class="trip-section-header">
                             <div class="section-title">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                رحلات معلقة
+                                بانتظار عودة السائق
                             </div>
                             <span class="section-count count-warning" id="pendingCount">0</span>
                         </div>
@@ -1899,17 +1899,17 @@
                         </div>
                     </div>
 
-                    <!-- Approved/Submitted Trips (معتمدة) -->
+                    <!-- Approved Trips - بانتظار إكمال بيانات الممرضة -->
                     <div class="trip-section">
                         <div class="trip-section-header">
                             <div class="section-title">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                رحلات معتمدة
+                                بانتظار إكمال الممرضة
                             </div>
                             <span class="section-count count-success" id="approvedCount">0</span>
                         </div>
                         <div class="trip-search-box">
-                            <input type="text" id="approvedSearchInput" placeholder="بحث في الرحلات المعتمدة..." oninput="filterTrips('approved')">
+                            <input type="text" id="approvedSearchInput" placeholder="بحث في الرحلات بانتظار الإكمال..." oninput="filterTrips('approved')">
                         </div>
                         <div class="trip-section-body" id="approvedTripsContainer">
                             <div class="trip-section-empty">
@@ -3115,7 +3115,9 @@
             updateNotificationBadges(trips);
             if (trips && trips.length > 0) {
                 pendingTripsArr = trips.filter(t => t.status === 'pending');
-                approvedTripsArr = trips.filter(t => t.status === 'complete' || t.status === 'submitted');
+                // Only show trips waiting for nurse completion (driver returned but nurse hasn't submitted yet).
+                // 'submitted' trips are already in the Records table — no need to duplicate here.
+                approvedTripsArr = trips.filter(t => t.status === 'complete');
             } else {
                 pendingTripsArr = [];
                 approvedTripsArr = [];
