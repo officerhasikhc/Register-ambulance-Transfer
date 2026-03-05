@@ -18,10 +18,33 @@
     <script>
     (function() {
         var url = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+        window.__earlyFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            // Update local caches immediately so page shows fresh data
+            if (result && result.success && Array.isArray(result.trips)) {
+                try {
+                    localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, timestamp: Date.now() }));
+                    // Clear stale driver pending trips that no longer exist on server
+                    var serverStaffNums = {};
+                    result.trips.forEach(function(t) {
+                        if (t.status === 'pending' && t.staffNumber) serverStaffNums[t.staffNumber.toString().trim()] = true;
+                    });
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var k = localStorage.key(i);
+                        if (k && k.startsWith('pending_trip_')) {
+                            try {
+                                var lt = JSON.parse(localStorage.getItem(k));
+                                if (lt && lt.tripId && lt.staffNumber && !serverStaffNums[lt.staffNumber.toString().trim()]) {
+                                    localStorage.removeItem(k);
+                                }
+                            } catch(e2) {}
+                        }
+                    }
+                } catch(e) {}
+            }
+            return result;
+        }).catch(function() { return null; });
         if (typeof DataCache !== 'undefined') {
             DataCache.preload(url, 'driver');
-        } else {
-            window.__earlyFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).catch(function() { return null; });
         }
     })();
     </script>
@@ -1427,22 +1450,44 @@
                 return;
             }
 
-            // === INSTANT LOCAL LOAD FIRST ===
+            // === SMART LOCAL LOAD: prefer fresh data over stale cache ===
             const pendingKey = `pending_trip_${selectedDriver.staffNumber}`;
             const historyKey = `trip_history_${selectedDriver.staffNumber}`;
+            const staffStr = selectedDriver.staffNumber ? selectedDriver.staffNumber.toString().trim() : '';
             
-            // Check for locally saved pending trip
+            // If early fetch already completed and updated the cache, use that.
+            // The early fetch started in <head> and cleans up deleted trips from localStorage.
+            // So by now, localStorage should already reflect server state.
             const localPending = localStorage.getItem(pendingKey);
             if (localPending) {
                 try {
-                    pendingTrip = JSON.parse(localPending);
-                    const pendingDiv = document.getElementById('pendingTrip');
-                    if (pendingDiv && pendingTrip.departureDate) {
-                        pendingDiv.style.display = 'block';
-                        document.getElementById('pendingDate').textContent = pendingTrip.departureDate;
-                        document.getElementById('pendingTime').textContent = pendingTrip.departureTime || '';
+                    const localTrip = JSON.parse(localPending);
+                    // Only show if the trip hasn't been deleted on server (check DataCache)
+                    const cachedServerTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 5);
+                    let serverSaysGone = false;
+                    if (cachedServerTrips && cachedServerTrips.data && Array.isArray(cachedServerTrips.data) && localTrip.tripId) {
+                        const stillOnServer = cachedServerTrips.data.some(t => {
+                            const tStaff = t.staffNumber ? t.staffNumber.toString().trim() : '';
+                            return tStaff === staffStr && t.status === 'pending';
+                        });
+                        if (!stillOnServer) serverSaysGone = true;
                     }
-                    updateButtons();
+                    
+                    if (serverSaysGone) {
+                        localStorage.removeItem(pendingKey);
+                        pendingTrip = null;
+                        document.getElementById('pendingTrip').style.display = 'none';
+                        updateButtons();
+                    } else if (localTrip.departureDate) {
+                        pendingTrip = localTrip;
+                        const pendingDiv = document.getElementById('pendingTrip');
+                        if (pendingDiv) {
+                            pendingDiv.style.display = 'block';
+                            document.getElementById('pendingDate').textContent = localTrip.departureDate;
+                            document.getElementById('pendingTime').textContent = localTrip.departureTime || '';
+                        }
+                        updateButtons();
+                    }
                 } catch (e) {}
             }
             
@@ -2386,6 +2431,14 @@
         setInterval(() => {
             if (!document.hidden) autoRefreshHistory();
         }, 12000);
+        
+        // Refresh immediately when driver returns to the app (tab/PWA switch)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && selectedDriver) {
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+                loadPendingTrip();
+            }
+        });
 
         // ============================================
         // OFFLINE SUPPORT | دعم العمل بدون إنترنت
