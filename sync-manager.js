@@ -220,7 +220,7 @@ const SyncManager = {
                 timeout: 45000
             });
 
-            if (result.success && !result.offline) {
+            if (result.success && !result.offline && !result.queued) {
                 await this._updateEntry(localId, {
                     status: 'synced',
                     serverResponse: result,
@@ -230,7 +230,9 @@ const SyncManager = {
                 this._emit('synced', { localId, action: entry.action, serverResponse: result, data: entry.data });
             } else if (result.offline || result.queued) {
                 await this._updateStatus(localId, 'queued');
-                this._scheduleOnlineRetry(localId);
+                const retryDelay = Math.min(5000 * Math.pow(1.5, (entry.retryCount || 0)), 60000);
+                console.warn('⚠️ SyncManager: Queued for retry in', Math.round(retryDelay/1000) + 's:', localId);
+                setTimeout(() => this._syncOne(localId), retryDelay);
             } else {
                 throw new Error(result.error || 'Unknown sync error');
             }

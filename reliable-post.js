@@ -9,15 +9,17 @@
  *
  * Solution:
  * 1. Primary: Use mode:'cors' with redirect:'follow' — full visibility
- * 2. Fallback: If CORS fails (rare), retry with no-cors as last resort
- * 3. Automatic retry with exponential backoff (up to 3 attempts)
- * 4. Offline queue: if all attempts fail, queue for later sync
+ * 2. Fallback: GET with URL-encoded payload (bypasses CORS entirely)
+ * 3. Last resort: no-cors POST (opaque, unverifiable)
+ * 4. Automatic retry with exponential backoff (up to 3 attempts)
+ * 5. Offline queue: if all attempts fail, queue for later sync
  */
 
 const ReliablePost = {
     OFFLINE_QUEUE_KEY: 'reliable_post_queue',
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000,
+    _GET_SUPPORTED_ACTIONS: ['submitCase', 'driverDeparture', 'driverReturn', 'updateRecord'],
 
     /**
      * Send POST data reliably to Google Apps Script
@@ -32,6 +34,7 @@ const ReliablePost = {
         const timeout = options.timeout || 45000;
         const background = options.background || false;
 
+        // === Strategy 1: POST with CORS (most reliable when it works) ===
         for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
             try {
                 var attemptTimeout = timeout + (attempt * 5000);
@@ -51,23 +54,36 @@ const ReliablePost = {
             }
         }
 
-        // Fallback: try no-cors (opaque response — can't confirm, but data may arrive)
+        // === Strategy 2: GET with URL payload (bypasses CORS/redirect entirely) ===
+        if (data.action && this._GET_SUPPORTED_ACTIONS.includes(data.action)) {
+            try {
+                console.log('ReliablePost: Trying GET fallback for', data.action);
+                const result = await this._getWithPayload(url, data, timeout);
+                if (result && result.success) {
+                    console.log('ReliablePost: GET fallback succeeded');
+                    return result;
+                }
+            } catch (error) {
+                console.warn('ReliablePost: GET fallback failed:', error.message);
+            }
+        }
+
+        // === Strategy 3: no-cors POST (fire-and-forget, unverifiable) ===
         try {
             console.log('ReliablePost: Falling back to no-cors mode');
             await this._postNoCors(url, data, timeout);
-            // Can't read opaque response, assume success
-            return { success: true, opaque: true };
+            console.warn('ReliablePost: no-cors sent but unconfirmed (opaque). Queuing for verification.');
         } catch (error) {
             console.warn('ReliablePost: no-cors fallback also failed:', error.message);
         }
 
-        // All attempts failed — queue for offline sync
+        // All confirmed strategies failed — queue for later retry
+        this._queueOffline(url, data);
         if (background) {
-            this._queueOffline(url, data);
             return { success: true, offline: true, queued: true };
         }
 
-        return { success: false, error: 'فشل الإرسال. تحقق من الاتصال بالإنترنت.' };
+        return { success: false, error: 'لم يتم تأكيد الإرسال. سيُعاد المحاولة تلقائياً.', queued: true };
     },
 
     /**
@@ -96,7 +112,43 @@ const ReliablePost = {
             try {
                 return JSON.parse(text);
             } catch (e) {
-                // Some GAS responses may not be JSON
+                return { success: true, raw: text };
+            }
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout');
+            }
+            throw error;
+        }
+    },
+
+    /**
+     * GET with payload as URL parameter — bypasses CORS preflight entirely.
+     * GAS doGet handles 'postViaGet' action and routes to the correct handler.
+     */
+    async _getWithPayload(url, data, timeout) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const payload = encodeURIComponent(JSON.stringify(data));
+            const getUrl = `${url}?action=postViaGet&payload=${payload}`;
+            const response = await fetch(getUrl, {
+                method: 'GET',
+                redirect: 'follow',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const text = await response.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
                 return { success: true, raw: text };
             }
         } catch (error) {
@@ -160,19 +212,28 @@ const ReliablePost = {
         const remaining = [];
 
         for (const item of queue) {
-            // Skip items older than 24 hours
             if (Date.now() - item.timestamp > 24 * 60 * 60 * 1000) continue;
 
+            let synced = false;
+
+            // Try CORS POST first
             try {
                 await this._postWithTimeout(item.url, item.data, 'cors', 30000);
-                console.log('ReliablePost: Synced offline item');
+                synced = true;
             } catch (e) {
-                // Try no-cors fallback
-                try {
-                    await this._postNoCors(item.url, item.data, 30000);
-                } catch (e2) {
-                    remaining.push(item);
+                // Try GET fallback
+                if (item.data.action && this._GET_SUPPORTED_ACTIONS.includes(item.data.action)) {
+                    try {
+                        const result = await this._getWithPayload(item.url, item.data, 30000);
+                        if (result && result.success) synced = true;
+                    } catch (e2) {}
                 }
+            }
+
+            if (!synced) {
+                remaining.push(item);
+            } else {
+                console.log('ReliablePost: Synced offline item');
             }
         }
 
@@ -192,7 +253,6 @@ if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
         setTimeout(() => ReliablePost.syncOfflineQueue(), 2000);
     });
-    // Sync on load (deferred to not block page)
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => ReliablePost.syncOfflineQueue(), 5000);

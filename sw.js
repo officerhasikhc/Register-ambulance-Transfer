@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Log PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v32';
+const CACHE_NAME = 'ambulance-log-v33';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -23,9 +23,6 @@ const urlsToCache = [
   './manifest-ar.json',
   './manifest-en.json',
   './browserconfig.xml',
-  './request-optimizer.js',
-  './ui-optimizer.js',
-  './connection-monitor.js',
   './data-cache.js',
   './reliable-post.js',
   './sync-manager.js',
@@ -36,7 +33,7 @@ const urlsToCache = [
 
 // Install event - Skip waiting to activate immediately
 self.addEventListener('install', event => {
-  console.log('[SW] Installing Service Worker v32...');
+  console.log('[SW] Installing Service Worker v33...');
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
