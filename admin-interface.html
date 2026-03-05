@@ -17,12 +17,20 @@
         var now = new Date();
         var year = now.getFullYear();
         var month = now.getMonth() + 1;
+        // Heavy fetch: stats + records + trips (slow, 10-20s)
         window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).then(function(result) {
-            // Save to dedicated key ASAP so instant display works even after cache invalidation
             if (result && result.success) {
                 try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
             }
             return result;
+        }).catch(function() { return null; });
+        // Fast fetch: pending trips only (lightweight, 1-3s)
+        window.__earlyPendingTrips = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.success && Array.isArray(result.trips)) {
+                try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                return result.trips;
+            }
+            return null;
         }).catch(function() { return null; });
     })();
     </script>
@@ -543,6 +551,11 @@
 
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
 
         .table-container.loading #recordsContainer {
@@ -3164,16 +3177,41 @@
                 if (_raw) _instantData = JSON.parse(_raw);
             } catch(e) {}
         }
+        
+        var _tripsDisplayed = false;
         if (_instantData) {
             if (_instantData.stats) applyStats(_instantData.stats);
             if (_instantData.records) applyRecords(_instantData.records);
-            if (_instantData.trips) applyTrips(_instantData.trips);
-        } else {
+            if (_instantData.trips) { applyTrips(_instantData.trips); _tripsDisplayed = true; }
+        }
+        
+        // If trips weren't in admin data, try separate pending trips cache
+        if (!_tripsDisplayed) {
+            var _cachedTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 10);
+            if (_cachedTrips && _cachedTrips.data) {
+                applyTrips(_cachedTrips.data);
+                _tripsDisplayed = true;
+            }
+        }
+        
+        // Show skeleton only for sections that haven't loaded yet
+        if (!_tripsDisplayed) {
             showTripsSkeleton();
+            // Race: use early pending trips fetch for fast display
+            if (window.__earlyPendingTrips) {
+                window.__earlyPendingTrips.then(function(trips) {
+                    if (trips && !_tripsDisplayed) {
+                        applyTrips(trips);
+                        _tripsDisplayed = true;
+                    }
+                });
+            }
         }
         
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
+        // Also fetch pending trips via fast lightweight endpoint
+        loadPendingTrips();
 
         // Background pre-warming: aggressively prefetch ALL months' records
         // Priority: adjacent months first, then "all", then the rest
@@ -3284,6 +3322,14 @@
         }
 
         async function loadPendingTrips() {
+            // Reuse early pending trips fetch if available
+            if (window.__earlyPendingTrips) {
+                const ptUrl = `${WEB_APP_URL}?action=getPendingTrips`;
+                DataCache._inflight[ptUrl] = window.__earlyPendingTrips.then(function(trips) {
+                    return { success: true, trips: trips || [] };
+                });
+                window.__earlyPendingTrips = null;
+            }
             await DataCache.fetchWithCache(
                 `${WEB_APP_URL}?action=getPendingTrips`,
                 DataCache.KEYS.PENDING_TRIPS,
