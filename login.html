@@ -16,18 +16,18 @@
     <link rel="stylesheet" href="responsive-ui.css">
     
     <!-- HTML Meta Tags -->
-    <meta name="description" content="Ambulance Reg System - Ambulance Activity Log | نظام سجل الإسعاف - سجل رحلات الإسعاف | Ministry of Health - Hasik Health Center | وزارة الصحة - مركز حاسك الصحي">
+    <meta name="description" content="Ambulance Reg System - Ambulance Activity Record | نظام سجل الإسعاف - سجل رحلات الإسعاف | Ministry of Health - Hasik Health Center | وزارة الصحة - مركز حاسك الصحي">
     <meta name="theme-color" content="#1e40af">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Ambulance Log | سجل الإسعاف">
+    <meta name="apple-mobile-web-app-title" content="Ambulance Record | سجل الإسعاف">
     
     <!-- Facebook / Open Graph Meta Tags -->
     <meta property="og:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
-    <meta property="og:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta property="og:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Record System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
     <meta property="og:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -41,7 +41,7 @@
     <meta property="twitter:domain" content="officerhasikhc.github.io">
     <meta property="twitter:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
     <meta name="twitter:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
-    <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Record System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
     <meta name="twitter:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
     <link rel="manifest" href="manifest-ar.json?v=2" id="app-manifest">
     
@@ -481,7 +481,7 @@
 
         <div class="login-header">
             <img src="moh-logo.png" alt="Logo" class="login-logo">
-            <h1 class="login-title" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Log System">نظام سجل نشاط الإسعاف</h1>
+            <h1 class="login-title" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</h1>
             <p class="login-subtitle" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
         </div>
 
@@ -753,10 +753,21 @@
                     }
                 }).catch(function() {});
             } else if (userType === 'admin') {
+                // Fast fetch: lightweight pending trips ONLY (1-2s) — returned as firstFetch so login waits for it
+                var firstAdminFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                    }
+                }).catch(function() {});
+
+                // Heavy fetch: full admin data (stats + records + trips) — runs in background
                 var adminUrl = url + '?action=getAdminData&year=' + year + '&month=' + month;
-                var firstAdminFetch = fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
-                    if (result && result.success && typeof DataCache !== 'undefined') {
-                        DataCache.set('cache_admin_data', result);
+                fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success) {
+                        try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
+                        if (typeof DataCache !== 'undefined') {
+                            DataCache.set('cache_admin_data', result);
+                        }
                     }
                 }).catch(function() {});
 
