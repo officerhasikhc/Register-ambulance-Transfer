@@ -2470,6 +2470,21 @@
 
         var _adminRecordsRequestId = 0;
 
+        // Client-side month filter: extract month from record's Departure Date
+        function _filterRecordsByMonth(records, month) {
+            if (!month || month === 'all') return records;
+            var m = parseInt(month);
+            return records.filter(function(r) {
+                try {
+                    var d = r['Departure Date'];
+                    if (!d) return false;
+                    // Handle Date objects, "yyyy-MM-dd", or "MM/dd/yyyy"
+                    var dateObj = (d instanceof Date) ? d : new Date(d);
+                    return (dateObj.getMonth() + 1) === m;
+                } catch(e) { return false; }
+            });
+        }
+
         async function loadRecords() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
@@ -2478,37 +2493,80 @@
 
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
             const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
-            if (loadingSpinner && !DataCache.has(cacheKey, DataCache.EXPIRY.RECORDS)) {
+
+            // === INSTANT PATH: Try to display from cache without any network wait ===
+            var instantShown = false;
+
+            // 1. Exact cache hit for this year+month+search
+            var exactCache = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
+            if (exactCache && exactCache.data) {
+                allRecords = filterDeleted(exactCache.data);
+                const tp = Math.ceil(allRecords.length / recordsPerPage);
+                if (currentPage > tp && tp > 0) currentPage = tp;
+                if (currentPage < 1) currentPage = 1;
+                displayRecordsWithPagination();
+                instantShown = true;
+            }
+
+            // 2. If no exact hit but we have "all year" data, filter client-side
+            if (!instantShown && !search && year !== 'all') {
+                var allYearKey = DataCache.KEYS.RECORDS + '_' + year + '_all_';
+                var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
+                if (allYearCache && allYearCache.data) {
+                    var filtered = _filterRecordsByMonth(allYearCache.data, month);
+                    allRecords = filterDeleted(filtered);
+                    const tp = Math.ceil(allRecords.length / recordsPerPage);
+                    if (currentPage > tp && tp > 0) currentPage = tp;
+                    if (currentPage < 1) currentPage = 1;
+                    displayRecordsWithPagination();
+                    // Also save this filtered result as exact cache for future hits
+                    DataCache.set(cacheKey, filtered);
+                    instantShown = true;
+                }
+            }
+
+            // Only show spinner if we have nothing to show
+            if (!instantShown && loadingSpinner) {
                 loadingSpinner.style.display = 'block';
             }
 
+            // === BACKGROUND: Fetch fresh data from server (non-blocking if instant shown) ===
             let url = `${WEB_APP_URL}?action=getAllRecords`;
             if (year !== 'all') url += `&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
             if (search) url += `&search=${encodeURIComponent(search)}`;
 
-            try {
-                await DataCache.fetchWithCache(
-                    url,
-                    cacheKey,
-                    DataCache.EXPIRY.RECORDS,
-                    (records, meta) => {
-                        if (thisRequestId !== _adminRecordsRequestId) return;
-                        if (meta && !meta.fromCache && meta.unchanged) {
+            const bgUpdate = async () => {
+                try {
+                    await DataCache.fetchWithCache(
+                        url,
+                        cacheKey,
+                        DataCache.EXPIRY.RECORDS,
+                        (records, meta) => {
+                            if (thisRequestId !== _adminRecordsRequestId) return;
+                            if (meta && meta.fromCache) return; // already displayed above
+                            if (meta && !meta.fromCache && meta.unchanged && instantShown) {
+                                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                                return;
+                            }
+                            allRecords = filterDeleted(records || []);
+                            const totalPages = Math.ceil(allRecords.length / recordsPerPage);
+                            if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+                            if (currentPage < 1) currentPage = 1;
+                            displayRecordsWithPagination();
                             if (loadingSpinner) loadingSpinner.style.display = 'none';
-                            return;
-                        }
-                        allRecords = filterDeleted(records || []);
-                        const totalPages = Math.ceil(allRecords.length / recordsPerPage);
-                        if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-                        if (currentPage < 1) currentPage = 1;
-                        displayRecordsWithPagination();
-                        if (loadingSpinner) loadingSpinner.style.display = 'none';
-                    },
-                    (result) => (result.success && result.data) ? result.data : null
-                );
-            } finally {
-                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                        },
+                        (result) => (result.success && result.data) ? result.data : null
+                    );
+                } finally {
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                }
+            };
+
+            if (instantShown) {
+                bgUpdate(); // non-blocking
+            } else {
+                await bgUpdate(); // must wait — no cached data to show
             }
         }
 
@@ -3067,9 +3125,11 @@
             updateRecordsTitle();
             loadRecords();
         });
+        var _searchDebounceTimer = null;
         document.getElementById('searchInput').addEventListener('input', function() {
             currentPage = 1;
-            loadRecords();
+            clearTimeout(_searchDebounceTimer);
+            _searchDebounceTimer = setTimeout(loadRecords, 250);
         });
         
         // Export type change listener

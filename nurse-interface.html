@@ -3031,23 +3031,75 @@
             });
         }
 
+        // Client-side month filter for nurse records
+        function _nurseFilterByMonth(records, month) {
+            if (!month || month === 'all') return records;
+            var m = parseInt(month);
+            return records.filter(function(r) {
+                try {
+                    var d = r['Departure Date'];
+                    if (!d) return false;
+                    var dateObj = (d instanceof Date) ? d : new Date(d);
+                    return (dateObj.getMonth() + 1) === m;
+                } catch(e) { return false; }
+            });
+        }
+
         async function loadRecords(silent = false) {
             const overlay = document.getElementById('recordsLoadingOverlay');
             const section = document.querySelector('.records-section');
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const cacheKey = 'cache_nurse_data_' + year + '_' + month;
-            const cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS);
+            const cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
 
-            if (!silent && cached && cached.data) {
-                // Pre-warmed: data will render instantly from cache callback
-            } else if (!silent) {
-                // No cache: dim current records + show loading overlay
+            var instantShown = false;
+
+            // 1. Exact cache hit for this year+month
+            if (cached && cached.data && cached.data.records) {
+                let mergedRecords = applyPendingEdits(cached.data.records);
+                allRecords = mergedRecords;
+                nurseRecordsPage = 1;
+                displayRecords(allRecords);
+                document.getElementById('totalCount').textContent = allRecords.length;
+                if (cached.data.yearlyTotal !== undefined) {
+                    document.getElementById('yearlyTotalCount').textContent = cached.data.yearlyTotal;
+                    updateYearlyTotalLabel();
+                }
+                instantShown = true;
+            }
+
+            // 2. If no exact hit, try "all year" cache and filter client-side
+            if (!instantShown) {
+                var allYearKey = 'cache_nurse_data_' + year + '_all';
+                var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
+                if (allYearCache && allYearCache.data && allYearCache.data.records) {
+                    var filtered = _nurseFilterByMonth(allYearCache.data.records, month);
+                    let mergedRecords = applyPendingEdits(filtered);
+                    allRecords = mergedRecords;
+                    nurseRecordsPage = 1;
+                    displayRecords(allRecords);
+                    document.getElementById('totalCount').textContent = allRecords.length;
+                    if (allYearCache.data.yearlyTotal !== undefined) {
+                        document.getElementById('yearlyTotalCount').textContent = allYearCache.data.yearlyTotal;
+                        updateYearlyTotalLabel();
+                    }
+                    instantShown = true;
+                }
+            }
+
+            // Only show loading if nothing to display
+            if (!silent && !instantShown) {
                 if (section) section.classList.add('loading');
                 if (overlay) overlay.style.display = 'flex';
             }
 
-            await loadAllNurseData();
+            // Background: fetch fresh data (non-blocking if instant shown)
+            if (instantShown) {
+                loadAllNurseData(); // non-blocking — don't await
+            } else {
+                await loadAllNurseData();
+            }
 
             if (section) section.classList.remove('loading');
             if (overlay) overlay.style.display = 'none';
