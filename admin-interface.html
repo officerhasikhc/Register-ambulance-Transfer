@@ -2485,6 +2485,9 @@
             });
         }
 
+        // Hash of currently displayed records — used to avoid flicker on bg refresh
+        var _displayedRecordsHash = null;
+
         async function loadRecords() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
@@ -2497,14 +2500,20 @@
             // === INSTANT PATH: Try to display from cache without any network wait ===
             var instantShown = false;
 
-            // 1. Exact cache hit for this year+month+search
-            var exactCache = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
-            if (exactCache && exactCache.data) {
-                allRecords = filterDeleted(exactCache.data);
+            // Helper: display records and track hash of what's shown
+            function showRecords(data) {
+                allRecords = filterDeleted(data);
                 const tp = Math.ceil(allRecords.length / recordsPerPage);
                 if (currentPage > tp && tp > 0) currentPage = tp;
                 if (currentPage < 1) currentPage = 1;
+                _displayedRecordsHash = DataCache.hash(allRecords);
                 displayRecordsWithPagination();
+            }
+
+            // 1. Exact cache hit for this year+month+search
+            var exactCache = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
+            if (exactCache && exactCache.data) {
+                showRecords(exactCache.data);
                 instantShown = true;
             }
 
@@ -2514,12 +2523,7 @@
                 var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
                 if (allYearCache && allYearCache.data) {
                     var filtered = _filterRecordsByMonth(allYearCache.data, month);
-                    allRecords = filterDeleted(filtered);
-                    const tp = Math.ceil(allRecords.length / recordsPerPage);
-                    if (currentPage > tp && tp > 0) currentPage = tp;
-                    if (currentPage < 1) currentPage = 1;
-                    displayRecordsWithPagination();
-                    // Also save this filtered result as exact cache for future hits
+                    showRecords(filtered);
                     DataCache.set(cacheKey, filtered);
                     instantShown = true;
                 }
@@ -2544,17 +2548,20 @@
                         DataCache.EXPIRY.RECORDS,
                         (records, meta) => {
                             if (thisRequestId !== _adminRecordsRequestId) return;
-                            if (meta && meta.fromCache) return; // already displayed above
-                            if (meta && !meta.fromCache && meta.unchanged && instantShown) {
-                                if (loadingSpinner) loadingSpinner.style.display = 'none';
-                                return;
-                            }
-                            allRecords = filterDeleted(records || []);
+                            // Skip cache callback — we already displayed above
+                            if (meta && meta.fromCache) return;
+                            if (loadingSpinner) loadingSpinner.style.display = 'none';
+                            // Compare fresh data against what's currently displayed
+                            // Only re-render if actually different — prevents visual flicker
+                            var freshFiltered = filterDeleted(records || []);
+                            var freshHash = DataCache.hash(freshFiltered);
+                            if (instantShown && freshHash === _displayedRecordsHash) return;
+                            allRecords = freshFiltered;
                             const totalPages = Math.ceil(allRecords.length / recordsPerPage);
                             if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
                             if (currentPage < 1) currentPage = 1;
+                            _displayedRecordsHash = freshHash;
                             displayRecordsWithPagination();
-                            if (loadingSpinner) loadingSpinner.style.display = 'none';
                         },
                         (result) => (result.success && result.data) ? result.data : null
                     );
@@ -3234,7 +3241,12 @@
         }
 
         function applyRecords(records) {
-            allRecords = filterDeleted(records || []);
+            var newRecords = filterDeleted(records || []);
+            var newHash = DataCache.hash(newRecords);
+            // Skip re-render if data is identical to what's already displayed
+            if (newHash === _displayedRecordsHash) return;
+            allRecords = newRecords;
+            _displayedRecordsHash = newHash;
             const totalPages = Math.ceil(allRecords.length / recordsPerPage);
             if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
@@ -3369,6 +3381,9 @@
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const thisRequestId = ++_adminDataRequestId;
+            // Capture filter state at request time to avoid race conditions
+            const reqYear = year;
+            const reqMonth = month;
             
             // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
             if (window.__earlyAdminFetch && !search) {
@@ -3394,17 +3409,20 @@
                         if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
                     }
                     applyStats(data.stats);
-                    applyRecords(data.records);
+                    // Only apply records if filter hasn't changed since request started
+                    var curYear = document.getElementById('yearFilter').value;
+                    var curMonth = document.getElementById('monthFilter').value;
+                    if (curYear === reqYear && curMonth === reqMonth) {
+                        applyRecords(data.records);
+                    }
                     applyTrips(data.trips);
                     // Save to dedicated fallback for instant display on next load
                     if (!meta || !meta.fromCache) {
                         try { localStorage.setItem('admin_instant_data', JSON.stringify(data)); } catch(e) {}
                     }
-                    // Also update records cache for current view so month switching stays instant
+                    // Save records cache using the request-time filter values (not current)
                     if (data.records) {
-                        var ry = document.getElementById('yearFilter').value;
-                        var rm = document.getElementById('monthFilter').value;
-                        DataCache.set(DataCache.KEYS.RECORDS + '_' + ry + '_' + rm + '_', data.records);
+                        DataCache.set(DataCache.KEYS.RECORDS + '_' + reqYear + '_' + reqMonth + '_', data.records);
                     }
                 },
                 (result) => result.success ? result : null
@@ -3775,6 +3793,7 @@
             var confirmedAction = pendingAction;
             markAsDeleted(confirmedRecordId);
             allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(confirmedRecordId).trim());
+            _displayedRecordsHash = DataCache.hash(allRecords);
             displayRecordsWithPagination();
 
             invalidateAdminCaches(confirmedRecordId, false);
@@ -3923,6 +3942,7 @@
                     }
                     return r;
                 });
+                _displayedRecordsHash = DataCache.hash(allRecords);
                 displayRecordsWithPagination();
             }
 

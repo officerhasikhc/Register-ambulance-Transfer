@@ -2790,6 +2790,7 @@
                     }
                     return r;
                 });
+                _nurseDisplayedHash = DataCache.hash(allRecords);
                 displayRecords(allRecords);
                 console.log('✅ Local record updated for ID:', editId);
             } else {
@@ -2830,6 +2831,7 @@
                 allRecords.unshift(optimisticRecord);
                 allYearRecords.unshift(optimisticRecord);
                 nurseRecordsPage = 1;
+                _nurseDisplayedHash = DataCache.hash(allRecords);
                 displayRecords(allRecords);
                 // Update yearly total instantly (don't wait for server)
                 document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
@@ -3031,6 +3033,9 @@
             });
         }
 
+        // Hash of currently displayed nurse records — prevents flicker on bg refresh
+        var _nurseDisplayedHash = null;
+
         // Client-side month filter for nurse records
         function _nurseFilterByMonth(records, month) {
             if (!month || month === 'all') return records;
@@ -3055,17 +3060,22 @@
 
             var instantShown = false;
 
-            // 1. Exact cache hit for this year+month
-            if (cached && cached.data && cached.data.records) {
-                let mergedRecords = applyPendingEdits(cached.data.records);
-                allRecords = mergedRecords;
+            // Helper: display and track hash
+            function showNurseRecords(records, yearlyTotal) {
+                let merged = applyPendingEdits(records);
+                allRecords = merged;
                 nurseRecordsPage = 1;
+                _nurseDisplayedHash = DataCache.hash(allRecords);
                 displayRecords(allRecords);
-                document.getElementById('totalCount').textContent = allRecords.length;
-                if (cached.data.yearlyTotal !== undefined) {
-                    document.getElementById('yearlyTotalCount').textContent = cached.data.yearlyTotal;
+                if (yearlyTotal !== undefined) {
+                    document.getElementById('yearlyTotalCount').textContent = yearlyTotal;
                     updateYearlyTotalLabel();
                 }
+            }
+
+            // 1. Exact cache hit for this year+month
+            if (cached && cached.data && cached.data.records) {
+                showNurseRecords(cached.data.records, cached.data.yearlyTotal);
                 instantShown = true;
             }
 
@@ -3075,15 +3085,7 @@
                 var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
                 if (allYearCache && allYearCache.data && allYearCache.data.records) {
                     var filtered = _nurseFilterByMonth(allYearCache.data.records, month);
-                    let mergedRecords = applyPendingEdits(filtered);
-                    allRecords = mergedRecords;
-                    nurseRecordsPage = 1;
-                    displayRecords(allRecords);
-                    document.getElementById('totalCount').textContent = allRecords.length;
-                    if (allYearCache.data.yearlyTotal !== undefined) {
-                        document.getElementById('yearlyTotalCount').textContent = allYearCache.data.yearlyTotal;
-                        updateYearlyTotalLabel();
-                    }
+                    showNurseRecords(filtered, allYearCache.data.yearlyTotal);
                     instantShown = true;
                 }
             }
@@ -3862,6 +3864,9 @@
                     // skip UI updates (cache is still saved by fetchWithCache)
                     if (thisRequestId !== _nurseDataRequestId) return;
                     
+                    // Skip cache callback — loadRecords already displayed cached data
+                    if (meta && meta.fromCache && _nurseDisplayedHash) return;
+                    
                     // UNCHANGED GUARD: if background revalidation found no changes,
                     // skip expensive DOM re-render (data already displayed from cache)
                     if (meta && !meta.fromCache && meta.unchanged) {
@@ -3924,8 +3929,14 @@
                         }
                         
                         allRecords = mergedRecords;
-                        nurseRecordsPage = 1;
-                        displayRecords(allRecords);
+                        
+                        // Only re-render if data actually changed from what's displayed
+                        var freshHash = DataCache.hash(allRecords);
+                        if (freshHash !== _nurseDisplayedHash) {
+                            nurseRecordsPage = 1;
+                            _nurseDisplayedHash = freshHash;
+                            displayRecords(allRecords);
+                        }
                         
                         if (month === 'all') {
                             allYearRecords = allRecords;
