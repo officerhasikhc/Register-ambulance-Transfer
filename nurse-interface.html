@@ -2719,20 +2719,17 @@
             const isEditing = !!editingRecordId;
             const isExternal = document.getElementById('externalSupportCheck').checked;
 
-            // Build nurse name based on external support mode
             let finalNurseName = '';
             let finalNurseStaffNumber = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
+            let extSupportValue = '';
             if (isExternal) {
-                // External support: use external nurse name (may be empty/unknown)
+                finalNurseName = getValidDisplayName(window.loggedInUser || {}) || document.getElementById('nurseName').value;
                 const extNurse = (document.getElementById('externalNurseName').value || '').trim();
                 const extOrg = (document.getElementById('externalOrgName').value || '').trim();
-                // Format: "[External Support] OrgName - NurseName" or "[External Support] OrgName" or "[External Support] Unknown"
-                let parts = ['[External Support]'];
+                let parts = [];
                 if (extOrg) parts.push(extOrg);
-                if (extNurse) parts.push('- ' + extNurse);
-                else if (!extOrg) parts.push('Unknown');
-                finalNurseName = parts.join(' ');
-                // Keep admin's real staff number — backend detects ext support via [External Support] prefix
+                if (extNurse) parts.push(extNurse);
+                extSupportValue = parts.length > 0 ? parts.join(' - ') : 'External Support';
             } else {
                 finalNurseName = document.getElementById('nurseName').value;
             }
@@ -2754,7 +2751,7 @@
                 patientName: document.getElementById('patientName').value,
                 nurseName: finalNurseName,
                 nurseStaffNumber: finalNurseStaffNumber,
-                registrantName: isExternal ? getValidDisplayName(window.loggedInUser || {}) : undefined
+                extSupport: extSupportValue || undefined
             };
 
             // Safety: ensure nurseName is a real name, not empty or an employee number (skip for external support)
@@ -2798,7 +2795,7 @@
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber,
-                    'Registrant Name': formData.registrantName || ''
+                    'Ext Support': formData.extSupport || ''
                 };
                 
                 // Store in pendingEdits so server refreshes won't revert
@@ -2864,7 +2861,7 @@
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber,
-                    'Registrant Name': formData.registrantName || ''
+                    'Ext Support': formData.extSupport || ''
                 };
                 allRecords.unshift(optimisticRecord);
                 allYearRecords.unshift(optimisticRecord);
@@ -2946,15 +2943,16 @@
             hideValidation();
             editingRecordId = null;
 
-            // Reset external support fields
+            // Reset external support fields via toggle
             var extCheck = document.getElementById('externalSupportCheck');
-            if (extCheck) extCheck.checked = false;
-            document.getElementById('externalOrgGroup').style.display = 'none';
-            document.getElementById('externalNurseGroup').style.display = 'none';
+            if (extCheck) {
+                extCheck.checked = false;
+                extCheck.removeAttribute('checked');
+            }
+            toggleExternalSupport();
             document.getElementById('externalOrgName').value = '';
             document.getElementById('externalNurseName').value = '';
-            document.getElementById('nurseNameGroup').style.display = '';
-            document.getElementById('nurseName').required = true;
+            document.getElementById('nurseName').readOnly = false;
             
             // Hide "Other" destination input
             const destinationOtherInput = document.getElementById('destinationOther');
@@ -3207,11 +3205,12 @@
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             let fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
                             const nurseStaffForDisplay = (record['Nurse Staff Number'] || '').toString().trim();
-                            const isExtSupport = fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
-                            if (isExtSupport) {
-                                const registrantName = (record['Registrant Name'] || '').toString().trim();
-                                fullNurse = registrantName || formatExternalSupportDisplay(fullNurse);
-                            } else if (fullNurse !== '-') {
+                            const extSupportVal = (record['Ext Support'] || '').toString().trim();
+                            const isExtSupport = !!extSupportVal || fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
+                            if (isExtSupport && fullNurse.startsWith('[External Support]')) {
+                                fullNurse = formatExternalSupportDisplay(fullNurse);
+                            }
+                            if (fullNurse !== '-' && !isExtSupport) {
                                 const loggedUser = window.loggedInUser || {};
                                 const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
                                 if (loggedStaff && (nurseStaffForDisplay === loggedStaff || (looksLikeEmployeeNumber(fullNurse) && fullNurse === loggedStaff))) {
@@ -3228,7 +3227,7 @@
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${isExtSupport ? fullNurse + ' (' + formatExternalSupportDisplay(record['Nurse Name']) + ')' : fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
+                                <td title="${isExtSupport ? fullNurse + (extSupportVal ? ' [' + extSupportVal + ']' : '') : fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
@@ -3324,7 +3323,7 @@
             // Non-admin users cannot edit External Support records
             const recNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             const recNurseName = (record['Nurse Name'] || '').toString().trim();
-            if (!isAdminUser() && (recNurseStaff === 'EXT_SUPPORT' || recNurseName.startsWith('[External Support]') || record['Registrant Name'])) {
+            if (!isAdminUser() && (recNurseStaff === 'EXT_SUPPORT' || recNurseName.startsWith('[External Support]') || record['Ext Support'])) {
                 alert(currentLang === 'en' ? 'External Support records can only be edited by admin.' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة.');
                 return;
             }
@@ -3353,6 +3352,83 @@
             const formHeader = document.querySelector('.form-header h2');
             formHeader.textContent = 'Edit Ambulance Case';
             formHeader.style.color = '#374151';
+
+            // ============================================
+            // STEP 1: Detect & restore External Support mode FIRST
+            // This must run before anything else to ensure fields are shown
+            // ============================================
+            const recordNurseName = (record['Nurse Name'] || '').toString().trim();
+            const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            const isAdmin = isAdminUser();
+            const nurseField = document.getElementById('nurseName');
+
+            const extSupportCol = (record['Ext Support'] || '').toString().trim();
+            const hasExtPrefix = recordNurseName.indexOf('[External Support]') >= 0;
+            const hasExtMarker = recordNurseStaff === 'EXT_SUPPORT';
+            const isExternalSupportRecord = !!extSupportCol || hasExtPrefix || hasExtMarker;
+
+            console.log('📝 Edit record - ExtSupport col:', JSON.stringify(extSupportCol), '| Nurse:', JSON.stringify(recordNurseName), '| isAdmin:', isAdmin, '| isExtSupport:', isExternalSupportRecord);
+
+            // Reset ext support state first
+            document.getElementById('externalSupportCheck').checked = false;
+            toggleExternalSupport();
+
+            // Parse ext support data for restoration
+            let parsedOrg = '';
+            let parsedNurse = '';
+            if (isExternalSupportRecord) {
+                if (extSupportCol) {
+                    const dashIdx = extSupportCol.indexOf(' - ');
+                    if (dashIdx !== -1) {
+                        parsedOrg = extSupportCol.substring(0, dashIdx).trim();
+                        parsedNurse = extSupportCol.substring(dashIdx + 3).trim();
+                    } else if (extSupportCol !== 'External Support') {
+                        parsedOrg = extSupportCol;
+                    }
+                } else if (hasExtPrefix) {
+                    let extContent = recordNurseName;
+                    const bracketIdx = extContent.indexOf(']');
+                    if (bracketIdx >= 0) extContent = extContent.substring(bracketIdx + 1).trim();
+                    const dashIdx = extContent.indexOf(' - ');
+                    if (dashIdx !== -1) {
+                        parsedOrg = extContent.substring(0, dashIdx).trim();
+                        parsedNurse = extContent.substring(dashIdx + 3).trim();
+                    } else if (extContent && extContent !== 'Unknown') {
+                        parsedOrg = extContent;
+                    }
+                }
+            }
+
+            // Apply ext support mode for admin editing ext support record
+            function applyExtSupportMode() {
+                const extCheckbox = document.getElementById('externalSupportCheck');
+                const extGroup = document.getElementById('externalSupportGroup');
+                extGroup.style.display = 'block';
+                extCheckbox.checked = true;
+                extCheckbox.setAttribute('checked', 'checked');
+                toggleExternalSupport();
+                nurseField.readOnly = true;
+                document.getElementById('externalOrgName').value = parsedOrg;
+                document.getElementById('externalNurseName').value = parsedNurse;
+                console.log('📝 ExtSupport applied → Org:', parsedOrg, '| Nurse:', parsedNurse, '| Checkbox:', extCheckbox.checked,
+                    '| OrgGroupDisplay:', document.getElementById('externalOrgGroup').style.display,
+                    '| NurseGroupDisplay:', document.getElementById('externalNurseGroup').style.display);
+            }
+
+            if (isAdmin && isExternalSupportRecord) {
+                console.log('📝 → Restoring External Support mode');
+                formHeader.textContent = currentLang === 'en' ? 'Edit External Support Case' : 'تعديل حالة دعم خارجي';
+                applyExtSupportMode();
+                // Re-apply after a tick to survive any DOM resets from background callbacks
+                setTimeout(applyExtSupportMode, 50);
+                setTimeout(applyExtSupportMode, 500);
+            } else if (isAdmin) {
+                formHeader.textContent = currentLang === 'en' ? 'Edit Ambulance Case' : 'تعديل حالة إسعاف';
+            }
+
+            // ============================================
+            // STEP 2: Fill standard form fields
+            // ============================================
             
             // Fill vehicle number
             if (record['Vehicle Number']) {
@@ -3363,7 +3439,6 @@
             // Fill driver name
             if (record['Driver Name']) {
                 const driverSelect = document.getElementById('driverName');
-                // Find driver by name
                 const driverOption = Array.from(driverSelect.options).find(opt => opt.text.includes(record['Driver Name']));
                 if (driverOption) {
                     driverSelect.value = driverOption.value;
@@ -3371,7 +3446,7 @@
                 }
             }
             
-            // Fill departure date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
+            // Fill departure date
             if (record['Departure Date']) {
                 const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
                 if (depDate) {
@@ -3391,7 +3466,7 @@
                 }
             }
             
-            // Fill return date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
+            // Fill return date
             const retDate = DateTimeFormatter.formatDate(record['Return Date']);
             if (retDate) {
                 if (flatpickrReturn) flatpickrReturn.setDate(retDate);
@@ -3409,13 +3484,11 @@
                 }
             }
             
-            // Fill destination - check if it's "Other" or a predefined value
+            // Fill destination
             if (record['Destination']) {
                 const destinationSelect = document.getElementById('destination');
                 const destinationOtherInput = document.getElementById('destinationOther');
                 const destValue = record['Destination'].toString().trim();
-                
-                // Check if destination is in the predefined list (SQH)
                 const predefinedDestinations = ['SQH'];
                 if (predefinedDestinations.includes(destValue.toUpperCase())) {
                     destinationSelect.value = destValue.toUpperCase();
@@ -3423,14 +3496,12 @@
                     destinationOtherInput.required = false;
                     destinationOtherInput.value = '';
                 } else {
-                    // It's an "Other" destination
                     destinationSelect.value = 'OTHER';
                     destinationOtherInput.style.display = 'block';
                     destinationOtherInput.value = destValue;
                     destinationOtherInput.required = true;
                 }
             } else {
-                // No destination - hide "Other" input
                 const destinationOtherInput = document.getElementById('destinationOther');
                 if (destinationOtherInput) {
                     destinationOtherInput.style.display = 'none';
@@ -3442,52 +3513,17 @@
             if (record['Patient Name'] || record['patientName']) {
                 document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
-            
-            // Reset external support fields before loading new record data
-            document.getElementById('externalSupportCheck').checked = false;
-            document.getElementById('externalOrgGroup').style.display = 'none';
-            document.getElementById('externalNurseGroup').style.display = 'none';
-            document.getElementById('externalOrgName').value = '';
-            document.getElementById('externalNurseName').value = '';
-            document.getElementById('nurseNameGroup').style.display = '';
-            document.getElementById('nurseName').required = true;
 
-            // Nurse name logic: check if this is the logged-in nurse's own trip or someone else's
-            const nurseField = document.getElementById('nurseName');
+            // ============================================
+            // STEP 3: Handle nurse name field based on user type
+            // (External support was already handled in STEP 1)
+            // ============================================
             const loggedInStaffNum = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
             const loggedInNameAr = (window.loggedInUser && window.loggedInUser.nameAr || '').toString().trim();
             const loggedInNameEn = (window.loggedInUser && window.loggedInUser.nameEn || '').toString().trim();
-            const recordNurseName = (record['Nurse Name'] || '').toString().trim();
-            const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            
-            // Admin can edit ANY record freely (including nurse name)
-            const isAdmin = isAdminUser();
 
-            console.log('📝 Edit record - Nurse Name:', JSON.stringify(recordNurseName), 'Staff:', recordNurseStaff, 'isAdmin:', isAdmin, 'Registrant:', record['Registrant Name'] || 'N/A');
-
-            // Detect external support: by [External Support] prefix, EXT_SUPPORT staff marker (old records), or Registrant Name field
-            const isExternalSupportRecord = recordNurseName.startsWith('[External Support]') || recordNurseStaff === 'EXT_SUPPORT' || !!record['Registrant Name'];
             if (isAdmin && isExternalSupportRecord) {
-                // Restore external support mode for editing
-                const extCheckbox = document.getElementById('externalSupportCheck');
-                const extGroup = document.getElementById('externalSupportGroup');
-                extGroup.style.display = '';
-                extCheckbox.checked = true;
-                extCheckbox.setAttribute('checked', 'checked');
-                // Manually show/hide fields (don't use toggleExternalSupport which clears values)
-                document.getElementById('nurseNameGroup').style.display = 'none';
-                nurseField.required = false;
-                document.getElementById('externalOrgGroup').style.display = '';
-                document.getElementById('externalNurseGroup').style.display = '';
-                // Parse org name and nurse name from "[External Support] OrgName - NurseName"
-                const extContent = recordNurseName.replace('[External Support]', '').trim();
-                const dashIdx = extContent.indexOf(' - ');
-                if (dashIdx !== -1) {
-                    document.getElementById('externalOrgName').value = extContent.substring(0, dashIdx).trim();
-                    document.getElementById('externalNurseName').value = extContent.substring(dashIdx + 3).trim();
-                } else if (extContent && extContent !== 'Unknown') {
-                    document.getElementById('externalOrgName').value = extContent;
-                }
+                // Already handled in STEP 1 — do nothing here
             } else if (isAdmin) {
                 // Admin editing normal record: always editable, show original name
                 nurseField.readOnly = false;
@@ -3611,7 +3647,7 @@
                     DateTimeFormatter.formatDate(r['Return Date']) || '',
                     r['Return Time'] || '',
                     hasReturn ? 'Completed' : 'Pending Return',
-                    ((r['Nurse Name'] || '').startsWith('[External Support]') || (r['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT') ? ((r['Registrant Name'] || '').toString().trim() || formatExternalSupportDisplay(r['Nurse Name'])) : (r['Nurse Name'] || r['nurseName'] || '')
+                    (r['Nurse Name'] || r['nurseName'] || '')
                 ]);
             }
 
@@ -3695,11 +3731,12 @@
                 const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 let reportNurse = (record['Nurse Name'] || '').toString().trim() || '-';
                 const reportNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-                const isReportExtSupport = reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
-                if (isReportExtSupport) {
-                    const registrantName = (record['Registrant Name'] || '').toString().trim();
-                    reportNurse = registrantName || formatExternalSupportDisplay(reportNurse);
-                } else if (reportNurse !== '-') {
+                const reportExtCol = (record['Ext Support'] || '').toString().trim();
+                const isReportExtSupport = !!reportExtCol || reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
+                if (isReportExtSupport && reportNurse.startsWith('[External Support]')) {
+                    reportNurse = formatExternalSupportDisplay(reportNurse);
+                }
+                if (!isReportExtSupport && reportNurse !== '-') {
                     const nurseStaff = reportNurseStaff;
                     const loggedUser = window.loggedInUser || {};
                     const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
@@ -3816,7 +3853,7 @@
                     <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                    <td>${((record['Nurse Name'] || '').startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT') ? ((record['Registrant Name'] || '').toString().trim() || formatExternalSupportDisplay(record['Nurse Name'])) : (record['Nurse Name'] || '-')}</td>
+                    <td>${record['Nurse Name'] || '-'}</td>
                 </tr>`;
             });
             
@@ -3892,7 +3929,6 @@
             } catch(e) { return false; }
         }
 
-        // Toggle External Support mode (admin only)
         function toggleExternalSupport() {
             const checked = document.getElementById('externalSupportCheck').checked;
             const nurseNameGroup = document.getElementById('nurseNameGroup');
@@ -3900,14 +3936,12 @@
             const externalNurseGroup = document.getElementById('externalNurseGroup');
             const nurseNameField = document.getElementById('nurseName');
             if (checked) {
-                // Hide normal nurse name, show external fields
                 nurseNameGroup.style.display = 'none';
                 nurseNameField.required = false;
-                externalOrgGroup.style.display = '';
-                externalNurseGroup.style.display = '';
+                externalOrgGroup.style.display = 'block';
+                externalNurseGroup.style.display = 'block';
             } else {
-                // Restore normal nurse name
-                nurseNameGroup.style.display = '';
+                nurseNameGroup.style.display = 'block';
                 nurseNameField.required = true;
                 externalOrgGroup.style.display = 'none';
                 externalNurseGroup.style.display = 'none';
@@ -3938,9 +3972,8 @@
                     nurseNameField.style.backgroundColor = '';
                     nurseNameField.style.cursor = '';
 
-                    // Admin users: show External Support checkbox and allow free editing of nurseName
                     if (userData.type === 'admin') {
-                        document.getElementById('externalSupportGroup').style.display = '';
+                        document.getElementById('externalSupportGroup').style.display = 'block';
                     }
                     
                     // Store for later use
@@ -4056,7 +4089,7 @@
                         localStorage.setItem('userSession', JSON.stringify(updated));
                         window.loggedInUser = updated;
                         const nurseField = document.getElementById('nurseName');
-                        if (nurseField && !nurseField.readOnly) {
+                        if (nurseField && !nurseField.readOnly && !editingRecordId) {
                             const freshName = getValidDisplayName(updated);
                             if (freshName) nurseField.value = freshName;
                         }
