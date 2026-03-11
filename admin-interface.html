@@ -2224,11 +2224,24 @@
 
         // Resolve nurse Arabic name: prefer Users sheet lookup by Nurse Staff Number, fallback to stored name
         function resolveNurseArabicName(record) {
+            const nurseName = (record['Nurse Name'] || '').toString().trim();
+            // Handle External Support records
+            if (nurseName.startsWith('[External Support]')) {
+                const content = nurseName.replace('[External Support]', '').trim();
+                if (!content || content === 'Unknown') return 'دعم خارجي';
+                const dashIdx = content.indexOf(' - ');
+                if (dashIdx !== -1) {
+                    const org = content.substring(0, dashIdx).trim();
+                    const nurse = content.substring(dashIdx + 3).trim();
+                    return nurse ? `دعم خارجي: ${org} (${nurse})` : `دعم خارجي: ${org}`;
+                }
+                return `دعم خارجي: ${content}`;
+            }
             const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             if (nurseStaff && nurseNameMap[nurseStaff]) {
                 return nurseNameMap[nurseStaff];
             }
-            return (record['Nurse Name'] || '').toString().trim() || '-';
+            return nurseName || '-';
         }
 
         // ============================================
@@ -2675,6 +2688,7 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             const fullNurse = resolveNurseArabicName(record);
+                            const isExtSupport = (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]');
                             
                             return `
                             <tr data-record-id="${recordId}">
@@ -2685,7 +2699,7 @@
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${mapDestinationToAr(record['Destination'])}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${fullNurse}" style="cursor:default;">${truncName(fullNurse)}</td>
+                                <td title="${fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
                                 <td><span class="status-badge ${statusClass}" style="font-size:10px;padding:2px 6px;">${statusText}</span></td>
                                 <td>
                                     <div class="action-btns" style="gap:2px;">
@@ -3915,7 +3929,7 @@
             const origEl = document.getElementById('editNurseOriginal');
             const origNameEl = document.getElementById('editNurseOriginalName');
             if (nurseNameEn) {
-                origNameEl.textContent = nurseNameEn;
+                origNameEl.textContent = nurseNameEn.startsWith('[External Support]') ? resolveNurseArabicName(record) : nurseNameEn;
                 origEl.style.display = '';
             } else {
                 origEl.style.display = 'none';

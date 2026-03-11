@@ -1370,12 +1370,12 @@
                     <div class="form-group" id="externalSupportGroup" style="display:none;">
                         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
                             <input type="checkbox" id="externalSupportCheck" onchange="toggleExternalSupport()" style="width:18px;height:18px;accent-color:#2563eb;cursor:pointer;">
-                            <span data-en="External Support (supporting another organization)" data-ar="دعم خارجي (دعم مؤسسة أخرى)">External Support</span>
+                            <span data-en="External Support (supporting another entity)" data-ar="دعم خارجي (دعم جهة أخرى)">External Support</span>
                         </label>
                     </div>
                     <div class="form-group" id="externalOrgGroup" style="display:none;">
-                        <label data-en="Supported Organization Name" data-ar="اسم المؤسسة المدعومة">Supported Organization Name</label>
-                        <input type="text" id="externalOrgName" placeholder="Enter organization name" lang="en" style="border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;font-family:inherit;font-size:15px;">
+                        <label data-en="Supported Entity Name" data-ar="اسم الجهة المدعومة">Supported Entity Name</label>
+                        <input type="text" id="externalOrgName" placeholder="Enter entity name" lang="en" style="border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;font-family:inherit;font-size:15px;">
                     </div>
                     <div class="form-group" id="externalNurseGroup" style="display:none;">
                         <label data-en="Accompanying Nurse/Paramedic (External)" data-ar="الممرض/ة أو المسعف/ة المرافق/ة (خارجي)">Accompanying Nurse (External)</label>
@@ -3202,7 +3202,9 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             let fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
-                            if (fullNurse !== '-') {
+                            if (fullNurse !== '-' && fullNurse.startsWith('[External Support]')) {
+                                fullNurse = formatExternalSupportDisplay(fullNurse);
+                            } else if (fullNurse !== '-') {
                                 const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
                                 const loggedUser = window.loggedInUser || {};
                                 const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
@@ -3211,6 +3213,7 @@
                                     if (resolved) fullNurse = resolved;
                                 }
                             }
+                            const isExtSupport = (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]');
                             return `
                             <tr class="${isJustSaved ? 'record-just-saved' : ''}">
                                 <td><span style="background:${isPending ? '#fef3c7' : '#e0e7ff'};color:${isPending ? '#92400e' : '#1e40af'};padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;${isPending ? 'animation:saving-pulse 1.5s ease-in-out infinite;' : ''}">${recordId}</span></td>
@@ -3220,7 +3223,7 @@
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${fullNurse}" style="cursor:default;">${truncName(fullNurse)}</td>
+                                <td title="${fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
@@ -3427,6 +3430,15 @@
                 document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
             
+            // Reset external support fields before loading new record data
+            document.getElementById('externalSupportCheck').checked = false;
+            document.getElementById('externalOrgGroup').style.display = 'none';
+            document.getElementById('externalNurseGroup').style.display = 'none';
+            document.getElementById('externalOrgName').value = '';
+            document.getElementById('externalNurseName').value = '';
+            document.getElementById('nurseNameGroup').style.display = '';
+            document.getElementById('nurseName').required = true;
+
             // Nurse name logic: check if this is the logged-in nurse's own trip or someone else's
             const nurseField = document.getElementById('nurseName');
             const loggedInStaffNum = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
@@ -3442,7 +3454,11 @@
             if (isAdmin && recordNurseName.startsWith('[External Support]')) {
                 // Restore external support mode for editing
                 document.getElementById('externalSupportCheck').checked = true;
-                toggleExternalSupport(); // Show external fields, hide nurseName
+                // Manually show/hide fields (don't use toggleExternalSupport which clears values)
+                document.getElementById('nurseNameGroup').style.display = 'none';
+                nurseField.required = false;
+                document.getElementById('externalOrgGroup').style.display = '';
+                document.getElementById('externalNurseGroup').style.display = '';
                 // Parse org name and nurse name from "[External Support] OrgName - NurseName"
                 const extContent = recordNurseName.replace('[External Support]', '').trim();
                 const dashIdx = extContent.indexOf(' - ');
@@ -3658,7 +3674,9 @@
                 const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
                 const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 let reportNurse = (record['Nurse Name'] || '').toString().trim() || '-';
-                if (reportNurse !== '-') {
+                if (reportNurse !== '-' && reportNurse.startsWith('[External Support]')) {
+                    reportNurse = formatExternalSupportDisplay(reportNurse);
+                } else if (reportNurse !== '-') {
                     const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
                     const loggedUser = window.loggedInUser || {};
                     const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
@@ -3775,7 +3793,7 @@
                     <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                    <td>${record['Nurse Name'] || '-'}</td>
+                    <td>${(record['Nurse Name'] || '').startsWith('[External Support]') ? formatExternalSupportDisplay(record['Nurse Name']) : (record['Nurse Name'] || '-')}</td>
                 </tr>`;
             });
             
@@ -3815,6 +3833,22 @@
             if (!val) return false;
             const s = val.toString().trim();
             return s.length > 0 && /^\d+$/.test(s);
+        }
+
+        // Helper: format External Support nurse name for display
+        // "[External Support] OrgName - NurseName" → "External Support: OrgName (NurseName)"
+        function formatExternalSupportDisplay(nurseName) {
+            if (!nurseName || !nurseName.startsWith('[External Support]')) return nurseName;
+            const content = nurseName.replace('[External Support]', '').trim();
+            if (!content || content === 'Unknown') return currentLang === 'en' ? 'External Support' : 'دعم خارجي';
+            const dashIdx = content.indexOf(' - ');
+            const prefix = currentLang === 'en' ? 'Ext. Support' : 'دعم خارجي';
+            if (dashIdx !== -1) {
+                const org = content.substring(0, dashIdx).trim();
+                const nurse = content.substring(dashIdx + 3).trim();
+                return nurse ? `${prefix}: ${org} (${nurse})` : `${prefix}: ${org}`;
+            }
+            return `${prefix}: ${content}`;
         }
 
         // Helper: get a valid display name from session data, skipping employee numbers
