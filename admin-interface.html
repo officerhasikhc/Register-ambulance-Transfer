@@ -2225,8 +2225,9 @@
         // Resolve nurse Arabic name: prefer Users sheet lookup by Nurse Staff Number, fallback to stored name
         function resolveNurseArabicName(record) {
             const nurseName = (record['Nurse Name'] || '').toString().trim();
-            // Handle External Support records
-            if (nurseName.startsWith('[External Support]')) {
+            const nurseStaffNum = (record['Nurse Staff Number'] || '').toString().trim();
+            // Handle External Support records (detect by prefix OR EXT_SUPPORT marker)
+            if (nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT') {
                 const content = nurseName.replace('[External Support]', '').trim();
                 if (!content || content === 'Unknown') return 'دعم خارجي';
                 const dashIdx = content.indexOf(' - ');
@@ -2688,7 +2689,7 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             const fullNurse = resolveNurseArabicName(record);
-                            const isExtSupport = (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]');
+                            const isExtSupport = (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
                             
                             return `
                             <tr data-record-id="${recordId}">
@@ -3936,7 +3937,7 @@
             }
 
             // If this is an External Support record or a name not in the nurses list, auto-enable free text
-            if (nurseNameEn.startsWith('[External Support]') || nurseNameEn.includes('External Support')) {
+            if (nurseNameEn.startsWith('[External Support]') || nurseNameEn.includes('External Support') || nurseStaff === 'EXT_SUPPORT') {
                 document.getElementById('editNurseFreeText').checked = true;
                 document.getElementById('editNurseName').style.display = 'none';
                 document.getElementById('editNurseNameText').style.display = '';
@@ -3976,7 +3977,7 @@
             if (isFreeText) {
                 // Free text mode: use the text input directly
                 nurseName = (document.getElementById('editNurseNameText').value || '').trim();
-                nurseStaffNumber = '';
+                nurseStaffNumber = nurseName.indexOf('[External Support]') === 0 ? 'EXT_SUPPORT' : '';
             } else {
                 const nurseSelectValue = document.getElementById('editNurseName').value;
                 if (nurseSelectValue) {
