@@ -3345,6 +3345,15 @@
             }
         })();
         
+        // Invalidate data cache on code update to ensure fresh records with Ext Support column
+        (function() {
+            var codeVer = 'v34';
+            if (localStorage.getItem('_adminCodeVer') !== codeVer) {
+                localStorage.setItem('_adminCodeVer', codeVer);
+                try { DataCache.invalidateAll(); } catch(e) {}
+            }
+        })();
+
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
         loadPendingTrips();
