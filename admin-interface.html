@@ -2090,10 +2090,10 @@
                         <input type="text" id="editPatientName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
                     </div>
                     <div class="detail-item" style="padding:12px;">
-                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجل (الممرضة)</label>
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجّل</label>
                         <div id="editNurseOriginal" style="font-size:11px;color:#6b7280;margin-bottom:4px;display:none;">المسجّل الأصلي: <span id="editNurseOriginalName"></span></div>
                         <select id="editNurseName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;background:var(--white);">
-                            <option value="">-- اختر الممرضة --</option>
+                            <option value="">-- اختر المسجّل --</option>
                         </select>
                         <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;user-select:none;font-size:12px;color:#6b7280;">
                             <input type="checkbox" id="editNurseFreeText" onchange="toggleEditNurseFreeText()" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;">
@@ -2658,7 +2658,7 @@
                             <th>العودة</th>
                             <th>الوجهة</th>
                             <th>المريض</th>
-                            <th>الممرضة</th>
+                            <th>المسجّل</th>
                             <th>الحالة</th>
                             <th>الإجراءات</th>
                         </tr>
@@ -2751,7 +2751,7 @@
                         <div class="detail-value">${patientName}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">المسجل (الممرضة)</div>
+                        <div class="detail-label">المسجّل</div>
                         <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
                     <div class="detail-item">
@@ -2807,7 +2807,7 @@
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${DateTimeFormatter.formatTimeForDisplay(currentRecord['Return Time']) || '-'}</div></div>
                         <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item"><div class="label">اسم المريض</div><div class="value">${(currentRecord['Patient Name'] || currentRecord['patientName'] || '').toString().trim() || '-'}</div></div>
-                        <div class="item"><div class="label">المسجل (الممرضة)</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
+                        <div class="item"><div class="label">المسجّل</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                     </div>
                     <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
@@ -3080,7 +3080,7 @@
                 }
 
                 if (exportFormat === 'csv') {
-                    let csv = 'التاريخ,رقم السيارة,السائق,الرقم الوظيفي,ساعة المغادرة,تاريخ العودة,ساعة العودة,الوجهة,التشخيص,الممرضة\n';
+                    let csv = 'التاريخ,رقم السيارة,السائق,الرقم الوظيفي,ساعة المغادرة,تاريخ العودة,ساعة العودة,الوجهة,التشخيص,المسجّل\n';
                     
                     data.forEach(record => {
                         const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '';
@@ -3851,7 +3851,7 @@
 
         function populateNurseDropdown(selectedNameEn, selectedStaffNumber) {
             const select = document.getElementById('editNurseName');
-            select.innerHTML = '<option value="">-- اختر الممرضة --</option>';
+            select.innerHTML = '<option value="">-- اختر المسجّل --</option>';
             nursesList.forEach(n => {
                 const nameEn = (n.nameEn || '').toString().trim();
                 const nameAr = (n.nameAr || '').toString().trim();
