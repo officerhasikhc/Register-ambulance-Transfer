@@ -2732,8 +2732,7 @@
                 if (extNurse) parts.push('- ' + extNurse);
                 else if (!extOrg) parts.push('Unknown');
                 finalNurseName = parts.join(' ');
-                // Use EXT_SUPPORT marker so backend name resolution won't overwrite, and edit can detect it
-                finalNurseStaffNumber = 'EXT_SUPPORT';
+                // Keep admin's real staff number — backend detects ext support via [External Support] prefix
             } else {
                 finalNurseName = document.getElementById('nurseName').value;
             }
@@ -2754,7 +2753,8 @@
                 destination: destinationValue,
                 patientName: document.getElementById('patientName').value,
                 nurseName: finalNurseName,
-                nurseStaffNumber: finalNurseStaffNumber
+                nurseStaffNumber: finalNurseStaffNumber,
+                registrantName: isExternal ? getValidDisplayName(window.loggedInUser || {}) : undefined
             };
 
             // Safety: ensure nurseName is a real name, not empty or an employee number (skip for external support)
@@ -2797,7 +2797,8 @@
                     'Destination': formData.destination,
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
-                    'Nurse Staff Number': formData.nurseStaffNumber
+                    'Nurse Staff Number': formData.nurseStaffNumber,
+                    'Registrant Name': formData.registrantName || ''
                 };
                 
                 // Store in pendingEdits so server refreshes won't revert
@@ -2862,7 +2863,8 @@
                     'Destination': formData.destination,
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
-                    'Nurse Staff Number': formData.nurseStaffNumber
+                    'Nurse Staff Number': formData.nurseStaffNumber,
+                    'Registrant Name': formData.registrantName || ''
                 };
                 allRecords.unshift(optimisticRecord);
                 allYearRecords.unshift(optimisticRecord);
@@ -3206,8 +3208,9 @@
                             let fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
                             const nurseStaffForDisplay = (record['Nurse Staff Number'] || '').toString().trim();
                             const isExtSupport = fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
-                            if (fullNurse !== '-' && isExtSupport) {
-                                fullNurse = formatExternalSupportDisplay(fullNurse);
+                            if (isExtSupport) {
+                                const registrantName = (record['Registrant Name'] || '').toString().trim();
+                                fullNurse = registrantName || formatExternalSupportDisplay(fullNurse);
                             } else if (fullNurse !== '-') {
                                 const loggedUser = window.loggedInUser || {};
                                 const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
@@ -3225,7 +3228,7 @@
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
+                                <td title="${isExtSupport ? fullNurse + ' (' + formatExternalSupportDisplay(record['Nurse Name']) + ')' : fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
@@ -3321,7 +3324,7 @@
             // Non-admin users cannot edit External Support records
             const recNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             const recNurseName = (record['Nurse Name'] || '').toString().trim();
-            if (!isAdminUser() && (recNurseStaff === 'EXT_SUPPORT' || recNurseName.startsWith('[External Support]'))) {
+            if (!isAdminUser() && (recNurseStaff === 'EXT_SUPPORT' || recNurseName.startsWith('[External Support]') || record['Registrant Name'])) {
                 alert(currentLang === 'en' ? 'External Support records can only be edited by admin.' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة.');
                 return;
             }
@@ -3460,14 +3463,17 @@
             // Admin can edit ANY record freely (including nurse name)
             const isAdmin = isAdminUser();
 
-            console.log('📝 Edit record - Nurse Name:', JSON.stringify(recordNurseName), 'Staff:', recordNurseStaff, 'isAdmin:', isAdmin);
+            console.log('📝 Edit record - Nurse Name:', JSON.stringify(recordNurseName), 'Staff:', recordNurseStaff, 'isAdmin:', isAdmin, 'Registrant:', record['Registrant Name'] || 'N/A');
 
-            // Check if this is an External Support record (detect by prefix OR by EXT_SUPPORT staff marker)
-            const isExternalSupportRecord = recordNurseName.startsWith('[External Support]') || recordNurseStaff === 'EXT_SUPPORT';
+            // Detect external support: by [External Support] prefix, EXT_SUPPORT staff marker (old records), or Registrant Name field
+            const isExternalSupportRecord = recordNurseName.startsWith('[External Support]') || recordNurseStaff === 'EXT_SUPPORT' || !!record['Registrant Name'];
             if (isAdmin && isExternalSupportRecord) {
                 // Restore external support mode for editing
-                document.getElementById('externalSupportGroup').style.display = ''; // Show checkbox container
-                document.getElementById('externalSupportCheck').checked = true;
+                const extCheckbox = document.getElementById('externalSupportCheck');
+                const extGroup = document.getElementById('externalSupportGroup');
+                extGroup.style.display = '';
+                extCheckbox.checked = true;
+                extCheckbox.setAttribute('checked', 'checked');
                 // Manually show/hide fields (don't use toggleExternalSupport which clears values)
                 document.getElementById('nurseNameGroup').style.display = 'none';
                 nurseField.required = false;
@@ -3605,7 +3611,7 @@
                     DateTimeFormatter.formatDate(r['Return Date']) || '',
                     r['Return Time'] || '',
                     hasReturn ? 'Completed' : 'Pending Return',
-                    r['Nurse Name'] || r['nurseName'] || ''
+                    ((r['Nurse Name'] || '').startsWith('[External Support]') || (r['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT') ? ((r['Registrant Name'] || '').toString().trim() || formatExternalSupportDisplay(r['Nurse Name'])) : (r['Nurse Name'] || r['nurseName'] || '')
                 ]);
             }
 
@@ -3689,8 +3695,10 @@
                 const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 let reportNurse = (record['Nurse Name'] || '').toString().trim() || '-';
                 const reportNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-                if (reportNurse !== '-' && (reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT')) {
-                    reportNurse = formatExternalSupportDisplay(reportNurse);
+                const isReportExtSupport = reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
+                if (isReportExtSupport) {
+                    const registrantName = (record['Registrant Name'] || '').toString().trim();
+                    reportNurse = registrantName || formatExternalSupportDisplay(reportNurse);
                 } else if (reportNurse !== '-') {
                     const nurseStaff = reportNurseStaff;
                     const loggedUser = window.loggedInUser || {};
@@ -3808,7 +3816,7 @@
                     <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                    <td>${((record['Nurse Name'] || '').startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT') ? formatExternalSupportDisplay(record['Nurse Name']) : (record['Nurse Name'] || '-')}</td>
+                    <td>${((record['Nurse Name'] || '').startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT') ? ((record['Registrant Name'] || '').toString().trim() || formatExternalSupportDisplay(record['Nurse Name'])) : (record['Nurse Name'] || '-')}</td>
                 </tr>`;
             });
             
