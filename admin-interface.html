@@ -2091,9 +2091,15 @@
                     </div>
                     <div class="detail-item" style="padding:12px;">
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجل (الممرضة)</label>
+                        <div id="editNurseOriginal" style="font-size:11px;color:#6b7280;margin-bottom:4px;display:none;">المسجّل الأصلي: <span id="editNurseOriginalName"></span></div>
                         <select id="editNurseName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;background:var(--white);">
                             <option value="">-- اختر الممرضة --</option>
                         </select>
+                        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;user-select:none;font-size:12px;color:#6b7280;">
+                            <input type="checkbox" id="editNurseFreeText" onchange="toggleEditNurseFreeText()" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;">
+                            <span>إدخال يدوي (دعم خارجي أو اسم غير موجود)</span>
+                        </label>
+                        <input type="text" id="editNurseNameText" placeholder="أدخل اسم المسجل يدوياً" style="display:none;width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;margin-top:6px;">
                     </div>
                 </div>
                 <div style="margin-top:20px;display:flex;gap:12px;">
@@ -3863,6 +3869,28 @@
             });
         }
 
+        // Toggle free text mode for nurse name in admin edit modal
+        function toggleEditNurseFreeText() {
+            const checked = document.getElementById('editNurseFreeText').checked;
+            const selectEl = document.getElementById('editNurseName');
+            const textEl = document.getElementById('editNurseNameText');
+            if (checked) {
+                selectEl.style.display = 'none';
+                textEl.style.display = '';
+                // Pre-fill with current dropdown selection text if any
+                if (selectEl.value) {
+                    try {
+                        const d = JSON.parse(selectEl.value);
+                        textEl.value = d.nameEn || d.nameAr || '';
+                    } catch(e) {}
+                }
+            } else {
+                selectEl.style.display = '';
+                textEl.style.display = 'none';
+                textEl.value = '';
+            }
+        }
+
         function openEditRecordModal(record) {
             document.getElementById('editRecordId').value = record.ID || '';
             document.getElementById('editVehicleNumber').value = record['Vehicle Number'] || '';
@@ -3875,10 +3903,44 @@
             document.getElementById('editDestination').value = record['Destination'] || '';
             document.getElementById('editPatientName').value = record['Patient Name'] || record['patientName'] || '';
 
-            // Populate nurse dropdown with active nurses
+            // Reset free text mode
+            document.getElementById('editNurseFreeText').checked = false;
+            document.getElementById('editNurseName').style.display = '';
+            document.getElementById('editNurseNameText').style.display = 'none';
+            document.getElementById('editNurseNameText').value = '';
+
+            // Show original registerer name
             const nurseNameEn = (record['Nurse Name'] || '').toString().trim();
             const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            populateNurseDropdown(nurseNameEn, nurseStaff);
+            const origEl = document.getElementById('editNurseOriginal');
+            const origNameEl = document.getElementById('editNurseOriginalName');
+            if (nurseNameEn) {
+                origNameEl.textContent = nurseNameEn;
+                origEl.style.display = '';
+            } else {
+                origEl.style.display = 'none';
+            }
+
+            // If this is an External Support record or a name not in the nurses list, auto-enable free text
+            if (nurseNameEn.startsWith('[External Support]') || nurseNameEn.includes('External Support')) {
+                document.getElementById('editNurseFreeText').checked = true;
+                document.getElementById('editNurseName').style.display = 'none';
+                document.getElementById('editNurseNameText').style.display = '';
+                document.getElementById('editNurseNameText').value = nurseNameEn;
+                // Still populate dropdown in background for easy switching
+                populateNurseDropdown('', '');
+            } else {
+                // Populate nurse dropdown with active nurses
+                populateNurseDropdown(nurseNameEn, nurseStaff);
+                // If no nurse was matched in dropdown, auto-enable free text with the original name
+                const select = document.getElementById('editNurseName');
+                if (nurseNameEn && !select.value) {
+                    document.getElementById('editNurseFreeText').checked = true;
+                    document.getElementById('editNurseName').style.display = 'none';
+                    document.getElementById('editNurseNameText').style.display = '';
+                    document.getElementById('editNurseNameText').value = nurseNameEn;
+                }
+            }
 
             document.getElementById('editRecordModal').classList.add('active');
         }
@@ -3894,15 +3956,22 @@
             btn.textContent = 'جاري الحفظ...';
 
             const recordId = document.getElementById('editRecordId').value;
-            const nurseSelectValue = document.getElementById('editNurseName').value;
+            const isFreeText = document.getElementById('editNurseFreeText').checked;
             let nurseName = '';
             let nurseStaffNumber = '';
-            if (nurseSelectValue) {
-                try {
-                    const nurseData = JSON.parse(nurseSelectValue);
-                    nurseName = nurseData.nameEn || nurseData.nameAr || '';
-                    nurseStaffNumber = nurseData.staffNumber || '';
-                } catch (e) {}
+            if (isFreeText) {
+                // Free text mode: use the text input directly
+                nurseName = (document.getElementById('editNurseNameText').value || '').trim();
+                nurseStaffNumber = '';
+            } else {
+                const nurseSelectValue = document.getElementById('editNurseName').value;
+                if (nurseSelectValue) {
+                    try {
+                        const nurseData = JSON.parse(nurseSelectValue);
+                        nurseName = nurseData.nameEn || nurseData.nameAr || '';
+                        nurseStaffNumber = nurseData.staffNumber || '';
+                    } catch (e) {}
+                }
             }
 
             const payload = {
