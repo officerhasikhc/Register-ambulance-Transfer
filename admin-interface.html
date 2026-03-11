@@ -2052,6 +2052,7 @@
             </div>
             <form id="editRecordForm" onsubmit="saveEditRecord(event)">
                 <input type="hidden" id="editRecordId">
+                <input type="hidden" id="editExtSupport">
                 <div class="detail-grid" style="gap:14px;">
                     <div class="detail-item" style="padding:12px;">
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">رقم السيارة</label>
@@ -2222,21 +2223,29 @@
         }
         loadNurseNameMap();
 
-        // Resolve nurse Arabic name: prefer Users sheet lookup by Nurse Staff Number, fallback to stored name
         function resolveNurseArabicName(record) {
             const nurseName = (record['Nurse Name'] || '').toString().trim();
             const nurseStaffNum = (record['Nurse Staff Number'] || '').toString().trim();
-            // Handle External Support records (detect by prefix OR EXT_SUPPORT marker)
-            if (nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT') {
-                const content = nurseName.replace('[External Support]', '').trim();
-                if (!content || content === 'Unknown') return 'دعم خارجي';
-                const dashIdx = content.indexOf(' - ');
-                if (dashIdx !== -1) {
-                    const org = content.substring(0, dashIdx).trim();
-                    const nurse = content.substring(dashIdx + 3).trim();
-                    return nurse ? `دعم خارجي: ${org} (${nurse})` : `دعم خارجي: ${org}`;
+            const extSupportCol = (record['Ext Support'] || '').toString().trim();
+            const isExtSupport = !!extSupportCol || nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT';
+            if (isExtSupport) {
+                // New records: Nurse Name = admin's name, resolve Arabic from staff number
+                if (nurseStaffNum && nurseStaffNum !== 'EXT_SUPPORT' && nurseNameMap[nurseStaffNum]) {
+                    return nurseNameMap[nurseStaffNum];
                 }
-                return `دعم خارجي: ${content}`;
+                // Old records: parse from [External Support] prefix
+                if (nurseName.startsWith('[External Support]')) {
+                    const content = nurseName.replace('[External Support]', '').trim();
+                    if (!content || content === 'Unknown') return 'دعم خارجي';
+                    const dashIdx = content.indexOf(' - ');
+                    if (dashIdx !== -1) {
+                        const org = content.substring(0, dashIdx).trim();
+                        const nurse = content.substring(dashIdx + 3).trim();
+                        return nurse ? `دعم خارجي: ${org} (${nurse})` : `دعم خارجي: ${org}`;
+                    }
+                    return `دعم خارجي: ${content}`;
+                }
+                return nurseName || 'دعم خارجي';
             }
             const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             if (nurseStaff && nurseNameMap[nurseStaff]) {
@@ -2689,7 +2698,7 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             const fullNurse = resolveNurseArabicName(record);
-                            const isExtSupport = (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
+                            const isExtSupport = !!(record['Ext Support'] || '').toString().trim() || (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
                             
                             return `
                             <tr data-record-id="${recordId}">
@@ -2769,6 +2778,10 @@
                         <div class="detail-label">المسجّل</div>
                         <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
+                    ${(currentRecord['Ext Support'] || '').toString().trim() ? `<div class="detail-item">
+                        <div class="detail-label">دعم خارجي</div>
+                        <div class="detail-value" style="color:#7c3aed;font-weight:600;">${currentRecord['Ext Support']}</div>
+                    </div>` : ''}
                     <div class="detail-item">
                         <div class="detail-label">تاريخ التسجيل</div>
                         <div class="detail-value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div>
@@ -3908,6 +3921,7 @@
 
         function openEditRecordModal(record) {
             document.getElementById('editRecordId').value = record.ID || '';
+            document.getElementById('editExtSupport').value = record['Ext Support'] || '';
             document.getElementById('editVehicleNumber').value = record['Vehicle Number'] || '';
             document.getElementById('editDriverName').value = record['Driver Name'] || '';
             document.getElementById('editStaffNumber').value = record['Staff Number'] || '';
@@ -3929,15 +3943,16 @@
             const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
             const origEl = document.getElementById('editNurseOriginal');
             const origNameEl = document.getElementById('editNurseOriginalName');
+            const editExtSupportCol = (record['Ext Support'] || '').toString().trim();
+            const isEditExtSupport = !!editExtSupportCol || nurseNameEn.startsWith('[External Support]') || nurseStaff === 'EXT_SUPPORT';
             if (nurseNameEn) {
-                origNameEl.textContent = nurseNameEn.startsWith('[External Support]') ? resolveNurseArabicName(record) : nurseNameEn;
+                origNameEl.textContent = isEditExtSupport ? resolveNurseArabicName(record) : nurseNameEn;
                 origEl.style.display = '';
             } else {
                 origEl.style.display = 'none';
             }
 
-            // If this is an External Support record or a name not in the nurses list, auto-enable free text
-            if (nurseNameEn.startsWith('[External Support]') || nurseNameEn.includes('External Support') || nurseStaff === 'EXT_SUPPORT') {
+            if (isEditExtSupport) {
                 document.getElementById('editNurseFreeText').checked = true;
                 document.getElementById('editNurseName').style.display = 'none';
                 document.getElementById('editNurseNameText').style.display = '';
@@ -3975,9 +3990,7 @@
             let nurseName = '';
             let nurseStaffNumber = '';
             if (isFreeText) {
-                // Free text mode: use the text input directly
                 nurseName = (document.getElementById('editNurseNameText').value || '').trim();
-                nurseStaffNumber = nurseName.indexOf('[External Support]') === 0 ? 'EXT_SUPPORT' : '';
             } else {
                 const nurseSelectValue = document.getElementById('editNurseName').value;
                 if (nurseSelectValue) {
@@ -4002,7 +4015,8 @@
                 destination: document.getElementById('editDestination').value.trim(),
                 patientName: document.getElementById('editPatientName').value.trim(),
                 nurseName: nurseName,
-                nurseStaffNumber: nurseStaffNumber
+                nurseStaffNumber: nurseStaffNumber,
+                extSupport: document.getElementById('editExtSupport').value || undefined
             };
 
             // === OPTIMISTIC LOCAL UPDATE — update records in memory instantly ===
