@@ -2723,13 +2723,19 @@
             let finalNurseStaffNumber = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
             let extSupportValue = '';
             if (isExternal) {
-                finalNurseName = getValidDisplayName(window.loggedInUser || {}) || document.getElementById('nurseName').value;
                 const extNurse = (document.getElementById('externalNurseName').value || '').trim();
                 const extOrg = (document.getElementById('externalOrgName').value || '').trim();
-                let parts = [];
-                if (extOrg) parts.push(extOrg);
-                if (extNurse) parts.push(extNurse);
-                extSupportValue = parts.length > 0 ? parts.join(' - ') : 'External Support';
+                let detailParts = [];
+                if (extOrg) detailParts.push(extOrg);
+                if (extNurse) detailParts.push(extNurse);
+                extSupportValue = detailParts.length > 0 ? detailParts.join(' - ') : 'External Support';
+                // Nurse Name = "[External Support] details" for reliable detection in sheet
+                // Admin's real name is resolved from Nurse Staff Number on display
+                let prefixParts = ['[External Support]'];
+                if (extOrg) prefixParts.push(extOrg);
+                if (extNurse) prefixParts.push('- ' + extNurse);
+                else if (!extOrg) prefixParts.push('Unknown');
+                finalNurseName = prefixParts.join(' ');
             } else {
                 finalNurseName = document.getElementById('nurseName').value;
             }
@@ -3207,10 +3213,16 @@
                             const nurseStaffForDisplay = (record['Nurse Staff Number'] || '').toString().trim();
                             const extSupportVal = (record['Ext Support'] || '').toString().trim();
                             const isExtSupport = !!extSupportVal || fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
-                            if (isExtSupport && fullNurse.startsWith('[External Support]')) {
-                                fullNurse = formatExternalSupportDisplay(fullNurse);
-                            }
-                            if (fullNurse !== '-' && !isExtSupport) {
+                            if (isExtSupport) {
+                                // Resolve admin name from staff number
+                                const loggedUser = window.loggedInUser || {};
+                                const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                                if (loggedStaff && nurseStaffForDisplay === loggedStaff) {
+                                    fullNurse = getValidDisplayName(loggedUser) || fullNurse;
+                                } else if (fullNurse.startsWith('[External Support]')) {
+                                    fullNurse = formatExternalSupportDisplay(fullNurse);
+                                }
+                            } else if (fullNurse !== '-') {
                                 const loggedUser = window.loggedInUser || {};
                                 const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
                                 if (loggedStaff && (nurseStaffForDisplay === loggedStaff || (looksLikeEmployeeNumber(fullNurse) && fullNurse === loggedStaff))) {
@@ -3647,7 +3659,16 @@
                     DateTimeFormatter.formatDate(r['Return Date']) || '',
                     r['Return Time'] || '',
                     hasReturn ? 'Completed' : 'Pending Return',
-                    (r['Nurse Name'] || r['nurseName'] || '')
+                    (function() {
+                        var nn = (r['Nurse Name'] || r['nurseName'] || '').toString().trim();
+                        if (nn.startsWith('[External Support]') || (r['Ext Support'] || '').toString().trim()) {
+                            var lu = window.loggedInUser || {};
+                            var ls = (lu.staffNumber || '').toString().trim();
+                            var ns = (r['Nurse Staff Number'] || '').toString().trim();
+                            if (ls && ns === ls) return getValidDisplayName(lu) || nn;
+                        }
+                        return nn;
+                    })()
                 ]);
             }
 
@@ -3733,8 +3754,14 @@
                 const reportNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
                 const reportExtCol = (record['Ext Support'] || '').toString().trim();
                 const isReportExtSupport = !!reportExtCol || reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
-                if (isReportExtSupport && reportNurse.startsWith('[External Support]')) {
-                    reportNurse = formatExternalSupportDisplay(reportNurse);
+                if (isReportExtSupport) {
+                    const loggedUser = window.loggedInUser || {};
+                    const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                    if (loggedStaff && reportNurseStaff === loggedStaff) {
+                        reportNurse = getValidDisplayName(loggedUser) || reportNurse;
+                    } else if (reportNurse.startsWith('[External Support]')) {
+                        reportNurse = formatExternalSupportDisplay(reportNurse);
+                    }
                 }
                 if (!isReportExtSupport && reportNurse !== '-') {
                     const nurseStaff = reportNurseStaff;
@@ -3876,7 +3903,18 @@
                     <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                    <td>${record['Nurse Name'] || '-'}</td>
+                    <td>${(function() {
+                        var nn = (record['Nurse Name'] || '').toString().trim() || '-';
+                        var isExt = !!(record['Ext Support'] || '').toString().trim() || nn.startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
+                        if (isExt) {
+                            var lu = window.loggedInUser || {};
+                            var ls = (lu.staffNumber || '').toString().trim();
+                            var ns = (record['Nurse Staff Number'] || '').toString().trim();
+                            if (ls && ns === ls) return getValidDisplayName(lu) || nn;
+                            if (nn.startsWith('[External Support]')) return formatExternalSupportDisplay(nn);
+                        }
+                        return nn;
+                    })()}</td>
                 </tr>`;
             });
             
