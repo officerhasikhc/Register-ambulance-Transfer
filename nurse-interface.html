@@ -2732,6 +2732,8 @@
                 if (extNurse) parts.push('- ' + extNurse);
                 else if (!extOrg) parts.push('Unknown');
                 finalNurseName = parts.join(' ');
+                // Clear staff number so backend won't resolve the name back to admin's real name
+                finalNurseStaffNumber = '';
             } else {
                 finalNurseName = document.getElementById('nurseName').value;
             }
@@ -3450,9 +3452,12 @@
             // Admin can edit ANY record freely (including nurse name)
             const isAdmin = isAdminUser();
 
+            console.log('📝 Edit record - Nurse Name:', JSON.stringify(recordNurseName), 'Staff:', recordNurseStaff, 'isAdmin:', isAdmin);
+
             // Check if this is an External Support record
             if (isAdmin && recordNurseName.startsWith('[External Support]')) {
                 // Restore external support mode for editing
+                document.getElementById('externalSupportGroup').style.display = ''; // Show checkbox container
                 document.getElementById('externalSupportCheck').checked = true;
                 // Manually show/hide fields (don't use toggleExternalSupport which clears values)
                 document.getElementById('nurseNameGroup').style.display = 'none';
