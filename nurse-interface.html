@@ -3398,14 +3398,30 @@
                             console.log('🔍     Ext Support:', JSON.stringify(result.diagnosis.rawCellValues.extSupport));
                             console.log('🔍     Starts with [External Support]:', result.diagnosis.startsWithExtPrefix);
                         }
-                        if (result.diagnosis.rawRowData) {
-                            console.log('🔍 [13] FULL raw row data:', JSON.stringify(result.diagnosis.rawRowData, null, 2));
-                        }
                         console.log('🔍 [14] All ext support records in sheet:', JSON.stringify(result.diagnosis.allExtSupportRecords));
                         console.log('🔍 [15] Total columns:', result.diagnosis.totalColumns, '| Total rows:', result.diagnosis.totalRows);
-                        console.log('🔍 ===== DIAGNOSTIC END =====');
+
+                        // Auto-repair misaligned records + delete extra column
+                        console.log('🔧 Calling repair + column delete function...');
+                        return fetch(WEB_APP_URL + '?action=repairAndRemoveExtraColumn');
                     })
-                    .catch(function(err) { console.log('🔍 [9] Server diagnostic error:', err.message); });
+                    .then(function(r) { return r.json(); })
+                    .then(function(repairResult) {
+                        console.log('🔧 ===== REPAIR + DELETE RESULT =====');
+                        console.log('🔧 Success:', repairResult.success);
+                        console.log('🔧 Repaired rows:', repairResult.totalRepaired);
+                        console.log('🔧 Columns deleted:', repairResult.columnsDeleted);
+                        if (repairResult.log) {
+                            repairResult.log.forEach(function(line) { console.log('🔧  ', line); });
+                        }
+                        console.log('🔧 ===== REPAIR END =====');
+                        if (repairResult.totalRepaired > 0 || repairResult.columnsDeleted > 0) {
+                            console.log('🔧 Refreshing data after repair...');
+                            DataCache.invalidateAll();
+                            setTimeout(function() { loadAllNurseData(); }, 1000);
+                        }
+                    })
+                    .catch(function(err) { console.log('🔍 Diagnostic/repair error:', err.message); });
             })(record);
             // === END DIAGNOSTIC ===
             
