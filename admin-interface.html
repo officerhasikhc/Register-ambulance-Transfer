@@ -2213,7 +2213,7 @@
                     // Also populate ambulance_drivers in localStorage for other pages
                     var driversList = users.filter(u => u.type === 'driver').map(u => ({
                         nameAr: u.nameAr || '', nameEn: u.nameEn || '',
-                        staffNumber: u.staffNumber || '', type: u.employeeType || 'employee'
+                        staffNumber: (u.staffNumber || u.civilId || '').toString(), type: u.employeeType || 'employee'
                     }));
                     if (driversList.length > 0) {
                         localStorage.setItem('ambulance_drivers', JSON.stringify(driversList));
