@@ -3345,6 +3345,69 @@
             // Set editing mode with exact ID
             editingRecordId = String(record.ID).trim();
             console.log('📝 Editing record ID:', editingRecordId);
+
+            // === DIAGNOSTIC: Deep inspection of record data ===
+            (function diagExtSupport(rec) {
+                var id = String(rec.ID).trim();
+                console.log('🔍 ===== DIAGNOSTIC START for ' + id + ' =====');
+                console.log('🔍 [1] Record object keys:', Object.keys(rec));
+                console.log('🔍 [2] ALL record values:', JSON.stringify(rec, null, 2));
+                console.log('🔍 [3] Ext Support value:', JSON.stringify(rec['Ext Support']), '| type:', typeof rec['Ext Support']);
+                console.log('🔍 [4] Nurse Name value:', JSON.stringify(rec['Nurse Name']), '| startsWith [External Support]:', String(rec['Nurse Name'] || '').indexOf('[External Support]') === 0);
+                console.log('🔍 [5] Nurse Staff Number:', JSON.stringify(rec['Nurse Staff Number']), '| === EXT_SUPPORT:', rec['Nurse Staff Number'] === 'EXT_SUPPORT');
+
+                // Check allRecords for this ID
+                var inAll = allRecords.find(function(r) { return String(r.ID).trim() === id; });
+                if (inAll) {
+                    console.log('🔍 [6] Found in allRecords → Ext Support:', JSON.stringify(inAll['Ext Support']), '| Nurse Name:', JSON.stringify(inAll['Nurse Name']), '| Nurse Staff:', JSON.stringify(inAll['Nurse Staff Number']));
+                } else {
+                    console.log('🔍 [6] NOT found in allRecords!');
+                }
+
+                // Check DataCache
+                try {
+                    var year = document.getElementById('yearFilter').value;
+                    var month = document.getElementById('monthFilter').value;
+                    var cacheKey = 'cache_nurse_data_' + year + '_' + month;
+                    var cached = DataCache.get(cacheKey, 999999999);
+                    if (cached && cached.data && cached.data.records) {
+                        var inCache = cached.data.records.find(function(r) { return String(r.ID).trim() === id; });
+                        if (inCache) {
+                            console.log('🔍 [7] Found in DataCache → Ext Support:', JSON.stringify(inCache['Ext Support']), '| Nurse Name:', JSON.stringify(inCache['Nurse Name']), '| Nurse Staff:', JSON.stringify(inCache['Nurse Staff Number']));
+                        } else {
+                            console.log('🔍 [7] NOT found in DataCache for key', cacheKey);
+                        }
+                    } else {
+                        console.log('🔍 [7] DataCache empty for key', cacheKey);
+                    }
+                } catch(e) { console.log('🔍 [7] DataCache error:', e.message); }
+
+                // Call server diagnostic
+                console.log('🔍 [8] Calling server diagnostic for', id, '...');
+                fetch(WEB_APP_URL + '?action=diagnoseExtSupport&id=' + encodeURIComponent(id))
+                    .then(function(r) { return r.json(); })
+                    .then(function(result) {
+                        console.log('🔍 ===== SERVER DIAGNOSTIC RESULT =====');
+                        console.log('🔍 [9] Raw sheet headers:', JSON.stringify(result.diagnosis.headers));
+                        console.log('🔍 [10] Column positions:', JSON.stringify(result.diagnosis.columnPositions));
+                        console.log('🔍 [11] Found record:', result.diagnosis.foundRecord);
+                        if (result.diagnosis.rawCellValues) {
+                            console.log('🔍 [12] RAW CELL VALUES from sheet:');
+                            console.log('🔍     Nurse Name:', JSON.stringify(result.diagnosis.rawCellValues.nurseName));
+                            console.log('🔍     Nurse Staff Number:', JSON.stringify(result.diagnosis.rawCellValues.nurseStaffNumber));
+                            console.log('🔍     Ext Support:', JSON.stringify(result.diagnosis.rawCellValues.extSupport));
+                            console.log('🔍     Starts with [External Support]:', result.diagnosis.startsWithExtPrefix);
+                        }
+                        if (result.diagnosis.rawRowData) {
+                            console.log('🔍 [13] FULL raw row data:', JSON.stringify(result.diagnosis.rawRowData, null, 2));
+                        }
+                        console.log('🔍 [14] All ext support records in sheet:', JSON.stringify(result.diagnosis.allExtSupportRecords));
+                        console.log('🔍 [15] Total columns:', result.diagnosis.totalColumns, '| Total rows:', result.diagnosis.totalRows);
+                        console.log('🔍 ===== DIAGNOSTIC END =====');
+                    })
+                    .catch(function(err) { console.log('🔍 [9] Server diagnostic error:', err.message); });
+            })(record);
+            // === END DIAGNOSTIC ===
             
             // Load record data into form
             loadRecordIntoForm(record);
