@@ -3347,7 +3347,7 @@
         
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v34';
+            var codeVer = 'v35';
             if (localStorage.getItem('_adminCodeVer') !== codeVer) {
                 localStorage.setItem('_adminCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4032,8 +4032,7 @@
             if (Array.isArray(allRecords)) {
                 allRecords = allRecords.map(r => {
                     if (String(r.ID || r.id).trim() === String(recordId).trim()) {
-                        return {
-                            ...r,
+                        var updatedFields = {
                             'Vehicle Number': payload.vehicleNumber,
                             'Driver Name': payload.driverName,
                             'Staff Number': payload.staffNumber,
@@ -4043,9 +4042,11 @@
                             'Return Time': payload.returnTime,
                             'Destination': payload.destination,
                             'Patient Name': payload.patientName,
-                            'Nurse Name': payload.nurseName,
-                            'Nurse Staff Number': payload.nurseStaffNumber
+                            'Nurse Name': payload.nurseName || r['Nurse Name'],
+                            'Nurse Staff Number': payload.nurseStaffNumber || r['Nurse Staff Number'],
+                            'Ext Support': payload.extSupport || r['Ext Support'] || ''
                         };
+                        return { ...r, ...updatedFields };
                     }
                     return r;
                 });

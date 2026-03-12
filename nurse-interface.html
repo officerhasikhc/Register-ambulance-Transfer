@@ -2729,13 +2729,12 @@
                 if (extOrg) detailParts.push(extOrg);
                 if (extNurse) detailParts.push(extNurse);
                 extSupportValue = detailParts.length > 0 ? detailParts.join(' - ') : 'External Support';
-                // Nurse Name = "[External Support] details" for reliable detection in sheet
-                // Admin's real name is resolved from Nurse Staff Number on display
                 let prefixParts = ['[External Support]'];
                 if (extOrg) prefixParts.push(extOrg);
                 if (extNurse) prefixParts.push('- ' + extNurse);
                 else if (!extOrg) prefixParts.push('Unknown');
                 finalNurseName = prefixParts.join(' ');
+                finalNurseStaffNumber = 'EXT_SUPPORT';
             } else {
                 finalNurseName = document.getElementById('nurseName').value;
             }
@@ -4312,7 +4311,7 @@
 
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v34';
+            var codeVer = 'v35';
             if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
                 localStorage.setItem('_nurseCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
