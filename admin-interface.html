@@ -2229,12 +2229,8 @@
             const extSupportCol = (record['Ext Support'] || '').toString().trim();
             const isExtSupport = !!extSupportCol || nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT';
             if (isExtSupport) {
-                // New records: Nurse Name = admin's real name (not [External Support]...)
-                if (!nurseName.startsWith('[External Support]') && nurseName) {
-                    return nurseName;
-                }
-                // Old records with [External Support] prefix: show generic admin label
-                return 'الإدارة';
+                // Backend resolves admin name into Nurse Name for ext support records
+                return nurseName || '-';
             }
             if (nurseStaffNum && nurseNameMap[nurseStaffNum]) {
                 return nurseNameMap[nurseStaffNum];
@@ -2786,7 +2782,7 @@
                                 else { org = c; }
                             }
                         }
-                        let html = '<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:#7c3aed;">⚡ تفاصيل الدعم الخارجي</div><div class="detail-value" style="color:#7c3aed;font-weight:600;">';
+                        let html = '<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:#7c3aed;">تفاصيل الدعم الخارجي</div><div class="detail-value" style="color:#7c3aed;font-weight:600;">';
                         if (org) html += '<div>الجهة المدعومة: ' + org + '</div>';
                         if (extNurse) html += '<div>الممرض/ة المرافق/ة: ' + extNurse + '</div>';
                         if (!org && !extNurse) html += 'حالة دعم خارجي';
