@@ -2229,27 +2229,15 @@
             const extSupportCol = (record['Ext Support'] || '').toString().trim();
             const isExtSupport = !!extSupportCol || nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT';
             if (isExtSupport) {
-                // New records: Nurse Name = admin's name, resolve Arabic from staff number
-                if (nurseStaffNum && nurseStaffNum !== 'EXT_SUPPORT' && nurseNameMap[nurseStaffNum]) {
-                    return nurseNameMap[nurseStaffNum];
+                // New records: Nurse Name = admin's real name (not [External Support]...)
+                if (!nurseName.startsWith('[External Support]') && nurseName) {
+                    return nurseName;
                 }
-                // Old records: parse from [External Support] prefix
-                if (nurseName.startsWith('[External Support]')) {
-                    const content = nurseName.replace('[External Support]', '').trim();
-                    if (!content || content === 'Unknown') return 'دعم خارجي';
-                    const dashIdx = content.indexOf(' - ');
-                    if (dashIdx !== -1) {
-                        const org = content.substring(0, dashIdx).trim();
-                        const nurse = content.substring(dashIdx + 3).trim();
-                        return nurse ? `دعم خارجي: ${org} (${nurse})` : `دعم خارجي: ${org}`;
-                    }
-                    return `دعم خارجي: ${content}`;
-                }
-                return nurseName || 'دعم خارجي';
+                // Old records with [External Support] prefix: show generic admin label
+                return 'الإدارة';
             }
-            const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            if (nurseStaff && nurseNameMap[nurseStaff]) {
-                return nurseNameMap[nurseStaff];
+            if (nurseStaffNum && nurseNameMap[nurseStaffNum]) {
+                return nurseNameMap[nurseStaffNum];
             }
             return nurseName || '-';
         }
@@ -2778,10 +2766,33 @@
                         <div class="detail-label">المسجّل</div>
                         <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
-                    ${(currentRecord['Ext Support'] || '').toString().trim() ? `<div class="detail-item">
-                        <div class="detail-label">دعم خارجي</div>
-                        <div class="detail-value" style="color:#7c3aed;font-weight:600;">${currentRecord['Ext Support']}</div>
-                    </div>` : ''}
+                    ${(function() {
+                        const extCol = (currentRecord['Ext Support'] || '').toString().trim();
+                        const nn = (currentRecord['Nurse Name'] || '').toString().trim();
+                        const ns = (currentRecord['Nurse Staff Number'] || '').toString().trim();
+                        const isExt = !!extCol || nn.startsWith('[External Support]') || ns === 'EXT_SUPPORT';
+                        if (!isExt) return '';
+                        let org = '', extNurse = '';
+                        if (extCol && extCol !== 'External Support') {
+                            const di = extCol.indexOf(' - ');
+                            if (di !== -1) { org = extCol.substring(0, di).trim(); extNurse = extCol.substring(di + 3).trim(); }
+                            else { org = extCol; }
+                        } else if (nn.startsWith('[External Support]')) {
+                            const bi = nn.indexOf(']');
+                            const c = bi >= 0 ? nn.substring(bi + 1).trim() : '';
+                            if (c && c !== 'Unknown') {
+                                const di = c.indexOf(' - ');
+                                if (di !== -1) { org = c.substring(0, di).trim(); extNurse = c.substring(di + 3).trim(); }
+                                else { org = c; }
+                            }
+                        }
+                        let html = '<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:#7c3aed;">⚡ تفاصيل الدعم الخارجي</div><div class="detail-value" style="color:#7c3aed;font-weight:600;">';
+                        if (org) html += '<div>الجهة المدعومة: ' + org + '</div>';
+                        if (extNurse) html += '<div>الممرض/ة المرافق/ة: ' + extNurse + '</div>';
+                        if (!org && !extNurse) html += 'حالة دعم خارجي';
+                        html += '</div></div>';
+                        return html;
+                    })()}
                     <div class="detail-item">
                         <div class="detail-label">تاريخ التسجيل</div>
                         <div class="detail-value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div>
@@ -3347,7 +3358,7 @@
         
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v35';
+            var codeVer = 'v36';
             if (localStorage.getItem('_adminCodeVer') !== codeVer) {
                 localStorage.setItem('_adminCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}

@@ -3213,13 +3213,23 @@
                             const extSupportVal = (record['Ext Support'] || '').toString().trim();
                             const isExtSupport = !!extSupportVal || fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
                             if (isExtSupport) {
-                                // Resolve admin name from staff number
-                                const loggedUser = window.loggedInUser || {};
-                                const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
-                                if (loggedStaff && nurseStaffForDisplay === loggedStaff) {
-                                    fullNurse = getValidDisplayName(loggedUser) || fullNurse;
-                                } else if (fullNurse.startsWith('[External Support]')) {
-                                    fullNurse = formatExternalSupportDisplay(fullNurse);
+                                // Show admin's real name as Registered By
+                                if (fullNurse.startsWith('[External Support]')) {
+                                    // Old format: try to resolve admin name, fallback to generic
+                                    const loggedUser = window.loggedInUser || {};
+                                    const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                                    if (loggedStaff && nurseStaffForDisplay === loggedStaff) {
+                                        fullNurse = getValidDisplayName(loggedUser) || fullNurse;
+                                    } else {
+                                        fullNurse = currentLang === 'en' ? 'Admin' : 'الإدارة';
+                                    }
+                                } else {
+                                    // New format: Nurse Name = admin's real name
+                                    const loggedUser = window.loggedInUser || {};
+                                    const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                                    if (loggedStaff && nurseStaffForDisplay === loggedStaff) {
+                                        fullNurse = getValidDisplayName(loggedUser) || fullNurse;
+                                    }
                                 }
                             } else if (fullNurse !== '-') {
                                 const loggedUser = window.loggedInUser || {};
@@ -3245,7 +3255,7 @@
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                             ${currentLang === 'en' ? 'View' : 'عرض'}
                                         </button>
-                                        <button class="action-btn edit" onclick='editRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
+                                        <button class="action-btn edit" ${isExtSupport && !isAdminUser() ? 'disabled title="' + (currentLang === 'en' ? 'External Support — admin only' : 'دعم خارجي — للإدارة فقط') + '" style="opacity:0.4;cursor:not-allowed;pointer-events:auto;"' : ''} onclick='${isExtSupport && !isAdminUser() ? 'return false' : 'editRecord(' + JSON.stringify(record).replace(/'/g, "&apos;") + ')'}'>
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                             ${currentLang === 'en' ? 'Edit' : 'تعديل'}
                                         </button>
@@ -3298,6 +3308,13 @@
             currentReportPage = 1;
             generateReportContent();
             
+            // Detect External Support record
+            const viewExtCol = (record['Ext Support'] || '').toString().trim();
+            const viewNurseName = (record['Nurse Name'] || '').toString().trim();
+            const viewNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            const isViewExtSupport = !!viewExtCol || viewNurseName.startsWith('[External Support]') || viewNurseStaff === 'EXT_SUPPORT';
+            const canEdit = !isViewExtSupport || isAdminUser();
+            
             // Add edit button to report header
             const reportHeader = document.querySelector('.report-header');
             const existingEditBtn = document.getElementById('editRecordBtn');
@@ -3305,13 +3322,42 @@
                 const editBtn = document.createElement('button');
                 editBtn.id = 'editRecordBtn';
                 editBtn.className = 'btn-print';
-                editBtn.style.background = '#374151';
                 editBtn.style.marginRight = '10px';
-                editBtn.textContent = 'Edit Record';
-                editBtn.onclick = () => editRecord(record);
+                if (canEdit) {
+                    editBtn.style.background = '#374151';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.style.opacity = '1';
+                    editBtn.textContent = currentLang === 'en' ? 'Edit Record' : 'تعديل';
+                    editBtn.onclick = () => editRecord(record);
+                    editBtn.disabled = false;
+                } else {
+                    editBtn.style.background = '#9ca3af';
+                    editBtn.style.cursor = 'not-allowed';
+                    editBtn.style.opacity = '0.5';
+                    editBtn.textContent = currentLang === 'en' ? 'Admin Only' : 'للإدارة فقط';
+                    editBtn.title = currentLang === 'en' ? 'External Support records can only be edited by admin' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة';
+                    editBtn.onclick = null;
+                    editBtn.disabled = true;
+                }
                 reportHeader.querySelector('.report-actions').insertBefore(editBtn, reportHeader.querySelector('.btn-print'));
             } else {
-                existingEditBtn.onclick = () => editRecord(record);
+                if (canEdit) {
+                    existingEditBtn.style.background = '#374151';
+                    existingEditBtn.style.cursor = 'pointer';
+                    existingEditBtn.style.opacity = '1';
+                    existingEditBtn.textContent = currentLang === 'en' ? 'Edit Record' : 'تعديل';
+                    existingEditBtn.onclick = () => editRecord(record);
+                    existingEditBtn.disabled = false;
+                    existingEditBtn.title = '';
+                } else {
+                    existingEditBtn.style.background = '#9ca3af';
+                    existingEditBtn.style.cursor = 'not-allowed';
+                    existingEditBtn.style.opacity = '0.5';
+                    existingEditBtn.textContent = currentLang === 'en' ? 'Admin Only' : 'للإدارة فقط';
+                    existingEditBtn.title = currentLang === 'en' ? 'External Support records can only be edited by admin' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة';
+                    existingEditBtn.onclick = null;
+                    existingEditBtn.disabled = true;
+                }
             }
             
             document.getElementById('reportModal').classList.add('show');
@@ -3346,85 +3392,6 @@
             editingRecordId = String(record.ID).trim();
             console.log('📝 Editing record ID:', editingRecordId);
 
-            // === DIAGNOSTIC: Deep inspection of record data ===
-            (function diagExtSupport(rec) {
-                var id = String(rec.ID).trim();
-                console.log('🔍 ===== DIAGNOSTIC START for ' + id + ' =====');
-                console.log('🔍 [1] Record object keys:', Object.keys(rec));
-                console.log('🔍 [2] ALL record values:', JSON.stringify(rec, null, 2));
-                console.log('🔍 [3] Ext Support value:', JSON.stringify(rec['Ext Support']), '| type:', typeof rec['Ext Support']);
-                console.log('🔍 [4] Nurse Name value:', JSON.stringify(rec['Nurse Name']), '| startsWith [External Support]:', String(rec['Nurse Name'] || '').indexOf('[External Support]') === 0);
-                console.log('🔍 [5] Nurse Staff Number:', JSON.stringify(rec['Nurse Staff Number']), '| === EXT_SUPPORT:', rec['Nurse Staff Number'] === 'EXT_SUPPORT');
-
-                // Check allRecords for this ID
-                var inAll = allRecords.find(function(r) { return String(r.ID).trim() === id; });
-                if (inAll) {
-                    console.log('🔍 [6] Found in allRecords → Ext Support:', JSON.stringify(inAll['Ext Support']), '| Nurse Name:', JSON.stringify(inAll['Nurse Name']), '| Nurse Staff:', JSON.stringify(inAll['Nurse Staff Number']));
-                } else {
-                    console.log('🔍 [6] NOT found in allRecords!');
-                }
-
-                // Check DataCache
-                try {
-                    var year = document.getElementById('yearFilter').value;
-                    var month = document.getElementById('monthFilter').value;
-                    var cacheKey = 'cache_nurse_data_' + year + '_' + month;
-                    var cached = DataCache.get(cacheKey, 999999999);
-                    if (cached && cached.data && cached.data.records) {
-                        var inCache = cached.data.records.find(function(r) { return String(r.ID).trim() === id; });
-                        if (inCache) {
-                            console.log('🔍 [7] Found in DataCache → Ext Support:', JSON.stringify(inCache['Ext Support']), '| Nurse Name:', JSON.stringify(inCache['Nurse Name']), '| Nurse Staff:', JSON.stringify(inCache['Nurse Staff Number']));
-                        } else {
-                            console.log('🔍 [7] NOT found in DataCache for key', cacheKey);
-                        }
-                    } else {
-                        console.log('🔍 [7] DataCache empty for key', cacheKey);
-                    }
-                } catch(e) { console.log('🔍 [7] DataCache error:', e.message); }
-
-                // Call server diagnostic
-                console.log('🔍 [8] Calling server diagnostic for', id, '...');
-                fetch(WEB_APP_URL + '?action=diagnoseExtSupport&id=' + encodeURIComponent(id))
-                    .then(function(r) { return r.json(); })
-                    .then(function(result) {
-                        console.log('🔍 ===== SERVER DIAGNOSTIC RESULT =====');
-                        console.log('🔍 [9] Raw sheet headers:', JSON.stringify(result.diagnosis.headers));
-                        console.log('🔍 [10] Column positions:', JSON.stringify(result.diagnosis.columnPositions));
-                        console.log('🔍 [11] Found record:', result.diagnosis.foundRecord);
-                        if (result.diagnosis.rawCellValues) {
-                            console.log('🔍 [12] RAW CELL VALUES from sheet:');
-                            console.log('🔍     Nurse Name:', JSON.stringify(result.diagnosis.rawCellValues.nurseName));
-                            console.log('🔍     Nurse Staff Number:', JSON.stringify(result.diagnosis.rawCellValues.nurseStaffNumber));
-                            console.log('🔍     Ext Support:', JSON.stringify(result.diagnosis.rawCellValues.extSupport));
-                            console.log('🔍     Starts with [External Support]:', result.diagnosis.startsWithExtPrefix);
-                        }
-                        console.log('🔍 [14] All ext support records in sheet:', JSON.stringify(result.diagnosis.allExtSupportRecords));
-                        console.log('🔍 [15] Total columns:', result.diagnosis.totalColumns, '| Total rows:', result.diagnosis.totalRows);
-
-                        // Auto-repair misaligned records + delete extra column
-                        console.log('🔧 Calling repair + column delete function...');
-                        return fetch(WEB_APP_URL + '?action=repairAndRemoveExtraColumn');
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(repairResult) {
-                        console.log('🔧 ===== REPAIR + DELETE RESULT =====');
-                        console.log('🔧 Success:', repairResult.success);
-                        console.log('🔧 Repaired rows:', repairResult.totalRepaired);
-                        console.log('🔧 Columns deleted:', repairResult.columnsDeleted);
-                        if (repairResult.log) {
-                            repairResult.log.forEach(function(line) { console.log('🔧  ', line); });
-                        }
-                        console.log('🔧 ===== REPAIR END =====');
-                        if (repairResult.totalRepaired > 0 || repairResult.columnsDeleted > 0) {
-                            console.log('🔧 Refreshing data after repair...');
-                            DataCache.invalidateAll();
-                            setTimeout(function() { loadAllNurseData(); }, 1000);
-                        }
-                    })
-                    .catch(function(err) { console.log('🔍 Diagnostic/repair error:', err.message); });
-            })(record);
-            // === END DIAGNOSTIC ===
-            
             // Load record data into form
             loadRecordIntoForm(record);
             
@@ -3833,22 +3800,38 @@
                 const reportExtCol = (record['Ext Support'] || '').toString().trim();
                 const isReportExtSupport = !!reportExtCol || reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
                 if (isReportExtSupport) {
-                    const loggedUser = window.loggedInUser || {};
-                    const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
-                    if (loggedStaff && reportNurseStaff === loggedStaff) {
-                        reportNurse = getValidDisplayName(loggedUser) || reportNurse;
-                    } else if (reportNurse.startsWith('[External Support]')) {
-                        reportNurse = formatExternalSupportDisplay(reportNurse);
+                    // For ext support: show admin's real name as Registered By
+                    if (reportNurse.startsWith('[External Support]')) {
+                        // Old format: Nurse Name = "[External Support] Org - Nurse" → show admin name if available
+                        const loggedUser = window.loggedInUser || {};
+                        const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                        if (loggedStaff && reportNurseStaff === loggedStaff) {
+                            reportNurse = getValidDisplayName(loggedUser) || reportNurse;
+                        } else {
+                            // Can't resolve admin name — show generic label
+                            reportNurse = currentLang === 'en' ? 'Admin' : 'الإدارة';
+                        }
+                    } else {
+                        // New format: Nurse Name = admin's real name — resolve if possible
+                        const loggedUser = window.loggedInUser || {};
+                        const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                        if (loggedStaff && reportNurseStaff === loggedStaff) {
+                            reportNurse = getValidDisplayName(loggedUser) || reportNurse;
+                        }
+                        // else: already contains admin's name from backend
                     }
-                }
-                if (!isReportExtSupport && reportNurse !== '-') {
-                    const nurseStaff = reportNurseStaff;
+                } else if (reportNurse !== '-') {
                     const loggedUser = window.loggedInUser || {};
                     const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
-                    if (loggedStaff && (nurseStaff === loggedStaff || (looksLikeEmployeeNumber(reportNurse) && reportNurse === loggedStaff))) {
+                    if (loggedStaff && (reportNurseStaff === loggedStaff || (looksLikeEmployeeNumber(reportNurse) && reportNurse === loggedStaff))) {
                         const resolved = getValidDisplayName(loggedUser);
                         if (resolved) reportNurse = resolved;
                     }
+                }
+                // Build ext support badge for table row
+                let extBadge = '';
+                if (isReportExtSupport) {
+                    extBadge = '<br><small style="color:#7c3aed;font-weight:600;">⚡ ' + (currentLang === 'en' ? 'External Support' : 'دعم خارجي') + '</small>';
                 }
                 html += `
                     <tr>
@@ -3859,7 +3842,7 @@
                         <td>${retDate}<br><small>${retTime}</small></td>
                         <td>${record['Destination'] || '-'}</td>
                         <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                        <td>${reportNurse}${isReportExtSupport && reportExtCol ? '<br><small style="color:#7c3aed;font-weight:600;">⚡ ' + reportExtCol + '</small>' : ''}</td>
+                        <td>${reportNurse}${extBadge}</td>
                     </tr>
                 `;
             });
@@ -3873,17 +3856,53 @@
             if (reportRecords.length === 1) {
                 const rec = reportRecords[0];
                 const extVal = (rec['Ext Support'] || '').toString().trim();
-                if (extVal) {
-                    const dashIdx = extVal.indexOf(' - ');
-                    const orgName = dashIdx !== -1 ? extVal.substring(0, dashIdx).trim() : (extVal !== 'External Support' ? extVal : '');
-                    const extNurseName = dashIdx !== -1 ? extVal.substring(dashIdx + 3).trim() : '';
+                const recNN = (rec['Nurse Name'] || '').toString().trim();
+                const recNS = (rec['Nurse Staff Number'] || '').toString().trim();
+                const isRecExtSupport = !!extVal || recNN.startsWith('[External Support]') || recNS === 'EXT_SUPPORT';
+                if (isRecExtSupport) {
+                    // Parse org & nurse from Ext Support column or from old [External Support] Nurse Name
+                    let orgName = '';
+                    let extNurseName = '';
+                    if (extVal && extVal !== 'External Support') {
+                        const dashIdx = extVal.indexOf(' - ');
+                        if (dashIdx !== -1) {
+                            orgName = extVal.substring(0, dashIdx).trim();
+                            extNurseName = extVal.substring(dashIdx + 3).trim();
+                        } else {
+                            orgName = extVal;
+                        }
+                    } else if (recNN.startsWith('[External Support]')) {
+                        const bracketEnd = recNN.indexOf(']');
+                        const content = bracketEnd >= 0 ? recNN.substring(bracketEnd + 1).trim() : '';
+                        if (content && content !== 'Unknown') {
+                            const dashIdx = content.indexOf(' - ');
+                            if (dashIdx !== -1) {
+                                orgName = content.substring(0, dashIdx).trim();
+                                extNurseName = content.substring(dashIdx + 3).trim();
+                            } else {
+                                orgName = content;
+                            }
+                        }
+                    }
+                    // Resolve admin name for display
+                    let adminDisplayName = '';
+                    if (!recNN.startsWith('[External Support]') && recNN) {
+                        adminDisplayName = recNN;
+                    } else {
+                        const loggedUser = window.loggedInUser || {};
+                        const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
+                        if (loggedStaff && recNS === loggedStaff) {
+                            adminDisplayName = getValidDisplayName(loggedUser) || '';
+                        }
+                    }
                     html += `
                         <div style="margin:15px 0;padding:12px 16px;background:#f5f3ff;border:2px solid #7c3aed;border-radius:10px;">
-                            <div style="font-weight:700;color:#7c3aed;margin-bottom:8px;font-size:13px;">
-                                ${currentLang === 'en' ? 'External Support Details' : 'تفاصيل الدعم الخارجي'}
+                            <div style="font-weight:700;color:#7c3aed;margin-bottom:8px;font-size:14px;">
+                                ⚡ ${currentLang === 'en' ? 'External Support Details' : 'تفاصيل الدعم الخارجي'}
                             </div>
+                            ${adminDisplayName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Registered By: ' : 'المسجّل: ') + '</strong>' + adminDisplayName + '</div>' : ''}
                             ${orgName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Supported Entity: ' : 'الجهة المدعومة: ') + '</strong>' + orgName + '</div>' : ''}
-                            ${extNurseName ? '<div style="font-size:13px;"><strong>' + (currentLang === 'en' ? 'Accompanying Nurse: ' : 'الممرض/ة المرافق/ة: ') + '</strong>' + extNurseName + '</div>' : ''}
+                            ${extNurseName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Accompanying Nurse: ' : 'الممرض/ة المرافق/ة: ') + '</strong>' + extNurseName + '</div>' : ''}
                             ${!orgName && !extNurseName ? '<div style="font-size:13px;color:#6b7280;">' + (currentLang === 'en' ? 'External support case' : 'حالة دعم خارجي') + '</div>' : ''}
                         </div>
                     `;
@@ -3983,13 +4002,16 @@
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
                     <td>${(function() {
                         var nn = (record['Nurse Name'] || '').toString().trim() || '-';
-                        var isExt = !!(record['Ext Support'] || '').toString().trim() || nn.startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
+                        var ns = (record['Nurse Staff Number'] || '').toString().trim();
+                        var isExt = !!(record['Ext Support'] || '').toString().trim() || nn.startsWith('[External Support]') || ns === 'EXT_SUPPORT';
                         if (isExt) {
-                            var lu = window.loggedInUser || {};
-                            var ls = (lu.staffNumber || '').toString().trim();
-                            var ns = (record['Nurse Staff Number'] || '').toString().trim();
-                            if (ls && ns === ls) return getValidDisplayName(lu) || nn;
-                            if (nn.startsWith('[External Support]')) return formatExternalSupportDisplay(nn);
+                            if (nn.startsWith('[External Support]')) {
+                                var lu = window.loggedInUser || {};
+                                var ls = (lu.staffNumber || '').toString().trim();
+                                if (ls && ns === ls) return getValidDisplayName(lu) || nn;
+                                return currentLang === 'en' ? 'Admin' : 'الإدارة';
+                            }
+                            return nn;
                         }
                         return nn;
                     })()}</td>
@@ -4390,7 +4412,7 @@
 
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v35';
+            var codeVer = 'v36';
             if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
                 localStorage.setItem('_nurseCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
