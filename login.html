@@ -126,17 +126,24 @@
             display: block;
         }
 
-        .login-title {
-            color: var(--primary-blue);
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 8px;
+        .login-org-name {
+            color: var(--text-primary);
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.7;
+            margin-bottom: 12px;
         }
 
-        .login-subtitle {
-            color: var(--text-secondary);
-            font-size: 14px;
-            line-height: 1.5;
+        .login-system-name {
+            color: #1e3a5f;
+            font-size: 14.5px;
+            font-weight: 600;
+            padding: 8px 18px;
+            margin-top: 10px;
+            background: #eef2f7;
+            border-radius: 8px;
+            display: inline-block;
+            letter-spacing: 0.3px;
         }
         
         /* Mobile: Larger elements - scaled up ~25% for better readability on phones */
@@ -252,26 +259,35 @@
         .login-btn {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
-            color: var(--white);
+            background: #e5e7eb;
+            color: #4b5563;
             border: none;
             border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.25s ease;
             font-family: inherit;
         }
 
         .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            color: var(--white);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
         }
 
         .login-btn:disabled {
-            opacity: 0.7;
             cursor: not-allowed;
             transform: none;
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            color: var(--white);
+            opacity: 0.8;
         }
 
         .error-message {
@@ -402,14 +418,13 @@
                 margin-top: 16px;
             }
 
-            .login-title {
-                font-size: 26px;
-                margin-bottom: 12px;
+            .login-org-name {
+                font-size: 17px;
+                margin-bottom: 14px;
             }
 
-            .login-subtitle {
-                font-size: 16px;
-                line-height: 1.6;
+            .login-system-name {
+                font-size: 15.5px;
             }
 
             .form-label {
@@ -481,8 +496,8 @@
 
         <div class="login-header">
             <img src="moh-logo.png" alt="Logo" class="login-logo">
-            <h1 class="login-title" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</h1>
-            <p class="login-subtitle" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
+            <p class="login-org-name" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
+            <div class="login-system-name" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</div>
         </div>
 
         <div class="error-message" id="errorMessage"></div>
