@@ -1971,7 +1971,7 @@
                 <div id="inspectionsSection" style="margin-top: 24px;">
                     <div class="controls" style="margin-bottom: 14px;">
                         <h2>فحوصات السيارات الأسبوعية</h2>
-                        <div class="filter-controls" style="gap: 8px;">
+                        <div class="filter-controls" style="gap: 8px; flex-wrap: wrap;">
                             <select id="inspWeekFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
                                 <option value="">جميع الأسابيع</option>
                             </select>
@@ -1979,6 +1979,12 @@
                                 <option value="">جميع السائقين</option>
                             </select>
                             <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
+                            <div style="display:flex;align-items:center;gap:6px;margin-right:auto;border-right:1.5px solid #e5e7eb;padding-right:10px;">
+                                <select id="inspMonthFilter" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                    <option value="">اختر الشهر</option>
+                                </select>
+                                <button onclick="printInspectionsMonth()" style="padding:8px 16px;background:linear-gradient(135deg,#1e40af,#2563eb);color:white;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">طباعة التقرير الشهري</button>
+                            </div>
                         </div>
                     </div>
 
@@ -4231,6 +4237,13 @@
             }
         }
 
+        // Returns {month:1-12, year:YYYY} for a week — uses Wednesday of the week as representative day
+        function getWeekMonth(weekStartISO) {
+            const d = new Date(weekStartISO + 'T00:00:00');
+            d.setDate(d.getDate() + 3);
+            return { month: d.getMonth() + 1, year: d.getFullYear() };
+        }
+
         function populateInspectionFilters(rows) {
             const weeks   = [...new Set(rows.map(r => r.Week_Start).filter(Boolean))].sort().reverse();
             const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
@@ -4256,6 +4269,32 @@
                 if (d === curD) opt.selected = true;
                 dSel.appendChild(opt);
             });
+
+            // Populate month filter using Wednesday Rule
+            const mSel = document.getElementById('inspMonthFilter');
+            const curM = mSel.value;
+            const monthSet = new Map(); // key: "YYYY-MM" → {year, month, label}
+            weeks.forEach(w => {
+                const { month, year } = getWeekMonth(w);
+                const key = year + '-' + String(month).padStart(2,'0');
+                if (!monthSet.has(key)) {
+                    const label = new Date(year, month - 1, 1).toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
+                    monthSet.set(key, { key, label });
+                }
+            });
+            mSel.innerHTML = '<option value="">اختر الشهر</option>';
+            [...monthSet.entries()].sort((a,b) => b[0].localeCompare(a[0])).forEach(([key, {label}]) => {
+                const opt = document.createElement('option');
+                opt.value = key; opt.textContent = label;
+                if (key === curM) opt.selected = true;
+                mSel.appendChild(opt);
+            });
+            // Auto-select current month if nothing selected
+            if (!mSel.value) {
+                const now = new Date();
+                const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+                for (const opt of mSel.options) { if (opt.value === curKey) { opt.selected = true; break; } }
+            }
         }
 
         function renderInspectionsTable(rows) {
@@ -4417,6 +4456,396 @@
                 </div>
                 ${dayRow.Day_Notes ? `<div style="margin-top:10px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">ملاحظات: ${dayRow.Day_Notes}</div>` : ''}`;
             modal.classList.add('active');
+        }
+
+        // ============================================================
+        // MONTHLY INSPECTION PRINT REPORT
+        // ============================================================
+
+        async function printInspectionsMonth() {
+            const mSel = document.getElementById('inspMonthFilter');
+            const mVal = mSel.value; // "YYYY-MM"
+            if (!mVal) { alert('يرجى اختيار الشهر أولاً'); return; }
+            if (!_allInspections || _allInspections.length === 0) { alert('لا توجد بيانات فحوصات محملة'); return; }
+
+            const [yearStr, monthStr] = mVal.split('-');
+            const targetYear  = parseInt(yearStr);
+            const targetMonth = parseInt(monthStr);
+
+            // Collect weeks that belong to this month (Wednesday Rule)
+            const allWeeks = [...new Set(_allInspections.map(r => r.Week_Start).filter(Boolean))].sort();
+            const monthWeeks = allWeeks.filter(w => {
+                const wm = getWeekMonth(w);
+                return wm.year === targetYear && wm.month === targetMonth;
+            });
+
+            if (monthWeeks.length === 0) {
+                alert('لا توجد أسابيع تنتمي لهذا الشهر في البيانات المتاحة');
+                return;
+            }
+
+            // Take up to 4 weeks (sorted ascending)
+            const weeksForReport = monthWeeks.slice(0, 4);
+
+            // Collect all drivers who appear in these weeks
+            const driverMap = new Map(); // staffNumber → {name, staff, vehicle}
+            _allInspections.forEach(r => {
+                if (weeksForReport.includes(r.Week_Start) && r.Staff_Number) {
+                    if (!driverMap.has(r.Staff_Number)) {
+                        driverMap.set(r.Staff_Number, {
+                            name: r.Driver_Name || '—',
+                            staff: r.Staff_Number,
+                            vehicle: r.Vehicle_Number || '—'
+                        });
+                    }
+                }
+            });
+            const drivers = [...driverMap.values()].sort((a,b) => a.name.localeCompare(b.name, 'ar'));
+
+            if (drivers.length === 0) { alert('لا توجد بيانات سائقين لهذا الشهر'); return; }
+
+            // Load logo as base64
+            let logoSrc = 'moh-logo.png';
+            try {
+                const fetched = await fetchLogoAsDataUri('moh-logo.png');
+                if (fetched) logoSrc = fetched;
+            } catch(e) {}
+
+            const monthLabel = new Date(targetYear, targetMonth - 1, 1)
+                .toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
+
+            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc);
+
+            const pw = window.open('', '_blank', 'width=1200,height=850');
+            if (!pw) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
+            pw.document.open();
+            pw.document.write(html);
+            pw.document.close();
+            pw.onload = function() { pw.focus(); pw.print(); };
+        }
+
+        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc) {
+            const DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const SECTIONS = [
+                { title: 'أولاً: الهيكل الخارجي والإطارات', items: [
+                    { id: 'tires_front',   label: 'الإطارات الأمامية'   },
+                    { id: 'tires_rear',    label: 'الإطارات الخلفية'    },
+                    { id: 'no_oil_leak',   label: 'تسرب زيت أو ماء'     },
+                    { id: 'side_mirrors',  label: 'المرايا الجانبية'     },
+                    { id: 'doors',         label: 'الأبواب'              }
+                ]},
+                { title: 'ثانياً: النظام الكهربائي الأساسي', items: [
+                    { id: 'engine_start',  label: 'تشغيل السيارة'       },
+                    { id: 'gauges',        label: 'لوحة العدادات'        },
+                    { id: 'no_warnings',   label: 'مصابيح التحذير'       },
+                    { id: 'ac_system',     label: 'نظام التكييف'         },
+                    { id: 'cabin_electric',label: 'أجهزة المقصورة'       }
+                ]},
+                { title: 'ثالثاً: المحرك والسوائل', items: [
+                    { id: 'oil_level',     label: 'مستوى الزيت'          },
+                    { id: 'radiator_water',label: 'ماء الراديتر'          },
+                    { id: 'front_wipers',  label: 'المساحات الأمامية'    },
+                    { id: 'fuel_level',    label: 'مستوى الوقود'          },
+                    { id: 'battery',       label: 'البطارية'              }
+                ]},
+                { title: 'رابعاً: الأنوار والإشارات', items: [
+                    { id: 'front_lights',  label: 'الأنوار الأمامية'     },
+                    { id: 'rear_lights',   label: 'الأنوار الخلفية'      },
+                    { id: 'brake_lights',  label: 'أنوار الفرامل'        },
+                    { id: 'turn_signals',  label: 'إشارات الانعطاف'      },
+                    { id: 'hazard_lights', label: 'أنوار الطوارئ'        }
+                ]}
+            ];
+
+            function parseSession(jsonStr) {
+                try { return JSON.parse(jsonStr || '{}'); } catch(e) { return {}; }
+            }
+
+            function statusCell(status) {
+                if (status === 'ok')       return '<td class="cell-ok">✓</td><td class="cell-ok">✓</td>';
+                if (status === 'fault')    return '<td class="cell-fault">✗</td><td class="cell-fault">✗</td>';
+                if (status === 'followup') return '<td class="cell-fup">⚠</td><td class="cell-fup">⚠</td>';
+                return '<td class="cell-empty">—</td><td class="cell-empty">—</td>';
+            }
+
+            function statusSingle(status) {
+                if (status === 'ok')       return '<td class="cell-ok">✓</td>';
+                if (status === 'fault')    return '<td class="cell-fault">✗</td>';
+                if (status === 'followup') return '<td class="cell-fup">⚠</td>';
+                return '<td class="cell-empty">—</td>';
+            }
+
+            // Build issues summary for a week/driver
+            function buildIssues(weekRows) {
+                const issues = [];
+                weekRows.forEach(row => {
+                    const dayName = DAY_NAMES[parseInt(row.Day_Index)] || '';
+                    ['am', 'pm'].forEach(sess => {
+                        const jsonStr = sess === 'am' ? row.AM_Items : row.PM_Items;
+                        const obj = parseSession(jsonStr);
+                        const items = obj.items || {};
+                        const notes = obj.notes || {};
+                        Object.keys(items).forEach(itemId => {
+                            const s = items[itemId];
+                            if (s === 'fault' || s === 'followup') {
+                                const secObj = SECTIONS.flatMap(sc => sc.items).find(i => i.id === itemId);
+                                const label = secObj ? secObj.label : itemId;
+                                const sLabel = s === 'fault' ? 'عطل' : 'يحتاج متابعة';
+                                const note = notes[itemId] ? ` — ${notes[itemId]}` : '';
+                                issues.push(`${dayName} (${sess === 'am' ? 'صباح' : 'مساء'}): ${label} [${sLabel}]${note}`);
+                            }
+                        });
+                    });
+                });
+                return issues;
+            }
+
+            let pages = '';
+            let totalPages = 0;
+            drivers.forEach(driver => {
+                weeks.forEach((weekStart, wIdx) => {
+                    const weekEnd = (() => {
+                        const r = _allInspections.find(r => r.Week_Start === weekStart);
+                        return r ? r.Week_End : '';
+                    })();
+                    const weekLabel = weekStart + ' — ' + (weekEnd || '');
+                    const weekRows = _allInspections.filter(r =>
+                        r.Week_Start === weekStart && r.Staff_Number === driver.staff
+                    );
+
+                    // Build table rows
+                    let tableRows = '';
+                    SECTIONS.forEach((sec, sIdx) => {
+                        // Section header row
+                        tableRows += `<tr class="sec-header"><td colspan="${2 + 14}">${sec.title}</td></tr>`;
+                        sec.items.forEach(item => {
+                            tableRows += `<tr class="item-row"><td class="item-label">${item.label}</td>`;
+                            for (let d = 0; d < 7; d++) {
+                                const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
+                                if (!dayRow) {
+                                    tableRows += '<td class="cell-empty">—</td><td class="cell-empty">—</td>';
+                                } else {
+                                    const amObj = parseSession(dayRow.AM_Items);
+                                    const pmObj = parseSession(dayRow.PM_Items);
+                                    const amStatus = (amObj.items || {})[item.id] || '';
+                                    const pmStatus = (pmObj.items || {})[item.id] || '';
+                                    tableRows += statusSingle(amStatus) + statusSingle(pmStatus);
+                                }
+                            }
+                            tableRows += '</tr>';
+                        });
+                    });
+
+                    // Notes row per day
+                    let notesRow = '<tr class="notes-row"><td class="item-label" style="font-weight:600;">ملاحظات اليوم</td>';
+                    for (let d = 0; d < 7; d++) {
+                        const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
+                        const note = dayRow ? (dayRow.Day_Notes || '') : '';
+                        notesRow += `<td colspan="2" style="font-size:7pt;padding:2px 3px;">${note}</td>`;
+                    }
+                    notesRow += '</tr>';
+
+                    // Issues list
+                    const issues = buildIssues(weekRows);
+                    const issuesHtml = issues.length
+                        ? `<div class="issues-section"><div class="issues-title">البنود التي تحتاج انتباهاً في هذا الأسبوع:</div><ul class="issues-list">${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`
+                        : `<div class="issues-section" style="color:#166534;">جميع البنود سليمة في هذا الأسبوع.</div>`;
+
+                    totalPages++;
+                    pages += `
+<div class="report-page">
+  <div class="page-header">
+    <div class="header-logo-wrap">
+      <img src="${logoSrc}" class="header-logo" alt="شعار">
+    </div>
+    <div class="header-center">
+      <div class="header-main">المديرية العامة للخدمات الصحية بمحافظة ظفار</div>
+      <div class="header-sub">مركز حاسك الصحي</div>
+      <div class="header-title">تقرير الفحص اليومي للمركبة الإسعافية</div>
+    </div>
+    <div class="header-meta">
+      <div class="meta-line">الشهر: <strong>${monthLabel}</strong></div>
+      <div class="meta-line">الأسبوع: <strong>${wIdx + 1} / ${weeks.length}</strong></div>
+      <div class="meta-line">${weekLabel}</div>
+    </div>
+  </div>
+  <div class="driver-bar">
+    <span>السائق: <strong>${driver.name}</strong></span>
+    <span>الرقم الوظيفي: <strong>${driver.staff}</strong></span>
+    <span>رقم السيارة: <strong>${driver.vehicle}</strong></span>
+  </div>
+  <table class="insp-table">
+    <thead>
+      <tr class="thead-day">
+        <th class="th-item" rowspan="2">بند الفحص</th>
+        ${DAY_NAMES.map(d => `<th colspan="2" class="th-day">${d}</th>`).join('')}
+      </tr>
+      <tr class="thead-sess">
+        ${DAY_NAMES.map(() => '<th class="th-sess">ص</th><th class="th-sess">م</th>').join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+      ${notesRow}
+    </tbody>
+  </table>
+  ${issuesHtml}
+  <div class="page-footer">
+    <div class="footer-cell">
+      <div class="footer-label">أعدّه</div>
+      <div class="footer-line"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">التاريخ</div>
+      <div class="footer-line"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">التوقيع</div>
+      <div class="footer-sig"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">الختم الرسمي</div>
+      <div class="footer-sig"></div>
+    </div>
+  </div>
+</div>`;
+                });
+            });
+
+            const printDate = new Date().toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+
+            return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تقرير الفحص الشهري — ${monthLabel}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 9pt; color: #111; background: #fff; }
+  .report-page {
+    width: 277mm; min-height: 190mm;
+    padding: 8mm 8mm 6mm;
+    page-break-after: always;
+    display: flex; flex-direction: column; gap: 4mm;
+  }
+  .report-page:last-child { page-break-after: avoid; }
+
+  /* ── HEADER ── */
+  .page-header {
+    display: flex; align-items: center; gap: 6mm;
+    border-bottom: 2px solid #1e3a8a; padding-bottom: 4mm;
+  }
+  .header-logo { width: 20mm; height: 20mm; object-fit: contain; }
+  .header-logo-wrap { flex-shrink: 0; }
+  .header-center { flex: 1; text-align: center; }
+  .header-main { font-size: 11pt; font-weight: 700; color: #1e3a8a; }
+  .header-sub  { font-size: 9.5pt; font-weight: 600; color: #374151; margin-top: 1mm; }
+  .header-title { font-size: 10pt; font-weight: 700; color: #111; margin-top: 2mm;
+    border: 1.5px solid #1e3a8a; display: inline-block; padding: 1mm 5mm; border-radius: 3px; }
+  .header-meta { text-align: left; font-size: 8pt; line-height: 1.6; white-space: nowrap; color: #374151; }
+  .meta-line strong { color: #1e3a8a; }
+
+  /* ── DRIVER BAR ── */
+  .driver-bar {
+    display: flex; gap: 10mm; background: #eff6ff;
+    border: 1px solid #bfdbfe; border-radius: 4px;
+    padding: 2mm 4mm; font-size: 9pt;
+  }
+  .driver-bar strong { color: #1e3a8a; }
+
+  /* ── TABLE ── */
+  .insp-table {
+    width: 100%; border-collapse: collapse; font-size: 7.5pt;
+    flex: 1;
+  }
+  .insp-table th, .insp-table td {
+    border: 0.5pt solid #9ca3af; text-align: center; padding: 1.5pt 2pt;
+  }
+  .th-item { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 8pt;
+    width: 30mm; text-align: right; padding: 2pt 4pt; }
+  .th-day  { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 7.5pt; }
+  .th-sess { background: #1e40af; color: #fff; font-size: 7pt; }
+  .thead-day th, .thead-sess th { border-color: #1e3a8a; }
+
+  .sec-header td {
+    background: #dbeafe; color: #1e3a8a; font-weight: 700;
+    text-align: right; padding: 2pt 4pt; font-size: 8pt;
+    border-top: 1pt solid #1e3a8a;
+  }
+  .item-label {
+    text-align: right; padding: 2pt 4pt; background: #f9fafb;
+    font-size: 7.5pt; color: #374151;
+  }
+  .item-row:nth-child(even) .item-label { background: #f3f4f6; }
+
+  .cell-ok    { color: #065f46; font-weight: 700; background: #f0fdf4; }
+  .cell-fault { color: #991b1b; font-weight: 700; background: #fef2f2; }
+  .cell-fup   { color: #78350f; font-weight: 700; background: #fffbeb; }
+  .cell-empty { color: #9ca3af; font-size: 7pt; }
+
+  .notes-row td { background: #f8fafc; font-size: 6.5pt; color: #374151; vertical-align: top; }
+
+  /* ── ISSUES ── */
+  .issues-section {
+    border: 1pt solid #fbbf24; border-radius: 3px;
+    padding: 2mm 4mm; background: #fffbeb; font-size: 7.5pt;
+  }
+  .issues-title { font-weight: 700; color: #92400e; margin-bottom: 1mm; }
+  .issues-list  { padding-right: 5mm; color: #374151; line-height: 1.6; }
+  .issues-list li { margin-bottom: 0.5mm; }
+
+  /* ── FOOTER ── */
+  .page-footer {
+    display: flex; gap: 6mm; justify-content: space-between;
+    border-top: 1pt solid #1e3a8a; padding-top: 3mm; margin-top: auto;
+  }
+  .footer-cell { flex: 1; text-align: center; }
+  .footer-label { font-size: 8pt; font-weight: 700; color: #1e3a8a; margin-bottom: 1mm; }
+  .footer-line  { border-bottom: 1pt solid #6b7280; height: 8mm; }
+  .footer-sig   { border: 1pt solid #9ca3af; height: 14mm; border-radius: 3px; }
+
+  /* ── PRINT ── */
+  @media print {
+    html, body { margin: 0; padding: 0; }
+    .report-page { width: 100%; padding: 6mm; }
+    .no-print { display: none !important; }
+    @page { size: A4 landscape; margin: 8mm; }
+  }
+
+  /* ── SCREEN TOOLBAR ── */
+  .print-toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+    background: #1e3a8a; color: white; padding: 8px 16px;
+    display: flex; align-items: center; gap: 12px;
+    font-family: Arial, sans-serif; font-size: 13px;
+  }
+  .print-toolbar button {
+    padding: 6px 18px; background: white; color: #1e3a8a;
+    border: none; border-radius: 6px; font-weight: 700;
+    font-size: 13px; cursor: pointer;
+  }
+  .print-spacer { height: 44px; }
+  body { margin-top: 0; }
+  @media screen {
+    body { background: #e5e7eb; }
+    .report-page {
+      background: white; margin: 8mm auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+    }
+  }
+</style>
+</head>
+<body>
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">طباعة</button>
+  <span>تقرير الفحص الشهري — ${monthLabel} &nbsp;|&nbsp; ${totalPages} صفحة</span>
+  <span style="font-size:11px;opacity:.8;">طُبع بتاريخ: ${printDate}</span>
+  <button onclick="window.close()" style="margin-right:auto;background:#ef4444;color:white;">إغلاق</button>
+</div>
+<div class="print-spacer no-print"></div>
+${pages}
+</body>
+</html>`;
         }
 
         // Auto-load inspections on page load
