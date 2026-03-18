@@ -1972,10 +1972,10 @@
                     <div class="controls" style="margin-bottom: 14px;">
                         <h2>فحوصات السيارات الأسبوعية</h2>
                         <div class="filter-controls" style="gap: 8px; flex-wrap: wrap;">
-                            <select id="inspWeekFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                            <select id="inspWeekFilter" onchange="renderInspectionsTable(_allInspections)" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
                                 <option value="">جميع الأسابيع</option>
                             </select>
-                            <select id="inspDriverFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                            <select id="inspDriverFilter" onchange="renderInspectionsTable(_allInspections)" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
                                 <option value="">جميع السائقين</option>
                             </select>
                             <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
@@ -4237,20 +4237,24 @@
             }
         }
 
-        // Returns {month:1-12, year:YYYY} for a week — uses Wednesday of the week as representative day
+        function parseDateSafe(val) {
+            if (!val) return null;
+            var s = String(val).trim();
+            if (!s) return null;
+            var d = s.includes('T') ? new Date(s) : new Date(s + 'T00:00:00');
+            return isNaN(d.getTime()) ? null : d;
+        }
+
         function getWeekMonth(weekStartISO) {
-            if (!weekStartISO || typeof weekStartISO !== 'string') return null;
-            const d = new Date(weekStartISO.trim() + 'T00:00:00');
-            if (isNaN(d.getTime())) return null;
+            var d = parseDateSafe(weekStartISO);
+            if (!d) return null;
             d.setDate(d.getDate() + 3);
             return { month: d.getMonth() + 1, year: d.getFullYear() };
         }
 
-        // Safe date formatter — returns Arabic locale string or fallback
         function fmtDateAr(isoStr, opts) {
-            if (!isoStr || typeof isoStr !== 'string' || isoStr.trim() === '') return '—';
-            const d = new Date(isoStr.trim() + 'T00:00:00');
-            if (isNaN(d.getTime())) return isoStr; // return raw if unparseable
+            var d = parseDateSafe(isoStr);
+            if (!d) return '—';
             return d.toLocaleDateString('ar-OM', opts || { day: 'numeric', month: 'long', year: 'numeric' });
         }
 
@@ -4301,11 +4305,12 @@
                 if (key === curM) opt.selected = true;
                 mSel.appendChild(opt);
             });
-            // Auto-select current month if nothing selected
-            if (!mSel.value) {
+            if (!mSel.value && monthSet.size > 0) {
+                const sortedKeys = [...monthSet.keys()].sort().reverse();
                 const now = new Date();
                 const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-                for (const opt of mSel.options) { if (opt.value === curKey) { opt.selected = true; break; } }
+                const target = sortedKeys.includes(curKey) ? curKey : sortedKeys[0];
+                for (const opt of mSel.options) { if (opt.value === target) { opt.selected = true; break; } }
             }
         }
 
@@ -4324,13 +4329,18 @@
                 return;
             }
 
-            // Group by driver + week
+            // Group by driver + week, keeping only the latest row per Day_Index
             const groups = {};
             filtered.forEach(r => {
                 const key = (r.Staff_Number || '') + '|' + (r.Week_Start || '');
-                if (!groups[key]) groups[key] = { rows: [], driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: r.Week_Start, weekEnd: r.Week_End };
-                groups[key].rows.push(r);
+                if (!groups[key]) groups[key] = { dayMap: {}, driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: r.Week_Start, weekEnd: r.Week_End };
+                const di = String(r.Day_Index);
+                const prev = groups[key].dayMap[di];
+                if (!prev || String(r.Submitted_At || '') >= String(prev.Submitted_At || '')) {
+                    groups[key].dayMap[di] = r;
+                }
             });
+            Object.values(groups).forEach(g => { g.rows = Object.values(g.dayMap); });
 
             const DAY_SHORT = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
             const INSP_TOTAL = 20; // total inspection items per session
@@ -4366,7 +4376,7 @@
 
                 // 7 day dots (Sun→Sat)
                 for (let d = 0; d < 7; d++) {
-                    const dayRow  = g.rows.find(r => parseInt(r.Day_Index) === d);
+                    const dayRow  = g.dayMap[String(d)];
                     const amCount = dayRow ? _inspItemCount(dayRow.AM_Items) : 0;
                     const pmCount = dayRow ? _inspItemCount(dayRow.PM_Items) : 0;
                     const hasData = amCount > 0 || pmCount > 0;
@@ -4401,11 +4411,12 @@
         }
 
         function showInspDayDetail(staffNumber, weekStart, dayIdx) {
-            const dayRow = _allInspections.find(r =>
+            const matches = _allInspections.filter(r =>
                 String(r.Staff_Number).trim() === String(staffNumber).trim() &&
                 String(r.Week_Start).trim()   === String(weekStart).trim() &&
                 parseInt(r.Day_Index)         === parseInt(dayIdx)
             );
+            const dayRow = matches.sort((a,b) => String(b.Submitted_At||'').localeCompare(String(a.Submitted_At||'')))[0];
             if (!dayRow) { alert('لا توجد بيانات لهذا اليوم'); return; }
 
             const DAY_NAMES_AR = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
