@@ -4281,12 +4281,20 @@
                 groups[key].rows.push(r);
             });
 
-            const DAY_SHORT = ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+            const DAY_SHORT = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const INSP_TOTAL = 20; // total inspection items per session
+
+            function _inspItemCount(jsonStr) {
+                try { return Object.values((JSON.parse(jsonStr||'{}').items)||{}).filter(Boolean).length; }
+                catch(e) { return 0; }
+            }
 
             let html = '';
             Object.values(groups).sort((a,b) => b.weekStart.localeCompare(a.weekStart)).forEach(g => {
-                const faultDays    = g.rows.filter(r => r.Has_Fault    === 'نعم').length;
-                const followupDays = g.rows.filter(r => r.Has_Followup === 'نعم').length;
+                // Count only days that have actual data
+                const activeDays   = g.rows.filter(r => _inspItemCount(r.AM_Items) > 0 || _inspItemCount(r.PM_Items) > 0);
+                const faultDays    = activeDays.filter(r => r.Has_Fault    === 'نعم').length;
+                const followupDays = activeDays.filter(r => r.Has_Followup === 'نعم').length;
                 const weekStartFmt = new Date(g.weekStart + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long' });
                 const weekEndFmt   = new Date(g.weekEnd   + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
 
@@ -4298,7 +4306,7 @@
                             <div style="font-size:12px;color:#6b7280;margin-top:2px;">${weekStartFmt} — ${weekEndFmt}</div>
                         </div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#d1fae5;color:#065f46;">${g.rows.length} يوم مرسل</span>
+                            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#d1fae5;color:#065f46;">${activeDays.length} يوم مرسل</span>
                             ${faultDays    ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fee2e2;color:#991b1b;">${faultDays} يوم فيه عطل</span>` : ''}
                             ${followupDays ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fef3c7;color:#78350f;">${followupDays} يوم متابعة</span>` : ''}
                         </div>
@@ -4307,17 +4315,29 @@
 
                 // 7 day dots (Sun→Sat)
                 for (let d = 0; d < 7; d++) {
-                    const dayRow = g.rows.find(r => parseInt(r.Day_Index) === d);
-                    let dotColor = '#e5e7eb';
-                    let title = DAY_SHORT[d] + ' — لم يُرسل';
-                    if (dayRow) {
-                        if (dayRow.Has_Fault    === 'نعم') { dotColor = '#ef4444'; title = DAY_SHORT[d] + ' — يوجد عطل'; }
-                        else if (dayRow.Has_Followup === 'نعم') { dotColor = '#f59e0b'; title = DAY_SHORT[d] + ' — يحتاج متابعة'; }
-                        else { dotColor = '#10b981'; title = DAY_SHORT[d] + ' — سليم'; }
+                    const dayRow  = g.rows.find(r => parseInt(r.Day_Index) === d);
+                    const amCount = dayRow ? _inspItemCount(dayRow.AM_Items) : 0;
+                    const pmCount = dayRow ? _inspItemCount(dayRow.PM_Items) : 0;
+                    const hasData = amCount > 0 || pmCount > 0;
+                    const isComplete = amCount >= INSP_TOTAL && pmCount >= INSP_TOTAL;
+                    const isPartial  = hasData && !isComplete;
+
+                    let dotColor, dotSymbol, title;
+                    if (!hasData) {
+                        dotColor = '#e5e7eb'; dotSymbol = ''; title = DAY_SHORT[d] + ' — لم يُفحص';
+                    } else if (dayRow.Has_Fault === 'نعم') {
+                        dotColor = '#ef4444'; dotSymbol = '✗'; title = DAY_SHORT[d] + ' — يوجد عطل';
+                    } else if (dayRow.Has_Followup === 'نعم') {
+                        dotColor = '#f59e0b'; dotSymbol = '⚠'; title = DAY_SHORT[d] + ' — يحتاج متابعة';
+                    } else if (isComplete) {
+                        dotColor = '#10b981'; dotSymbol = '✓'; title = DAY_SHORT[d] + ' — مكتمل وسليم';
+                    } else {
+                        dotColor = '#6b7280'; dotSymbol = '…'; title = DAY_SHORT[d] + ' — غير مكتمل (' + (amCount+pmCount) + '/' + (INSP_TOTAL*2) + ')';
                     }
+
                     html += `<div style="text-align:center;min-width:38px;cursor:pointer;" onclick="showInspDayDetail('${g.staff}','${g.weekStart}',${d})" title="${title}">
                         <div style="width:28px;height:28px;border-radius:50%;background:${dotColor};margin:0 auto;display:flex;align-items:center;justify-content:center;">
-                            ${dayRow ? `<span style="color:white;font-size:11px;font-weight:700;">${dayRow.Has_Fault==='نعم'?'✗':dayRow.Has_Followup==='نعم'?'⚠':'✓'}</span>` : ''}
+                            ${dotSymbol ? `<span style="color:white;font-size:11px;font-weight:700;">${dotSymbol}</span>` : ''}
                         </div>
                         <div style="font-size:10px;color:#6b7280;margin-top:3px;">${DAY_SHORT[d]}</div>
                     </div>`;
@@ -4396,7 +4416,7 @@
                     </div>
                 </div>
                 ${dayRow.Day_Notes ? `<div style="margin-top:10px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">ملاحظات: ${dayRow.Day_Notes}</div>` : ''}`;
-            modal.style.display = 'flex';
+            modal.classList.add('active');
         }
 
         // Auto-load inspections on page load
