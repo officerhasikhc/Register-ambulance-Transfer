@@ -700,6 +700,14 @@
         if (!sess) { window.location.href = 'login.html'; return; }
         loggedInUser = JSON.parse(sess);
 
+        // Kick off history fetch immediately (before DOM rendering) — DataCache will serve it instantly when loadHistory() calls fetchWithCache
+        if (loggedInUser?.staffNumber) {
+            const _earlyUrl = `${WEB_APP_URL}?action=getDriverInspections&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}`;
+            if (!DataCache._inflight[_earlyUrl]) {
+                DataCache._inflight[_earlyUrl] = fetch(_earlyUrl).then(r => r.json()).catch(() => null);
+            }
+        }
+
         document.getElementById('driverNameDisplay').textContent  = loggedInUser.nameAr        || '—';
         document.getElementById('staffNumDisplay').textContent    = loggedInUser.staffNumber    || '—';
         document.getElementById('vehicleNumDisplay').textContent  = loggedInUser.vehicleNumber  || '—';
@@ -1556,6 +1564,8 @@
                 window._autoSwitchTimer = setTimeout(() => switchSession('pm', true), 1400);
             }
         }
+        // Schedule silent sync when any session completes
+        if (filled === TOTAL_ITEMS) scheduleAutoSync();
         updateSessionButtons();
     }
 
@@ -1762,6 +1772,56 @@
     }
 
     // ============================================================
+    // AUTO-SYNC (silent background sync after each completed session)
+    // ============================================================
+    let _syncInProgress = false;
+    let _autoSyncTimer  = null;
+
+    function scheduleAutoSync() {
+        clearTimeout(_autoSyncTimer);
+        _autoSyncTimer = setTimeout(autoSyncDraft, 4000); // debounce 4 s
+    }
+
+    async function autoSyncDraft() {
+        if (_syncInProgress || !loggedInUser?.staffNumber || !draft.weekStart) return;
+        if (!hasDraftData()) return;
+        _syncInProgress = true;
+
+        const payload = {
+            action:        'submitInspectionWeek',
+            weekStart:      draft.weekStart,
+            weekEnd:        draft.weekEnd,
+            driverName:     draft.driverName    || loggedInUser.nameAr        || '',
+            staffNumber:    draft.staffNumber   || loggedInUser.staffNumber   || '',
+            vehicleNumber:  draft.vehicleNumber || loggedInUser.vehicleNumber || '',
+            days:           draft.days
+        };
+
+        const syncDot = document.getElementById('sessionHint');
+        try {
+            // ReliablePost handles 3 strategies + offline queue automatically
+            const result = await ReliablePost.send(WEB_APP_URL, payload);
+            if (result.success) {
+                // Invalidate history cache so next loadHistory() gets fresh data
+                DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber);
+                if (syncDot) {
+                    const prev = syncDot.textContent;
+                    syncDot.textContent = '✓ تم الحفظ في الخادم';
+                    syncDot.style.color = 'var(--success)';
+                    setTimeout(() => {
+                        syncDot.textContent = prev.startsWith('✓ تم الحفظ') ? '' : prev;
+                    }, 3000);
+                }
+            }
+            // If result.queued/offline: data is safely queued in localStorage, will retry automatically
+        } catch(_) {
+            // silent fail — data stays safe in localStorage
+        } finally {
+            _syncInProgress = false;
+        }
+    }
+
+    // ============================================================
     // SUBMIT WEEK
     // ============================================================
     async function submitWeek() {
@@ -1816,7 +1876,7 @@
                 if (bar) bar.remove();
             }
             localStorage.removeItem(DRAFT_KEY + loggedInUser.staffNumber);
-            localStorage.removeItem('insp_hist_' + loggedInUser.staffNumber); // invalidate history cache
+            DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber); // invalidate history cache
             loadHistory();
             // Reset to new week after short delay
             setTimeout(() => {
@@ -1852,30 +1912,31 @@
     async function loadHistory() {
         const sn = loggedInUser?.staffNumber;
         if (!sn) return;
-        const el = document.getElementById('historyContainer');
+        const el       = document.getElementById('historyContainer');
+        const cacheKey = 'cache_insp_hist_' + sn;
+        const url      = `${WEB_APP_URL}?action=getDriverInspections&staffNumber=${encodeURIComponent(sn)}`;
 
-        // Show cached instantly if available
-        const cacheKey = 'insp_hist_' + sn;
-        const cached   = localStorage.getItem(cacheKey);
-        if (cached) {
-            try { renderHistoryData(JSON.parse(cached)); } catch(e) {}
-        } else {
+        // Show loading only if nothing cached yet
+        if (!DataCache.get(cacheKey)) {
             el.innerHTML = '<div class="history-empty" style="font-size:12px;color:#9ca3af;">جارٍ التحميل...</div>';
         }
 
-        try {
-            const res  = await fetch(`${WEB_APP_URL}?action=getDriverInspections&staffNumber=${encodeURIComponent(sn)}`);
-            const data = await res.json();
-            if (data.success && data.weeks) {
-                localStorage.setItem(cacheKey, JSON.stringify(data.weeks));
-            }
-            if (!data.success || !data.weeks || !Object.keys(data.weeks).length) {
-                el.innerHTML = '<div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div>'; return;
-            }
-            renderHistoryData(data.weeks);
-        } catch(e) {
-            if (!cached) el.innerHTML = '<div class="history-empty">تعذّر تحميل السجل</div>';
-        }
+        // DataCache: shows cache instantly (0ms), fetches fresh in background, calls onData 1–2×
+        DataCache.fetchWithCache(
+            url,
+            cacheKey,
+            10 * 60 * 1000, // 10 min expiry
+            (weeks, meta) => {
+                if (!weeks || !Object.keys(weeks).length) {
+                    if (!meta.fromCache) {
+                        el.innerHTML = '<div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div>';
+                    }
+                    return;
+                }
+                renderHistoryData(weeks);
+            },
+            (resp) => (resp && resp.success && resp.weeks) ? resp.weeks : null
+        );
     }
 
     function renderHistoryData(weeks) {
