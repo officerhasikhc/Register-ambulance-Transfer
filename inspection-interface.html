@@ -1954,7 +1954,9 @@
             const canEdit   = editCount < EDIT_LIMIT;
             const fmt = s => {
                 if (!s) return '—';
-                const d = new Date(s + 'T00:00:00');
+                var str = String(s).trim();
+                var d = str.includes('T') ? new Date(str) : new Date(str + 'T00:00:00');
+                if (isNaN(d.getTime())) return str;
                 return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
             };
             const item = document.createElement('div');
