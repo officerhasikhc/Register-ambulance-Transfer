@@ -1964,6 +1964,37 @@
                     <!-- Pagination -->
                     <div class="pagination" id="paginationContainer"></div>
                 </div>
+
+                <!-- ══════════════════════════════════════════ -->
+                <!-- Inspections Section | قسم فحوصات السيارات -->
+                <!-- ══════════════════════════════════════════ -->
+                <div id="inspectionsSection" style="margin-top: 24px;">
+                    <div class="controls" style="margin-bottom: 14px;">
+                        <h2>فحوصات السيارات الأسبوعية</h2>
+                        <div class="filter-controls" style="gap: 8px;">
+                            <select id="inspWeekFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <option value="">جميع الأسابيع</option>
+                            </select>
+                            <select id="inspDriverFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <option value="">جميع السائقين</option>
+                            </select>
+                            <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;"></span> سليم</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block;"></span> يحتاج متابعة</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span> يوجد عطل</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;display:inline-block;"></span> لم يُرسل</span>
+                    </div>
+
+                    <div id="inspectionsContainer">
+                        <div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -4174,6 +4205,203 @@
                     loadAdminData().finally(function() { isAdminRefreshing = false; });
                 }
             }
+        });
+
+        // ── Inspections Module ──────────────────────────────────────────
+        const WEB_APP_URL_INSP = WEB_APP_URL; // same endpoint
+
+        let _allInspections = [];
+
+        async function loadInspections() {
+            const el = document.getElementById('inspectionsContainer');
+            el.innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>';
+
+            try {
+                const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections');
+                const data = await res.json();
+                if (!data.success || !data.inspections || data.inspections.length === 0) {
+                    el.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">لا توجد فحوصات مرسلة حتى الآن</div>';
+                    return;
+                }
+                _allInspections = data.inspections;
+                populateInspectionFilters(_allInspections);
+                renderInspectionsTable(_allInspections);
+            } catch(e) {
+                el.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444;font-size:13px;">تعذّر تحميل الفحوصات</div>';
+            }
+        }
+
+        function populateInspectionFilters(rows) {
+            const weeks   = [...new Set(rows.map(r => r.Week_Start).filter(Boolean))].sort().reverse();
+            const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
+
+            const wSel = document.getElementById('inspWeekFilter');
+            const curW = wSel.value;
+            wSel.innerHTML = '<option value="">جميع الأسابيع</option>';
+            weeks.forEach(w => {
+                const d   = new Date(w + 'T00:00:00');
+                const lbl = d.toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+                const opt = document.createElement('option');
+                opt.value = w; opt.textContent = 'أسبوع ' + lbl;
+                if (w === curW) opt.selected = true;
+                wSel.appendChild(opt);
+            });
+
+            const dSel = document.getElementById('inspDriverFilter');
+            const curD = dSel.value;
+            dSel.innerHTML = '<option value="">جميع السائقين</option>';
+            drivers.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                if (d === curD) opt.selected = true;
+                dSel.appendChild(opt);
+            });
+        }
+
+        function renderInspectionsTable(rows) {
+            const filterWeek   = document.getElementById('inspWeekFilter').value;
+            const filterDriver = document.getElementById('inspDriverFilter').value;
+
+            const filtered = rows.filter(r =>
+                (!filterWeek   || r.Week_Start   === filterWeek)   &&
+                (!filterDriver || r.Driver_Name  === filterDriver)
+            );
+
+            if (filtered.length === 0) {
+                document.getElementById('inspectionsContainer').innerHTML =
+                    '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">لا توجد نتائج</div>';
+                return;
+            }
+
+            // Group by driver + week
+            const groups = {};
+            filtered.forEach(r => {
+                const key = (r.Staff_Number || '') + '|' + (r.Week_Start || '');
+                if (!groups[key]) groups[key] = { rows: [], driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: r.Week_Start, weekEnd: r.Week_End };
+                groups[key].rows.push(r);
+            });
+
+            const DAY_SHORT = ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+
+            let html = '';
+            Object.values(groups).sort((a,b) => b.weekStart.localeCompare(a.weekStart)).forEach(g => {
+                const faultDays    = g.rows.filter(r => r.Has_Fault    === 'نعم').length;
+                const followupDays = g.rows.filter(r => r.Has_Followup === 'نعم').length;
+                const weekStartFmt = new Date(g.weekStart + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long' });
+                const weekEndFmt   = new Date(g.weekEnd   + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+
+                html += `<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:14px;font-weight:700;color:#1f2937;">${g.driver}</div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:2px;">رقم السيارة: ${g.vehicle || '—'} &nbsp;|&nbsp; الرقم الوظيفي: ${g.staff || '—'}</div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${weekStartFmt} — ${weekEndFmt}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#d1fae5;color:#065f46;">${g.rows.length} يوم مرسل</span>
+                            ${faultDays    ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fee2e2;color:#991b1b;">${faultDays} يوم فيه عطل</span>` : ''}
+                            ${followupDays ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fef3c7;color:#78350f;">${followupDays} يوم متابعة</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;">`;
+
+                // 7 day dots (Sun→Sat)
+                for (let d = 0; d < 7; d++) {
+                    const dayRow = g.rows.find(r => parseInt(r.Day_Index) === d);
+                    let dotColor = '#e5e7eb';
+                    let title = DAY_SHORT[d] + ' — لم يُرسل';
+                    if (dayRow) {
+                        if (dayRow.Has_Fault    === 'نعم') { dotColor = '#ef4444'; title = DAY_SHORT[d] + ' — يوجد عطل'; }
+                        else if (dayRow.Has_Followup === 'نعم') { dotColor = '#f59e0b'; title = DAY_SHORT[d] + ' — يحتاج متابعة'; }
+                        else { dotColor = '#10b981'; title = DAY_SHORT[d] + ' — سليم'; }
+                    }
+                    html += `<div style="text-align:center;min-width:38px;cursor:pointer;" onclick="showInspDayDetail('${g.staff}','${g.weekStart}',${d})" title="${title}">
+                        <div style="width:28px;height:28px;border-radius:50%;background:${dotColor};margin:0 auto;display:flex;align-items:center;justify-content:center;">
+                            ${dayRow ? `<span style="color:white;font-size:11px;font-weight:700;">${dayRow.Has_Fault==='نعم'?'✗':dayRow.Has_Followup==='نعم'?'⚠':'✓'}</span>` : ''}
+                        </div>
+                        <div style="font-size:10px;color:#6b7280;margin-top:3px;">${DAY_SHORT[d]}</div>
+                    </div>`;
+                }
+
+                html += `</div></div>`;
+            });
+
+            document.getElementById('inspectionsContainer').innerHTML = html;
+        }
+
+        function showInspDayDetail(staffNumber, weekStart, dayIdx) {
+            const dayRow = _allInspections.find(r =>
+                String(r.Staff_Number).trim() === String(staffNumber).trim() &&
+                String(r.Week_Start).trim()   === String(weekStart).trim() &&
+                parseInt(r.Day_Index)         === parseInt(dayIdx)
+            );
+            if (!dayRow) { alert('لا توجد بيانات لهذا اليوم'); return; }
+
+            const DAY_NAMES_AR = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const ITEM_LABELS  = {
+                tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
+                no_oil_leak:'عدم تهريب زيت/ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
+                engine_start:'تشغيل السيارة', gauges:'العدادات', no_warnings:'لا إشارات تحذيرية',
+                ac_system:'نظام التكييف', cabin_electric:'كهرباء المقصورة',
+                oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
+                fuel_level:'مستوى الوقود', battery:'البطارية',
+                front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
+                brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
+            };
+            const STATUS_LABEL = { ok:'سليم', followup:'يحتاج متابعة', fault:'عطل', '':'' };
+
+            function renderSessionItems(jsonStr) {
+                if (!jsonStr) return '<span style="color:#9ca3af;font-size:12px;">لم يُفحص</span>';
+                try {
+                    const obj = JSON.parse(jsonStr);
+                    const items = obj.items || {};
+                    const notes = obj.notes || {};
+                    const photos = obj.photos || {};
+                    if (Object.keys(items).length === 0) return '<span style="color:#9ca3af;font-size:12px;">لم يُفحص</span>';
+                    let rows = '';
+                    Object.keys(items).forEach(k => {
+                        const s = items[k];
+                        const color = s==='fault'?'#991b1b':s==='followup'?'#78350f':'#065f46';
+                        const bg    = s==='fault'?'#fee2e2':s==='followup'?'#fef3c7':'#d1fae5';
+                        rows += `<div style="display:flex;justify-content:space-between;padding:3px 6px;border-bottom:1px solid #f3f4f6;font-size:12px;">
+                            <span style="color:#374151;">${ITEM_LABELS[k]||k}</span>
+                            <span style="background:${bg};color:${color};padding:1px 8px;border-radius:8px;font-size:11px;font-weight:600;">${STATUS_LABEL[s]||s}</span>
+                        </div>
+                        ${notes[k] ? `<div style="font-size:11px;color:#6b7280;padding:2px 6px 4px;font-style:italic;">— ${notes[k]}</div>` : ''}
+                        ${photos[k] ? `<div style="padding:3px 6px 6px;">
+                            <a href="${photos[k]}" target="_blank" title="عرض الصورة كاملة">
+                                <img src="${photos[k]}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1.5px solid #e5e7eb;cursor:pointer;display:block;" alt="صورة المشكلة">
+                            </a>
+                        </div>` : ''}`;
+                    });
+                    return rows;
+                } catch(e) { return '<span style="color:#9ca3af;font-size:12px;">—</span>'; }
+            }
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:15px;font-weight:700;color:#1f2937;">${dayRow.Driver_Name}</div>
+                    <div style="font-size:12px;color:#6b7280;">${DAY_NAMES_AR[dayIdx]} — ${dayRow.Week_Start} | رقم السيارة: ${dayRow.Vehicle_Number||'—'}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px;">صباح — ${dayRow.AM_Time||'—'}</div>
+                        ${renderSessionItems(dayRow.AM_Items)}
+                    </div>
+                    <div>
+                        <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px;">مساء — ${dayRow.PM_Time||'—'}</div>
+                        ${renderSessionItems(dayRow.PM_Items)}
+                    </div>
+                </div>
+                ${dayRow.Day_Notes ? `<div style="margin-top:10px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">ملاحظات: ${dayRow.Day_Notes}</div>` : ''}`;
+            modal.style.display = 'flex';
+        }
+
+        // Auto-load inspections on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadInspections, 800);
         });
 
         // Register Service Worker for PWA with aggressive auto-update

@@ -311,6 +311,16 @@ const DataCache = {
         }
 
         if (pageType === 'admin') {
+            // Fast: lightweight pending trips (1-2s) for instant display
+            fetches.push(
+                fetch(`${webAppUrl}?action=getPendingTrips`).then(r => r.json()).then(result => {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                    }
+                }).catch(() => {})
+            );
+
+            // Heavy: full admin data
             const url = `${webAppUrl}?action=getAdminData&year=${year}&month=${month}`;
             fetches.push(this._preloadFetch(
                 url,

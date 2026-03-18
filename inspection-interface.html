@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
+    <script src="session-manager.js"></script>
+    <meta name="theme-color" content="#1e40af">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>فحص سيارة الإسعاف اليومي</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #1e40af;
+            --light-blue: #3b82f6;
+            --lighter-blue: #eff6ff;
+            --dark-blue: #1e3a8a;
+            --bg-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #0ea5e9 100%);
+            --white: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --error: #ef4444;
+            --error-light: #fee2e2;
+            --border: #e5e7eb;
+            --shadow: 0 10px 40px rgba(0,0,0,0.15);
+            --shadow-lg: 0 25px 50px rgba(0,0,0,0.25);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 12px;
+        }
+
+        /* ── Header ── */
+        .header { text-align: center; color: var(--white); margin-bottom: 14px; width: 100%; max-width: 620px; }
+        .logo { width: 62px; height: 62px; background: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 8px; }
+        .header h1 { font-size: 15px; font-weight: 700; margin-bottom: 3px; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .header h2 { font-size: 13px; font-weight: 600; opacity: 0.9; }
+
+        /* ── Module Nav ── */
+        .module-nav { display: flex; gap: 10px; width: 100%; max-width: 620px; margin-bottom: 14px; }
+        .module-card {
+            flex: 1; background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3);
+            border-radius: 12px; padding: 12px 14px; text-align: center;
+            cursor: pointer; transition: all 0.2s; text-decoration: none; color: rgba(255,255,255,0.85);
+        }
+        .module-card.active { background: rgba(255,255,255,0.95); border-color: white; color: var(--primary-blue); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .module-card:hover:not(.active) { background: rgba(255,255,255,0.25); }
+        .module-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+        .module-sub { font-size: 11px; opacity: 0.8; }
+
+        /* ── Main Card ── */
+        .main-card { background: var(--white); border-radius: 18px; padding: 18px; width: 100%; max-width: 620px; box-shadow: var(--shadow-lg); margin-bottom: 16px; }
+
+        /* ── Driver Info ── */
+        .driver-info-bar { background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+        .driver-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+        .driver-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .btn-logout { background: var(--error-light); color: var(--error); border: 1px solid #fecaca; padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+
+        /* ── Page Title ── */
+        .page-title { text-align: center; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+        .page-title h3 { font-size: 16px; font-weight: 700; color: var(--primary-blue); }
+        .page-title p { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+
+        /* ── Custom Arabic Date Picker ── */
+        .datepicker-outer-wrap { position: relative; display: inline-block; margin-bottom: 8px; }
+        .datepicker-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border: 1.5px solid #bfdbfe; border-radius: 9px;
+            background: white; color: var(--primary-blue); font-family: inherit;
+            font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .datepicker-btn:hover { background: #eff6ff; }
+        .cal-popup {
+            position: absolute; top: calc(100% + 5px); right: 0; z-index: 200;
+            background: white; border: 1.5px solid var(--border); border-radius: 13px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.13); padding: 14px; width: 254px;
+            direction: rtl;
+        }
+        .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 4px; }
+        .cal-month-year { font-size: 13px; font-weight: 700; color: var(--text-primary); text-align: center; flex: 1; }
+        .cal-nav-btn { border: none; background: none; font-size: 17px; cursor: pointer; color: var(--primary-blue); padding: 3px 7px; border-radius: 6px; line-height: 1; }
+        .cal-nav-btn:hover { background: #eff6ff; }
+        .cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 4px; }
+        .cal-weekdays span { text-align: center; font-size: 10px; font-weight: 700; color: var(--text-secondary); padding: 4px 0; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+        .cal-cell { text-align: center; font-size: 12px; padding: 6px 2px; border-radius: 6px; cursor: pointer; color: var(--text-primary); line-height: 1.2; }
+        .cal-cell.empty { cursor: default; }
+        .cal-cell.future-cal { opacity: 0.32; cursor: not-allowed; pointer-events: none; }
+        .cal-cell:not(.empty):not(.future-cal):hover { background: #eff6ff; color: var(--primary-blue); }
+        .cal-cell.today-cal { background: var(--lighter-blue); font-weight: 700; color: var(--primary-blue); }
+        .cal-cell.in-week-cal { background: #dbeafe; color: var(--primary-blue); border-radius: 0; }
+        .cal-cell.week-start-cal { border-radius: 0 6px 6px 0; }
+        .cal-cell.week-end-cal { border-radius: 6px 0 0 6px; }
+        .cal-cell.sunday-cal { font-weight: 700; }
+        .cal-cell.sunday-cal::after { content: ''; display: block; width: 3px; height: 3px; background: var(--primary-blue); border-radius: 50%; margin: 1px auto 0; }
+
+        /* ── Week Selector (simplified - label + range only) ── */
+        .week-selector { background: var(--lighter-blue); border: 1px solid #bfdbfe; border-radius: 10px; padding: 9px 13px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .week-selector-label { font-size: 12px; font-weight: 700; color: var(--primary-blue); flex-shrink: 0; }
+        .week-range-text { font-size: 11px; font-weight: 600; color: #1d4ed8; white-space: nowrap; }
+
+        /* ── Day Tabs ── */
+        /* ── Slide Animations (day/session transitions) ── */
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(22px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-22px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes dayTabPop {
+            0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,0.38); transform: scale(1); }
+            45%     { box-shadow: 0 0 0 6px rgba(37,99,235,0);   transform: scale(1.06); }
+        }
+        .anim-slide-right { animation: slideInRight 0.22s ease both; }
+        .anim-slide-left  { animation: slideInLeft  0.22s ease both; }
+        .day-tab-jump-pulse { animation: dayTabPop 0.55s ease 2; }
+
+        /* ── Incomplete Reminder Banner ── */
+        .incomplete-reminder {
+            display: none; background: #fffbeb; border: 1.5px solid #fde68a;
+            border-radius: 10px; padding: 10px 13px; margin-bottom: 12px;
+        }
+        .incomplete-reminder.show {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            animation: slideInRight 0.3s ease;
+        }
+        .reminder-icon  { font-size: 17px; flex-shrink: 0; }
+        .reminder-text  { flex: 1; }
+        .reminder-title { font-size: 12px; font-weight: 700; color: #92400e; }
+        .reminder-sub   { font-size: 11px; color: #78350f; margin-top: 2px; }
+        .reminder-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .btn-go-incomplete {
+            font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 8px;
+            border: none; background: #f59e0b; color: white; cursor: pointer;
+            font-family: inherit; white-space: nowrap;
+        }
+        .btn-go-incomplete:active { background: #d97706; }
+        .btn-dismiss-reminder {
+            font-size: 11px; padding: 5px 9px; border-radius: 8px;
+            border: 1px solid #fde68a; background: transparent; color: #92400e;
+            cursor: pointer; font-family: inherit;
+        }
+
+        .day-tabs { display: flex; gap: 5px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px; }
+        .day-tabs::-webkit-scrollbar { height: 3px; }
+        .day-tabs::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+        .day-tab { flex: 0 0 auto; min-width: 52px; padding: 7px 4px; border: 1.5px solid var(--border); border-radius: 9px; text-align: center; cursor: pointer; transition: all 0.15s; background: white; }
+        .day-tab:hover:not(.future) { border-color: #93c5fd; background: #eff6ff; }
+        .day-tab.active { background: var(--primary-blue); border-color: var(--primary-blue); color: white; }
+        .day-tab.future { opacity: 0.38; cursor: not-allowed; }
+        .day-tab-name { font-size: 11px; font-weight: 700; }
+        .day-tab-date { font-size: 10px; opacity: 0.8; margin-top: 2px; direction: ltr; }
+        .day-tab-dot { width: 6px; height: 6px; border-radius: 50%; margin: 3px auto 0; background: #d1d5db; }
+        .day-tab.has-ok .day-tab-dot       { background: var(--success); }
+        .day-tab.has-followup .day-tab-dot { background: var(--warning); }
+        .day-tab.has-fault .day-tab-dot    { background: var(--error); }
+        .day-tab.active .day-tab-dot       { background: rgba(255,255,255,0.55); }
+
+        /* ── Session Bar ── */
+        .session-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .session-toggle { display: flex; gap: 4px; }
+        .session-btn { padding: 6px 16px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; background: white; color: var(--text-secondary); transition: all 0.15s; position: relative; }
+        .session-btn.active { background: var(--primary-blue); border-color: var(--primary-blue); color: white; }
+        .session-btn.done:not(.active) { border-color: var(--success); color: var(--success); }
+        .session-btn.done.active { background: var(--success); border-color: var(--success); }
+        .session-btn .done-dot { display: none; width: 7px; height: 7px; background: var(--success); border-radius: 50%; position: absolute; top: -2px; left: -2px; border: 1.5px solid white; }
+        .session-btn.done .done-dot { display: block; }
+        .session-btn.done.active .done-dot { background: white; border-color: var(--success); }
+        .session-hint { font-size: 11px; font-weight: 600; color: var(--success); flex: 1; text-align: center; transition: opacity 0.3s; }
+        .session-time-row { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+        .session-time-label { font-size: 11px; color: var(--text-secondary); }
+        .session-time-input { padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 7px; font-family: inherit; font-size: 12px; width: 90px; text-align: center; }
+        .session-time-input:focus { outline: none; border-color: var(--primary-blue); }
+
+        /* ── Global Progress ── */
+        .global-progress-wrap { margin-bottom: 13px; }
+        .global-progress-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .global-progress-label { font-size: 11px; color: var(--text-secondary); }
+        .global-progress-count { font-size: 11px; font-weight: 700; color: var(--primary-blue); }
+        .progress-bar-wrap { background: #f3f4f6; border-radius: 6px; height: 5px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--light-blue); border-radius: 6px; transition: width 0.3s; }
+
+        /* ── Section Headers with Icons ── */
+        .inspection-section { margin-bottom: 8px; scroll-margin-top: 70px; }
+
+        .section-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 10px; border-radius: 9px; margin-bottom: 3px; position: relative;
+            background: #f9fafb; border: 1px solid var(--border);
+        }
+        /* subtle left-border accent per section */
+        .sec-s0 { border-right: 3px solid #3b82f6; }
+        .sec-s1 { border-right: 3px solid #eab308; }
+        .sec-s2 { border-right: 3px solid #22c55e; }
+        .sec-s3 { border-right: 3px solid #f97316; }
+        .sec-icon-badge {
+            width: 26px; height: 26px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            background: #f3f4f6; color: #6b7280;
+        }
+        .sec-title {
+            flex: 1; font-size: 12px; font-weight: 700; color: var(--text-primary);
+        }
+        .sec-progress {
+            font-size: 10px; font-weight: 700;
+            padding: 2px 8px; border-radius: 10px;
+            background: rgba(0,0,0,0.07); color: #6b7280;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .sec-progress.complete { background: var(--success); color: white; }
+
+        /* ── Day Complete Bar ── */
+        .day-complete-bar {
+            display: none; background: var(--success-light); border: 1.5px solid #6ee7b7;
+            border-radius: 10px; padding: 10px 13px; margin: 10px 0 4px;
+            align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+            animation: slideInRight 0.25s ease;
+        }
+        .day-complete-bar.show { display: flex; }
+        .day-complete-info { display: flex; align-items: center; gap: 9px; }
+        .day-complete-icon { font-size: 20px; color: var(--success); line-height: 1; }
+        .day-complete-title { font-size: 12px; font-weight: 700; color: #065f46; }
+        .day-complete-sub   { font-size: 11px; color: #047857; margin-top: 1px; }
+        .btn-save-next {
+            font-size: 12px; font-weight: 700; padding: 7px 15px; border-radius: 9px;
+            border: none; background: var(--success); color: white; cursor: pointer;
+            font-family: inherit; white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-save-next:hover   { background: #059669; }
+        .btn-save-next:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        /* Section complete toast */
+        .sec-done-toast {
+            display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: var(--success); color: white; padding: 9px 20px;
+            border-radius: 20px; font-size: 13px; font-weight: 600;
+            box-shadow: 0 4px 16px rgba(16,185,129,0.4); z-index: 999;
+            animation: toastIn 0.3s ease;
+        }
+        @keyframes toastIn { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+        /* AM→PM transition toast (top-center) */
+        .session-switch-toast {
+            display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+            background: var(--primary-blue); color: white; padding: 10px 22px;
+            border-radius: 22px; font-size: 13px; font-weight: 700;
+            box-shadow: 0 4px 18px rgba(37,99,235,0.38); z-index: 1000; white-space: nowrap;
+            animation: toastInTop 0.3s ease;
+        }
+        @keyframes toastInTop { from { opacity:0; transform: translateX(-50%) translateY(-12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+        /* ── Item Rows ── */
+        .item-row { display: flex; align-items: center; padding: 6px 4px; border-bottom: 1px solid #f3f4f6; gap: 7px; scroll-margin-top: 110px; }
+        .item-row:last-of-type { border-bottom: none; }
+        .item-icon { flex-shrink: 0; color: #9ca3af; line-height: 0; }
+        .item-label { flex: 1; font-size: 12px; color: var(--text-primary); }
+        .status-group { display: flex; gap: 3px; flex-shrink: 0; }
+        .status-btn {
+            width: 30px; height: 28px; border: 1.5px solid #d1d5db; border-radius: 6px;
+            font-size: 13px; cursor: pointer; background: white;
+            display: flex; align-items: center; justify-content: center; transition: all 0.12s; line-height: 1;
+        }
+        .status-btn.sel-ok       { border-color: var(--success);  background: var(--success-light); color: #065f46; }
+        .status-btn.sel-followup { border-color: var(--warning);  background: var(--warning-light); color: #78350f; }
+        .status-btn.sel-fault    { border-color: var(--error);    background: var(--error-light);   color: #991b1b; }
+
+        /* ── Fault Notes ── */
+        .fault-note-wrap { padding: 3px 4px 5px 4px; }
+        .fault-note-input { width: 100%; padding: 5px 10px; border: 1px solid #fca5a5; border-radius: 7px; font-family: inherit; font-size: 12px; background: #fff5f5; color: var(--text-primary); }
+        .fault-note-input:focus { outline: none; border-color: var(--error); }
+
+        /* ── Followup Chips ── */
+        .followup-chips-wrap { padding: 4px 4px 7px; animation: slideInRight 0.18s ease; }
+        .followup-chips-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 5px; }
+        .followup-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .followup-chip {
+            font-size: 11px; font-weight: 600; padding: 4px 11px;
+            border-radius: 16px; border: 1.5px solid #fde68a;
+            background: white; color: #78350f; cursor: pointer;
+            font-family: inherit; transition: all 0.12s; white-space: nowrap;
+        }
+        .followup-chip:hover { background: #fffbeb; border-color: #f59e0b; }
+        .followup-chip.sel   { background: #fef3c7; border-color: #f59e0b; box-shadow: 0 0 0 1.5px #f59e0b; }
+        .followup-custom-input {
+            width: 100%; margin-top: 6px; padding: 5px 10px;
+            border: 1px solid #fde68a; border-radius: 7px;
+            font-family: inherit; font-size: 12px; background: #fffbeb; color: var(--text-primary);
+        }
+        .followup-custom-input:focus { outline: none; border-color: #f59e0b; }
+
+        /* ── Item Photo Attachment ── */
+        .item-photo-section { padding: 4px 4px 7px; }
+        .item-photo-preview { position: relative; display: inline-block; margin-bottom: 6px; }
+        .item-photo-thumbnail {
+            width: 84px; height: 63px; object-fit: cover; border-radius: 8px;
+            border: 2px solid var(--border); cursor: pointer; display: block;
+        }
+        .btn-remove-photo {
+            position: absolute; top: -5px; left: -5px;
+            width: 18px; height: 18px; border-radius: 50%;
+            background: #dc2626; color: white; border: none;
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; line-height: 1;
+            padding: 0;
+        }
+        .btn-capture-photo {
+            font-size: 11px; font-weight: 600; padding: 4px 11px;
+            border-radius: 8px; border: 1.5px dashed #d1d5db;
+            background: white; color: var(--text-secondary); cursor: pointer;
+            font-family: inherit; display: inline-flex; align-items: center; gap: 5px;
+            transition: all 0.12s;
+        }
+        .btn-capture-photo:hover { border-color: var(--primary-blue); color: var(--primary-blue); }
+
+        /* ── Day Locked ── */
+        .day-locked { text-align: center; padding: 30px 16px; color: var(--text-secondary); }
+        .day-locked-icon { font-size: 32px; margin-bottom: 8px; }
+        .day-locked p { font-size: 13px; }
+
+        /* ── General Notes ── */
+        .general-notes-section { margin-top: 10px; }
+        .general-notes-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
+        .general-notes-input { width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 9px; font-family: inherit; font-size: 12px; resize: none; min-height: 54px; }
+        .general-notes-input:focus { outline: none; border-color: var(--primary-blue); }
+
+        /* ── Submit ── */
+        .submit-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .week-status-summary { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; text-align: center; line-height: 1.6; }
+        .week-status-summary strong { color: var(--text-primary); }
+        .btn-submit-week { width: 100%; padding: 13px; background: var(--primary-blue); color: white; border: none; border-radius: 12px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+        .btn-submit-week:hover:not(:disabled) { background: var(--dark-blue); }
+        .btn-submit-week:disabled { background: #9ca3af; cursor: not-allowed; }
+        .saved-badge { display: none; text-align: center; font-size: 11px; color: var(--success); margin-top: 6px; }
+        .alert-msg { display: none; padding: 10px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: center; }
+        .alert-msg.success { background: var(--success-light); color: #065f46; border: 1px solid #6ee7b7; }
+        .alert-msg.error   { background: var(--error-light);   color: #991b1b;   border: 1px solid #fca5a5; }
+        .alert-msg.info    { background: var(--lighter-blue);  color: var(--primary-blue); border: 1px solid #bfdbfe; }
+        .alert-msg.show { display: block; }
+        /* Validation error list */
+        .validation-errors { margin-top: 10px; background: var(--error-light); border: 1px solid #fca5a5; border-radius: 9px; padding: 10px 14px; }
+        .validation-errors-title { font-size: 12px; font-weight: 700; color: #991b1b; margin-bottom: 6px; }
+        .validation-errors ul { padding-right: 16px; }
+        .validation-errors li { font-size: 12px; color: #7f1d1d; margin-bottom: 3px; }
+
+        /* ── History ── */
+        .history-section { background: var(--white); border-radius: 18px; padding: 16px 18px; width: 100%; max-width: 620px; box-shadow: var(--shadow); margin-bottom: 16px; }
+        .history-title { font-size: 14px; font-weight: 700; color: var(--primary-blue); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+        .history-item { border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; }
+        .history-item-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .btn-edit-week { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 7px; border: 1.5px solid #bfdbfe; background: var(--lighter-blue); color: var(--primary-blue); cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .btn-edit-week:disabled { opacity: 0.45; cursor: not-allowed; }
+        .edit-mode-bar { background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px; padding: 7px 12px; margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .edit-mode-label { font-size: 12px; font-weight: 700; color: #92400e; }
+        .btn-cancel-edit { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 7px; border: 1px solid #fca5a5; background: var(--error-light); color: var(--error); cursor: pointer; font-family: inherit; }
+        .history-week { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+        .history-driver { font-size: 11px; color: var(--text-secondary); }
+        .history-badges { display: flex; gap: 4px; }
+        .history-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+        .badge-ok       { background: var(--success-light); color: #065f46; }
+        .badge-followup { background: var(--warning-light); color: #78350f; }
+        .badge-fault    { background: var(--error-light);   color: #991b1b; }
+        .history-empty { text-align: center; color: var(--text-secondary); font-size: 13px; padding: 20px; }
+
+        @media (max-width: 480px) {
+            body { padding: 6px; }
+            .main-card { padding: 12px; border-radius: 14px; }
+            .history-section { padding: 12px 14px; border-radius: 14px; }
+            .header h1 { font-size: 12px; }
+            .header h2 { font-size: 10px; }
+            .module-nav { gap: 8px; }
+            .module-card { padding: 9px 10px; }
+            .module-title { font-size: 12px; }
+            .module-sub { font-size: 10px; }
+            .driver-name { font-size: 13px; }
+            .driver-meta { font-size: 10px; }
+            .page-title h3 { font-size: 14px; }
+            .page-title p  { font-size: 11px; }
+            .datepicker-btn { font-size: 11px; padding: 5px 9px; }
+            .cal-popup { width: calc(100vw - 28px); left: auto; right: 0; padding: 10px; }
+            .cal-cell { padding: 5px 1px; font-size: 11px; }
+            .cal-weekdays span { font-size: 9px; }
+            .cal-month-year { font-size: 12px; }
+            .week-selector { padding: 7px 10px; }
+            .week-selector-label { font-size: 11px; }
+            .week-range-text { font-size: 10px; }
+            .day-tab { min-width: 41px; padding: 5px 3px; }
+            .day-tab-name { font-size: 10px; }
+            .day-tab-date { font-size: 9px; }
+            .session-btn { padding: 5px 12px; font-size: 11px; }
+            .session-hint { font-size: 10px; }
+            .session-time-input { width: 82px; font-size: 11px; }
+            .section-header { padding: 6px 8px; }
+            .sec-title { font-size: 11px; }
+            .sec-icon-badge { width: 22px; height: 22px; }
+            .sec-progress { font-size: 9px; padding: 2px 6px; }
+            .item-row { padding: 5px 2px; gap: 5px; }
+            .item-label { font-size: 11px; }
+            .item-icon svg { width: 12px; height: 12px; }
+            .status-btn { padding: 4px 8px; font-size: 11px; }
+            .day-complete-bar { padding: 8px 10px; }
+            .day-complete-title { font-size: 11px; }
+            .day-complete-sub   { font-size: 10px; }
+            .btn-save-next { font-size: 11px; padding: 6px 11px; }
+            .btn-submit-week { font-size: 13px; padding: 12px; }
+            .session-switch-toast { font-size: 12px; padding: 8px 18px; white-space: normal; text-align: center; max-width: calc(100vw - 32px); }
+            .item-row    { scroll-margin-top: 90px; }
+            .inspection-section { scroll-margin-top: 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <img src="moh-logo.png" alt="شعار وزارة الصحة" class="logo">
+        <h1>المديرية العامة للخدمات الصحية بمحافظة ظفار</h1>
+        <h2>ولاية سدح - مركز حاسك الصحي</h2>
+    </div>
+
+    <!-- Module Navigation -->
+    <div class="module-nav">
+        <a href="driver-interface.html" class="module-card">
+            <div class="module-title">تسجيل رحلة</div>
+            <div class="module-sub">ذهاب وعودة</div>
+        </a>
+        <div class="module-card active">
+            <div class="module-title">فحص السيارة</div>
+            <div class="module-sub">الفحص اليومي</div>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="main-card">
+
+        <!-- Driver Info -->
+        <div class="driver-info-bar">
+            <div>
+                <div class="driver-name" id="driverNameDisplay">—</div>
+                <div class="driver-meta">
+                    الرقم الوظيفي: <span id="staffNumDisplay">—</span>
+                    &nbsp;|&nbsp; رقم السيارة: <span id="vehicleNumDisplay">—</span>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="logout()">خروج</button>
+        </div>
+
+        <!-- Page Title -->
+        <div class="page-title">
+            <h3>فحص سيارة الإسعاف اليومي</h3>
+            <p>أسبوع المناوبة — الأحد إلى السبت</p>
+        </div>
+
+        <!-- Custom Arabic Date Picker (outside the week selector box) -->
+        <div class="datepicker-outer-wrap" id="datepickerWrap">
+            <button class="datepicker-btn" id="datepickerBtn" onclick="toggleCalendar(event)">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="14" height="14" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+                <span id="datepickerLabel">اختر الأسبوع</span>
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor"><path d="M6 8L2 4h8z"/></svg>
+            </button>
+            <!-- Calendar popup -->
+            <div class="cal-popup" id="calPopup" style="display:none;">
+                <div class="cal-header">
+                    <button class="cal-nav-btn" onclick="calNav(1)" title="الشهر التالي">&#8250;</button>
+                    <span class="cal-month-year" id="calMonthYear"></span>
+                    <button class="cal-nav-btn" onclick="calNav(-1)" title="الشهر السابق">&#8249;</button>
+                </div>
+                <div class="cal-weekdays">
+                    <span>أح</span><span>إث</span><span>ثل</span><span>أر</span><span>خم</span><span>جم</span><span>سب</span>
+                </div>
+                <div class="cal-grid" id="calGrid"></div>
+            </div>
+        </div>
+        <!-- Hidden native input kept for JS compatibility -->
+        <input type="date" id="weekDateInput" style="display:none;">
+
+        <!-- Week Selector -->
+        <div class="week-selector">
+            <span class="week-selector-label">أسبوع المناوبة</span>
+            <span class="week-range-text" id="weekRangeDisplay">—</span>
+        </div>
+
+        <!-- Incomplete Day Reminder Banner -->
+        <div class="incomplete-reminder" id="incompleteReminder">
+            <span class="reminder-icon">⚠</span>
+            <div class="reminder-text">
+                <div class="reminder-title" id="reminderTitle">فحص غير مكتمل</div>
+                <div class="reminder-sub" id="reminderSub"></div>
+            </div>
+            <div class="reminder-actions">
+                <button class="btn-go-incomplete" id="btnGoIncomplete" onclick="jumpToIncomplete()">العودة لإكماله</button>
+                <button class="btn-dismiss-reminder" onclick="dismissReminder()">تجاهل</button>
+            </div>
+        </div>
+
+        <!-- Day Tabs -->
+        <div class="day-tabs" id="dayTabs"></div>
+
+        <!-- Session Bar -->
+        <div class="session-bar">
+            <div class="session-toggle">
+                <button class="session-btn active" id="btnAm" onclick="switchSession('am')">صباح<span class="done-dot"></span></button>
+                <button class="session-btn" id="btnPm" onclick="switchSession('pm')">مساء<span class="done-dot"></span></button>
+            </div>
+            <span class="session-hint" id="sessionHint"></span>
+            <div class="session-time-row">
+                <span class="session-time-label">الساعة:</span>
+                <input type="time" class="session-time-input" id="sessionTimeInput" oninput="onTimeChange(this.value)">
+            </div>
+        </div>
+
+        <!-- Global Progress -->
+        <div class="global-progress-wrap">
+            <div class="global-progress-row">
+                <span class="global-progress-label">إجمالي البنود المحددة</span>
+                <span class="global-progress-count" id="progressText">0 / 20</span>
+            </div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="progressBarFill" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- Inspection Sections (rendered by JS) -->
+        <div id="itemsContainer"></div>
+
+        <!-- Day Complete Bar (appears when both AM & PM are done) -->
+        <div class="day-complete-bar" id="dayCompleteBar">
+            <div class="day-complete-info">
+                <span class="day-complete-icon">✓</span>
+                <div>
+                    <div class="day-complete-title">اكتمل فحص اليوم</div>
+                    <div class="day-complete-sub" id="dayCompleteSubText">الصباح والمساء مسجّلان</div>
+                </div>
+            </div>
+            <button class="btn-save-next" id="btnSaveAndNext" onclick="saveDayAndNext()">
+                حفظ والانتقال للتالي
+            </button>
+        </div>
+
+        <!-- General Notes -->
+        <div class="general-notes-section">
+            <div class="general-notes-label">ملاحظات عامة</div>
+            <textarea class="general-notes-input" id="generalNotesInput" placeholder="أي ملاحظة إضافية..." oninput="onNotesChange(this.value)"></textarea>
+        </div>
+
+        <!-- Submit Section -->
+        <div class="submit-section">
+            <div class="week-status-summary" id="weekSummary"></div>
+            <div class="validation-errors" id="validationErrors" style="display:none;"></div>
+            <button class="btn-submit-week" id="btnSubmitWeek" onclick="submitWeek()">
+                إرسال الأسبوع كاملاً
+            </button>
+            <div class="saved-badge" id="savedBadge">✓ تم الحفظ محلياً</div>
+            <div class="alert-msg" id="alertMsg"></div>
+        </div>
+    </div>
+
+    <!-- Section Complete Toast -->
+    <div class="sec-done-toast" id="secDoneToast"></div>
+
+    <!-- AM→PM Transition Toast -->
+    <div class="session-switch-toast" id="sessionSwitchToast">☀ الصباح مكتمل — ينتقل للمساء 🌙</div>
+
+    <!-- Inspection History -->
+    <div class="history-section">
+        <div class="history-title">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3"/></svg>
+            الفحوصات المرسلة سابقاً
+        </div>
+        <div id="historyContainer"><div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div></div>
+    </div>
+
+    <script>
+    // ============================================================
+    // CONFIG
+    // ============================================================
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+    const DRAFT_KEY   = 'inspection_draft_';
+
+    // Preset reasons for "⚠ بحاجة للمتابعة" — generic enough to apply to all 20 items
+    const FOLLOWUP_CHIPS = [
+        'يحتاج تنظيف',
+        'يحتاج ضبط',
+        'يحتاج تشحيم',
+        'ضعيف الأداء',
+        'يحتاج استبدال',
+        'تلف طفيف',
+        'صوت غير طبيعي',
+        'يتسرب',
+        'أخرى...'
+    ];
+
+    // ============================================================
+    // SECTIONS DATA
+    // ============================================================
+    const SECTIONS = [
+        {
+            title: 'أولاً: الهيكل الخارجي والإطارات',
+            secIcon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="22" height="10" rx="2"/><path d="M5 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/><circle cx="7" cy="20" r="2"/><circle cx="17" cy="20" r="2"/><path d="M7 17v1m10-1v1"/></svg>`,
+            items: [
+                { id: 'tires_front',  label: 'الإطارات الأمامية',   icon: 'tire'   },
+                { id: 'tires_rear',   label: 'الإطارات الخلفية',    icon: 'tire'   },
+                { id: 'no_oil_leak',  label: 'عدم تهريب زيت / ماء', icon: 'leak'   },
+                { id: 'side_mirrors', label: 'المرايا الجانبية',     icon: 'mirror' },
+                { id: 'doors',        label: 'الأبواب',              icon: 'door'   }
+            ]
+        },
+        {
+            title: 'ثانياً: النظام الكهربائي الأساسي',
+            secIcon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 L4.5 13.5 H11 L9 22 L19.5 10.5 H13 Z"/></svg>`,
+            items: [
+                { id: 'engine_start',   label: 'تشغيل السيارة',           icon: 'key'     },
+                { id: 'gauges',         label: 'العدادات تعمل',            icon: 'gauge'   },
+                { id: 'no_warnings',    label: 'لا توجد إشارات تحذيرية',  icon: 'warning' },
+                { id: 'ac_system',      label: 'نظام التكييف',             icon: 'ac'      },
+                { id: 'cabin_electric', label: 'كهرباء المقصورة',          icon: 'electric'}
+            ]
+        },
+        {
+            title: 'ثالثاً: المحرك والسوائل',
+            secIcon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+            items: [
+                { id: 'oil_level',      label: 'مستوى الزيت',      icon: 'oil'     },
+                { id: 'radiator_water', label: 'ماء الراديتر',      icon: 'water'   },
+                { id: 'front_wipers',   label: 'المساحات الأمامية', icon: 'wiper'   },
+                { id: 'fuel_level',     label: 'مستوى الوقود',      icon: 'fuel'    },
+                { id: 'battery',        label: 'البطارية سليمة',    icon: 'battery' }
+            ]
+        },
+        {
+            title: 'رابعاً: الأنوار والإشارات الضوئية',
+            secIcon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
+            items: [
+                { id: 'front_lights', label: 'الأنوار الأمامية',   icon: 'light_f' },
+                { id: 'rear_lights',  label: 'الأنوار الخلفية',    icon: 'light_r' },
+                { id: 'brake_lights', label: 'أنوار الفرامل',      icon: 'brake'   },
+                { id: 'turn_signals', label: 'إشارات الانعطاف',    icon: 'turn'    },
+                { id: 'hazard_lights',label: 'أنوار الطوارئ',      icon: 'hazard'  }
+            ]
+        }
+    ];
+
+    const TOTAL_ITEMS = 20;
+    const ITEMS_PER_SEC = 5;
+
+    // Minimal item-level SVG icons
+    const ICONS = {
+        tire:    `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="3.5"/><line x1="10" y1="2" x2="10" y2="6.5"/><line x1="10" y1="13.5" x2="10" y2="18"/><line x1="2" y1="10" x2="6.5" y2="10"/><line x1="13.5" y1="10" x2="18" y2="10"/></svg>`,
+        leak:    `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 3C10 3 4.5 9.5 4.5 13C4.5 16.5 7 18.5 10 18.5C13 18.5 15.5 16.5 15.5 13C15.5 9.5 10 3 10 3Z"/><line x1="7" y1="7" x2="13" y2="13"/></svg>`,
+        mirror:  `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1.5" y="6" width="7" height="8" rx="1.5"/><line x1="8.5" y1="10" x2="13" y2="10"/><line x1="13" y1="6.5" x2="18.5" y2="5"/><line x1="13" y1="13.5" x2="18.5" y2="15"/></svg>`,
+        door:    `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="1.5" width="14" height="17" rx="1.5"/><circle cx="14" cy="10" r="1.2" fill="currentColor" stroke="none"/></svg>`,
+        key:     `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="10" r="4.5"/><line x1="11.5" y1="10" x2="19" y2="10"/><line x1="16" y1="10" x2="16" y2="13"/><line x1="19" y1="10" x2="19" y2="12.5"/></svg>`,
+        gauge:   `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 14.5 A8 8 0 0 1 17 14.5"/><line x1="10" y1="14.5" x2="14.5" y2="8"/><circle cx="10" cy="14.5" r="1.5" fill="currentColor" stroke="none"/></svg>`,
+        warning: `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 L18.5 17.5 L1.5 17.5 Z"/><line x1="10" y1="9" x2="10" y2="13"/><circle cx="10" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg>`,
+        ac:      `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="10" y1="1" x2="10" y2="19"/><line x1="1" y1="10" x2="19" y2="10"/><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/><line x1="7.5" y1="1" x2="10" y2="4"/><line x1="12.5" y1="1" x2="10" y2="4"/></svg>`,
+        electric:`<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 L4 10 L9.5 10 L8 18 L16 8 L10.5 8 Z"/></svg>`,
+        oil:     `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 12.5V6.5H14V12.5Q14 17.5 10 17.5Q6 17.5 6 12.5Z"/><line x1="9" y1="6.5" x2="9" y2="3.5"/><line x1="7" y1="3.5" x2="11" y2="3.5"/><line x1="7.5" y1="10.5" x2="12.5" y2="10.5" stroke-width="1.3"/></svg>`,
+        water:   `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 2C10 2 4 9 4 13C4 16.3 6.7 18.5 10 18.5C13.3 18.5 16 16.3 16 13C16 9 10 2 10 2Z"/></svg>`,
+        wiper:   `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 17 A10 10 0 0 1 17 17"/><path d="M3 17 A9 9 0 0 1 11.4 8.4"/><line x1="3" y1="17" x2="11.4" y2="8.4"/></svg>`,
+        fuel:    `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="11" height="14" rx="1.5"/><line x1="13" y1="8" x2="16.5" y2="8"/><path d="M16.5 8 L16.5 13 Q16.5 15 15 15"/><line x1="5" y1="4" x2="5" y2="7"/><line x1="10" y1="4" x2="10" y2="7"/></svg>`,
+        battery: `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1" y="6.5" width="15" height="7" rx="1.5"/><line x1="16" y1="9" x2="19" y2="9"/><line x1="16" y1="11" x2="19" y2="11"/><line x1="4" y1="10" x2="6.5" y2="10"/><line x1="5.2" y1="8.7" x2="5.2" y2="11.3"/><line x1="10" y1="10" x2="12" y2="10"/></svg>`,
+        light_f: `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L9.5 5 L9.5 15 L2 13 Z"/><line x1="9.5" y1="10" x2="13" y2="10"/><line x1="11" y1="7" x2="17" y2="5"/><line x1="11" y1="10" x2="17" y2="10"/><line x1="11" y1="13" x2="17" y2="15"/></svg>`,
+        light_r: `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1.5" y="6" width="17" height="8" rx="1.5"/><line x1="10" y1="6" x2="10" y2="14"/><rect x="2.5" y="7" width="6.5" height="6" rx="1"/><rect x="11" y="7" width="6.5" height="6" rx="1"/></svg>`,
+        brake:   `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="4"/></svg>`,
+        turn:    `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15.5 L18.5 10 L10 4.5 L10 8 L4 8 L4 12 L10 12 Z"/></svg>`,
+        hazard:  `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 L18.5 17.5 L1.5 17.5 Z"/><line x1="10" y1="9" x2="10" y2="13"/><circle cx="10" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg>`
+    };
+
+    const DAY_NAMES_AR = ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    let loggedInUser   = null;
+    let currentDayIdx  = 0;
+    let currentSession = 'am';
+    let draft = { weekStart: null, weekEnd: null, driverName: '', staffNumber: '', vehicleNumber: '', days: {} };
+    let weekDates = [];
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    function init() {
+        const sess = localStorage.getItem('userSession');
+        if (!sess) { window.location.href = 'login.html'; return; }
+        loggedInUser = JSON.parse(sess);
+
+        document.getElementById('driverNameDisplay').textContent  = loggedInUser.nameAr        || '—';
+        document.getElementById('staffNumDisplay').textContent    = loggedInUser.staffNumber    || '—';
+        document.getElementById('vehicleNumDisplay').textContent  = loggedInUser.vehicleNumber  || '—';
+
+        const today    = new Date();
+        const todayStr = toISO(today);
+        document.getElementById('weekDateInput').value = todayStr;
+
+        const saved = localStorage.getItem(DRAFT_KEY + loggedInUser.staffNumber);
+        if (saved) {
+            try {
+                draft = JSON.parse(saved);
+                if (draft.weekStart) {
+                    weekDates = buildWeekFromStart(draft.weekStart);
+                    updateWeekRangeDisplay();
+                    document.getElementById('weekDateInput').value = draft.weekStart;
+                } else { initWeek(todayStr); }
+            } catch(e) { initWeek(todayStr); }
+        } else { initWeek(todayStr); }
+
+        // Open today's tab if within current week
+        if (weekDates.length === 7) {
+            const diff = Math.floor((today - weekDates[0]) / 86400000);
+            if (diff >= 0 && diff < 7) currentDayIdx = diff;
+        }
+
+        updateDatepickerLabel();
+        renderDayTabs();
+        renderForm();
+        loadHistory();
+        updateWeekSummary();
+        // Check after a brief delay to ensure draft is fully loaded
+        setTimeout(checkIncompleteReminder, 400);
+    }
+
+    // ============================================================
+    // WEEK HELPERS
+    // ============================================================
+    function initWeek(dateStr) {
+        weekDates = buildWeek(dateStr);
+        draft.weekStart     = toISO(weekDates[0]);
+        draft.weekEnd       = toISO(weekDates[6]);
+        draft.driverName    = loggedInUser.nameAr        || '';
+        draft.staffNumber   = loggedInUser.staffNumber   || '';
+        draft.vehicleNumber = loggedInUser.vehicleNumber || '';
+        draft.days = {};
+        updateWeekRangeDisplay();
+        updateDatepickerLabel();
+    }
+
+    function buildWeek(dateStr) {
+        const d   = new Date(dateStr + 'T00:00:00');
+        const dow = d.getDay();
+        const sun = new Date(d); sun.setDate(d.getDate() - dow);
+        const arr = [];
+        for (let i = 0; i < 7; i++) { const nd = new Date(sun); nd.setDate(sun.getDate() + i); arr.push(nd); }
+        return arr;
+    }
+
+    function buildWeekFromStart(startStr) {
+        const sun = new Date(startStr + 'T00:00:00');
+        const arr = [];
+        for (let i = 0; i < 7; i++) { const nd = new Date(sun); nd.setDate(sun.getDate() + i); arr.push(nd); }
+        return arr;
+    }
+
+    function toISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+    function formatShort(d) { return d.getDate() + '/' + (d.getMonth()+1); }
+
+    // ============================================================
+    // ARABIC CALENDAR PICKER
+    // ============================================================
+    const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                       'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    let calYear  = new Date().getFullYear();
+    let calMonth = new Date().getMonth();
+    let _calOpen = false;
+
+    function toggleCalendar(e) {
+        e.stopPropagation();
+        _calOpen = !_calOpen;
+        const popup = document.getElementById('calPopup');
+        if (_calOpen) {
+            // Open to the month of the current week start
+            if (draft.weekStart) {
+                const d = new Date(draft.weekStart + 'T00:00:00');
+                calYear  = d.getFullYear();
+                calMonth = d.getMonth();
+            }
+            renderCalGrid();
+            popup.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', closeCalOutside), 10);
+        } else {
+            popup.style.display = 'none';
+        }
+    }
+
+    function closeCalOutside(e) {
+        const wrap = document.getElementById('datepickerWrap');
+        if (wrap && !wrap.contains(e.target)) {
+            document.getElementById('calPopup').style.display = 'none';
+            _calOpen = false;
+            document.removeEventListener('click', closeCalOutside);
+        }
+    }
+
+    function calNav(dir) { // dir: -1 = prev month, +1 = next month
+        calMonth += dir;
+        if (calMonth < 0)  { calMonth = 11; calYear--; }
+        if (calMonth > 11) { calMonth = 0;  calYear++; }
+        renderCalGrid();
+    }
+
+    function renderCalGrid() {
+        document.getElementById('calMonthYear').textContent = AR_MONTHS[calMonth] + ' ' + calYear;
+        const grid = document.getElementById('calGrid');
+        grid.innerHTML = '';
+        const todayISO   = toISO(new Date());
+        const weekStartI = draft.weekStart || '';
+        const weekEndI   = draft.weekEnd   || '';
+
+        const firstDay   = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+        const daysInMon  = new Date(calYear, calMonth + 1, 0).getDate();
+
+        // Blank cells before first day
+        for (let i = 0; i < firstDay; i++) {
+            const blank = document.createElement('span');
+            blank.className = 'cal-cell empty';
+            grid.appendChild(blank);
+        }
+
+        for (let d = 1; d <= daysInMon; d++) {
+            const dateObj = new Date(calYear, calMonth, d);
+            const iso     = toISO(dateObj);
+            const dow     = dateObj.getDay();
+            const cell    = document.createElement('span');
+            cell.textContent = d;
+
+            let cls = 'cal-cell';
+            if (iso === todayISO)  cls += ' today-cal';
+            if (iso > todayISO)    cls += ' future-cal';
+            if (dow === 0)         cls += ' sunday-cal';
+            if (weekStartI && iso >= weekStartI && iso <= weekEndI) {
+                cls += ' in-week-cal';
+                if (iso === weekStartI) cls += ' week-start-cal';
+                if (iso === weekEndI)   cls += ' week-end-cal';
+            }
+            cell.className = cls;
+
+            if (iso <= todayISO) {
+                cell.onclick = () => {
+                    document.getElementById('weekDateInput').value = iso;
+                    onWeekDateChange(iso);
+                    updateDatepickerLabel();
+                    renderCalGrid(); // refresh highlights
+                    // Close popup only when a Sunday is picked (new week set)
+                    const d2 = new Date(iso + 'T00:00:00');
+                    if (d2.getDay() === 0) {
+                        document.getElementById('calPopup').style.display = 'none';
+                        _calOpen = false;
+                        document.removeEventListener('click', closeCalOutside);
+                    }
+                };
+            }
+            grid.appendChild(cell);
+        }
+    }
+
+    function updateDatepickerLabel() {
+        const label = document.getElementById('datepickerLabel');
+        if (!label) return;
+        if (draft.weekStart) {
+            const d = new Date(draft.weekStart + 'T00:00:00');
+            label.textContent = AR_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+        } else {
+            label.textContent = 'اختر الأسبوع';
+        }
+    }
+    function formatLong(d)  { return d.toLocaleDateString('ar-OM', { day:'numeric', month:'long' }); }
+
+    function updateWeekRangeDisplay() {
+        if (!weekDates.length) return;
+        const fmt = d => d.getFullYear() + '/'
+            + String(d.getMonth()+1).padStart(2,'0') + '/'
+            + String(d.getDate()).padStart(2,'0');
+        // RTL reading: Sunday (right) — Saturday (left), so put Sunday string first
+        document.getElementById('weekRangeDisplay').textContent =
+            fmt(weekDates[0]) + ' — ' + fmt(weekDates[6]);
+    }
+
+    // Is a given day index in the future (after today)?
+    function isFutureDay(dayIdx) {
+        if (!weekDates || weekDates.length < 7) return false;
+        const dayDate = new Date(weekDates[dayIdx]); dayDate.setHours(0,0,0,0);
+        const today   = new Date(); today.setHours(0,0,0,0);
+        return dayDate > today;
+    }
+
+    function onWeekDateChange(val) {
+        if (!val) return;
+        const d   = new Date(val + 'T00:00:00');
+        const dow = d.getDay(); // 0 = Sunday
+
+        if (dow === 0) {
+            // Sunday → set new week
+            const newStart = val; // Sunday IS the week start
+            if (newStart === draft.weekStart) return;
+            const newDates = buildWeekFromStart(newStart);
+            const hasData  = hasDraftData();
+            if (hasData && !confirm('تغيير الأسبوع سيبدأ مسودة جديدة. هل تريد المتابعة؟')) {
+                document.getElementById('weekDateInput').value = draft.weekStart || val;
+                return;
+            }
+            weekDates = newDates;
+            draft.weekStart     = newStart;
+            draft.weekEnd       = toISO(newDates[6]);
+            draft.driverName    = loggedInUser.nameAr        || '';
+            draft.staffNumber   = loggedInUser.staffNumber   || '';
+            draft.vehicleNumber = loggedInUser.vehicleNumber || '';
+            draft.days = {};
+            currentDayIdx = 0;
+            updateWeekRangeDisplay();
+            updateDatepickerLabel();
+            renderDayTabs();
+            renderForm();
+            updateWeekSummary();
+            saveDraft();
+        } else {
+            // Not Sunday → navigate to that day within current week (if it falls in it)
+            const pickedISO = toISO(d);
+            let found = false;
+            for (let i = 0; i < weekDates.length; i++) {
+                if (toISO(weekDates[i]) === pickedISO) {
+                    currentDayIdx = i;
+                    renderDayTabs();
+                    renderForm();
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                // Restore input to week start and inform user
+                document.getElementById('weekDateInput').value = draft.weekStart || val;
+                showAlert('لتحديد أسبوع جديد اختر يوم الأحد (بداية المناوبة)', 'info');
+            }
+        }
+    }
+
+    function hasDraftData() {
+        return Object.keys(draft.days).some(d => {
+            const day = draft.days[d];
+            return Object.values((day.am||{}).items||{}).some(Boolean) || Object.values((day.pm||{}).items||{}).some(Boolean);
+        });
+    }
+
+    // ============================================================
+    // DAY TABS
+    // ============================================================
+    let _prevDayIdx = 0; // track direction for slide animation
+
+    function renderDayTabs() {
+        const el = document.getElementById('dayTabs');
+        el.innerHTML = '';
+        weekDates.forEach((date, i) => {
+            const dayData = draft.days[i] || {};
+            const vals    = [...Object.values((dayData.am||{}).items||{}), ...Object.values((dayData.pm||{}).items||{})];
+            const future  = isFutureDay(i);
+
+            let statusClass = '';
+            if (!future) {
+                if      (vals.some(v => v === 'fault'))    statusClass = 'has-fault';
+                else if (vals.some(v => v === 'followup')) statusClass = 'has-followup';
+                else if (vals.some(Boolean))               statusClass = 'has-ok';
+            }
+
+            const tab = document.createElement('div');
+            tab.id = 'dayTab_' + i;
+            tab.className = `day-tab ${statusClass}${future ? ' future' : ''}${i === currentDayIdx ? ' active' : ''}`;
+            tab.innerHTML = `
+                <div class="day-tab-name">${DAY_NAMES_AR[i]}</div>
+                <div class="day-tab-date">${formatShort(date)}</div>
+                <div class="day-tab-dot"></div>`;
+
+            if (!future) {
+                tab.onclick = () => goToDay(i);
+            } else {
+                tab.title = 'هذا اليوم لم يحن بعد';
+            }
+            el.appendChild(tab);
+        });
+    }
+
+    function goToDay(i, animDir) {
+        if (i === currentDayIdx && !animDir) return;
+        const dir = animDir || (i > _prevDayIdx ? 'right' : 'left');
+        _prevDayIdx   = currentDayIdx;
+        currentDayIdx = i;
+        renderDayTabs();
+        renderFormAnimated(dir);
+        // Scroll tab into view only on explicit navigation (not on setStatus)
+        setTimeout(() => {
+            const t = document.getElementById('dayTab_' + i);
+            if (t) t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }, 60);
+    }
+
+    // ============================================================
+    // SESSION SWITCH
+    // ============================================================
+    function switchSession(type) {
+        if (type === currentSession) return;
+        const dir = type === 'pm' ? 'right' : 'left';
+        currentSession = type;
+        document.getElementById('btnAm').classList.toggle('active', type === 'am');
+        document.getElementById('btnPm').classList.toggle('active', type === 'pm');
+        _prevSecComplete = [false, false, false, false]; // reset toast guards for new session
+        renderFormAnimated(dir);
+    }
+
+    function onTimeChange(val) {
+        if (isFutureDay(currentDayIdx)) return;
+        ensureDaySession();
+        draft.days[currentDayIdx][currentSession].time = val;
+        saveDraft();
+    }
+
+    // ============================================================
+    // RENDER FORM
+    // ============================================================
+    function renderForm() {
+        const container = document.getElementById('itemsContainer');
+
+        // Locked day (future)
+        if (isFutureDay(currentDayIdx)) {
+            document.getElementById('btnAm').disabled = true;
+            document.getElementById('btnPm').disabled = true;
+            document.getElementById('sessionTimeInput').disabled = true;
+            document.getElementById('generalNotesInput').disabled = true;
+            container.innerHTML = `
+                <div class="day-locked">
+                    <div class="day-locked-icon">🔒</div>
+                    <p>هذا اليوم لم يحن بعد<br><span style="font-size:11px;opacity:.7;">لا يمكن إدخال بيانات لأيام مستقبلية</span></p>
+                </div>`;
+            updateProgress(0);
+            return;
+        }
+
+        document.getElementById('btnAm').disabled = false;
+        document.getElementById('btnPm').disabled = false;
+        document.getElementById('sessionTimeInput').disabled = false;
+        document.getElementById('generalNotesInput').disabled = false;
+
+        const dayData  = draft.days[currentDayIdx] || {};
+        const sessData = dayData[currentSession]    || { time:'', items:{}, itemNotes:{} };
+
+        // Time: default to now if not set
+        const timeVal = sessData.time || '';
+        if (!timeVal) {
+            const now = new Date();
+            document.getElementById('sessionTimeInput').value =
+                String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        } else {
+            document.getElementById('sessionTimeInput').value = timeVal;
+        }
+
+        document.getElementById('generalNotesInput').value = dayData.notes || '';
+
+        container.innerHTML = '';
+        let totalFilled = 0;
+
+        SECTIONS.forEach((sec, si) => {
+            const secItems = sec.items;
+            let secFilled  = 0;
+
+            const secEl = document.createElement('div');
+            secEl.className = 'inspection-section';
+            secEl.id = 'sec_' + si;
+
+            // Section header
+            const hdr = document.createElement('div');
+            hdr.className = `section-header sec-s${si}`;
+            hdr.innerHTML = `
+                <div class="sec-icon-badge">${sec.secIcon}</div>
+                <span class="sec-title">${sec.title}</span>
+                <span class="sec-progress" id="sp_${si}">0 / ${ITEMS_PER_SEC}</span>`;
+            secEl.appendChild(hdr);
+
+            secItems.forEach(item => {
+                const status = (sessData.items||{})[item.id] || '';
+                if (status) { secFilled++; totalFilled++; }
+
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.id = 'row_' + item.id;
+                row.innerHTML = `
+                    <span class="item-icon">${ICONS[item.icon]||''}</span>
+                    <span class="item-label">${item.label}</span>
+                    <div class="status-group" id="sg_${item.id}">
+                        <button class="status-btn${status==='ok'?' sel-ok':''}"       title="سليم"           onclick="setStatus('${item.id}',${si},'ok',this)">✓</button>
+                        <button class="status-btn${status==='followup'?' sel-followup':''}" title="يحتاج متابعة" onclick="setStatus('${item.id}',${si},'followup',this)">⚠</button>
+                        <button class="status-btn${status==='fault'?' sel-fault':''}" title="عطل"            onclick="setStatus('${item.id}',${si},'fault',this)">✗</button>
+                    </div>`;
+                secEl.appendChild(row);
+
+                // Fault note
+                const noteWrap = document.createElement('div');
+                noteWrap.className  = 'fault-note-wrap';
+                noteWrap.id         = 'fnw_' + item.id;
+                noteWrap.style.display = (status === 'fault') ? 'block' : 'none';
+                const noteVal = ((sessData.itemNotes||{})[item.id]) || '';
+                noteWrap.innerHTML = `<input class="fault-note-input" type="text" placeholder="اذكر تفاصيل العطل..." value="${noteVal.replace(/"/g,'&quot;')}" oninput="setItemNote('${item.id}',this.value)">`;
+                secEl.appendChild(noteWrap);
+
+                // Followup chips
+                const chipWrap = document.createElement('div');
+                chipWrap.className = 'followup-chips-wrap';
+                chipWrap.id = 'fcw_' + item.id;
+                chipWrap.style.display = (status === 'followup') ? 'block' : 'none';
+                const savedChip = (status === 'followup') ? (noteVal || '') : '';
+                const isCustom  = savedChip && !FOLLOWUP_CHIPS.slice(0,-1).includes(savedChip);
+                chipWrap.innerHTML = `
+                    <div class="followup-chips-label">سبب المتابعة (اختياري)</div>
+                    <div class="followup-chips">${
+                        FOLLOWUP_CHIPS.map(c => {
+                            const isOther = c === 'أخرى...';
+                            const isSel   = isOther ? isCustom : (savedChip === c);
+                            return `<button class="followup-chip${isSel ? ' sel' : ''}" onclick="selectFollowupChip('${item.id}',${JSON.stringify(c)},this)">${c}</button>`;
+                        }).join('')
+                    }</div>
+                    <input class="followup-custom-input" id="fci_${item.id}" type="text"
+                        placeholder="اكتب السبب..."
+                        style="display:${isCustom ? 'block' : 'none'}"
+                        value="${isCustom ? savedChip.replace(/"/g,'&quot;') : ''}"
+                        oninput="setItemNote('${item.id}',this.value)">`;
+                secEl.appendChild(chipWrap);
+
+                // Photo attachment section (shown for fault and followup)
+                const photoSec = document.createElement('div');
+                photoSec.className = 'item-photo-section';
+                photoSec.id = 'phs_' + item.id;
+                photoSec.style.display = (status === 'fault' || status === 'followup') ? 'block' : 'none';
+                const savedPhoto = ((sessData.itemPhotos||{})[item.id]);
+                const hasPhoto = savedPhoto && (savedPhoto.data || savedPhoto.url);
+                const photoSrc = hasPhoto ? (savedPhoto.data || savedPhoto.url) : '';
+                photoSec.innerHTML = `
+                    <div class="item-photo-preview" id="php_${item.id}" style="${hasPhoto ? '' : 'display:none'}">
+                        ${hasPhoto ? `<img class="item-photo-thumbnail" src="${photoSrc}" alt="صورة" onclick="window.open('${photoSrc}','_blank')">
+                        <button class="btn-remove-photo" onclick="removeItemPhoto('${item.id}')" title="حذف الصورة">&times;</button>` : ''}
+                    </div>
+                    <button class="btn-capture-photo" id="phb_${item.id}" onclick="captureItemPhoto('${item.id}')" style="${hasPhoto ? 'display:none' : ''}">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        إرفاق صورة
+                    </button>
+                    <input type="file" id="phi_${item.id}" accept="image/*" capture="environment" style="display:none" onchange="onPhotoSelected(this,'${item.id}')">`;
+                secEl.appendChild(photoSec);
+            });
+
+            container.appendChild(secEl);
+
+            // Update section counter after render
+            updateSectionProgress(si, secFilled);
+        });
+
+        updateProgress(totalFilled);
+        updateSessionButtons();
+    }
+
+    // Animated wrapper for renderForm
+    function renderFormAnimated(dir) {
+        renderForm();
+        const container = document.getElementById('itemsContainer');
+        if (!container) return;
+        container.classList.remove('anim-slide-right','anim-slide-left');
+        // Force reflow to restart animation
+        void container.offsetWidth;
+        container.classList.add(dir === 'right' ? 'anim-slide-right' : 'anim-slide-left');
+    }
+
+    // ============================================================
+    // INCOMPLETE REMINDER
+    // ============================================================
+    let _incompleteTarget = null; // { dayIdx, session }
+
+    function checkIncompleteReminder() {
+        if (!weekDates.length) return;
+        const todayISO = toISO(new Date());
+        _incompleteTarget = null;
+
+        for (let i = 0; i < 7; i++) {
+            const dayISO = toISO(weekDates[i]);
+            if (dayISO >= todayISO) break; // stop at today (don't nag about today)
+
+            const dayData  = draft.days[i] || {};
+            const amFilled = Object.values((dayData.am||{}).items||{}).filter(Boolean).length;
+            const pmFilled = Object.values((dayData.pm||{}).items||{}).filter(Boolean).length;
+            const amDone   = amFilled >= TOTAL_ITEMS;
+            const pmDone   = pmFilled >= TOTAL_ITEMS;
+
+            if (!amDone || !pmDone) {
+                _incompleteTarget = {
+                    dayIdx:  i,
+                    session: !amDone ? 'am' : 'pm',
+                    dayName: DAY_NAMES_AR[i],
+                    missingAm: !amDone,
+                    missingPm: !pmDone
+                };
+                break; // show reminder for the FIRST incomplete past day
+            }
+        }
+
+        const banner = document.getElementById('incompleteReminder');
+        if (!banner) return;
+
+        if (_incompleteTarget) {
+            const t    = _incompleteTarget;
+            const what = (t.missingAm && t.missingPm)
+                ? 'الصباح والمساء غير مكتملين'
+                : (t.missingAm ? 'فحص الصباح غير مكتمل' : 'فحص المساء غير مكتمل');
+            document.getElementById('reminderTitle').textContent = `⚠ ${t.dayName} — ${what}`;
+            document.getElementById('reminderSub').textContent   = 'اليوم ' + toISO(weekDates[t.dayIdx]);
+            banner.classList.add('show');
+        } else {
+            banner.classList.remove('show');
+        }
+    }
+
+    function jumpToIncomplete() {
+        if (!_incompleteTarget) return;
+        const { dayIdx, session } = _incompleteTarget;
+        dismissReminder();
+
+        // Switch session first (no animation yet)
+        currentSession = session;
+        document.getElementById('btnAm').classList.toggle('active', session === 'am');
+        document.getElementById('btnPm').classList.toggle('active', session === 'pm');
+        _prevSecComplete = [false, false, false, false];
+
+        // Animate to the target day
+        goToDay(dayIdx, dayIdx <= currentDayIdx ? 'left' : 'right');
+
+        // After render: pulse the day tab and scroll it into view
+        setTimeout(() => {
+            const tab = document.getElementById('dayTab_' + dayIdx);
+            if (tab) {
+                tab.classList.add('day-tab-jump-pulse');
+                tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                setTimeout(() => tab.classList.remove('day-tab-jump-pulse'), 1300);
+            }
+            // Also scroll the session bar into view
+            document.getElementById('btnAm').closest('.session-bar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
+    }
+
+    function dismissReminder() {
+        _incompleteTarget = null;
+        document.getElementById('incompleteReminder')?.classList.remove('show');
+    }
+
+    // ============================================================
+    // STATUS TOGGLE
+    // ============================================================
+    function setStatus(itemId, secIdx, val, btn) {
+        if (isFutureDay(currentDayIdx)) return;
+        ensureDaySession();
+        const sess = draft.days[currentDayIdx][currentSession];
+        if (!sess.items) sess.items = {};
+        const prev = sess.items[itemId];
+        const next = (prev === val) ? '' : val;
+        sess.items[itemId] = next;
+
+        // Update button styles
+        const sg = document.getElementById('sg_' + itemId);
+        if (sg) sg.querySelectorAll('.status-btn').forEach(b => b.classList.remove('sel-ok','sel-followup','sel-fault'));
+        if (next) btn.classList.add('sel-' + next);
+
+        // Show/hide fault notes
+        const fnw = document.getElementById('fnw_' + itemId);
+        if (fnw) fnw.style.display = (next === 'fault') ? 'block' : 'none';
+
+        // Show/hide followup chips
+        const fcw = document.getElementById('fcw_' + itemId);
+        if (fcw) fcw.style.display = (next === 'followup') ? 'block' : 'none';
+
+        // Show/hide photo section
+        const phs = document.getElementById('phs_' + itemId);
+        if (phs) phs.style.display = (next === 'fault' || next === 'followup') ? 'block' : 'none';
+
+        // When deselecting or switching away from followup/fault, clear the note (and photo if going to ok/none)
+        if (prev && prev !== next) {
+            if (prev === 'followup' || prev === 'fault') {
+                clearItemNote(itemId);
+                if (next !== 'fault' && next !== 'followup') {
+                    removeItemPhoto(itemId);
+                }
+            }
+        }
+
+        // Recount section progress
+        const secItems = SECTIONS[secIdx].items;
+        const secFilled = secItems.filter(it => (sess.items||{})[it.id]).length;
+        updateSectionProgress(secIdx, secFilled);
+
+        // Recount global progress
+        const globalFilled = Object.values(sess.items).filter(Boolean).length;
+        updateProgress(globalFilled);
+
+        renderDayTabs();
+        saveDraft();
+
+        // Smart auto-scroll: follow the user downward
+        if (next) scrollToNextIncomplete(itemId, secIdx, secFilled);
+    }
+
+    /**
+     * After marking an item, scroll to the next incomplete item.
+     * If the section just completed, scroll to the next section header.
+     */
+    function scrollToNextIncomplete(itemId, secIdx, secFilled) {
+        const sessItems = (draft.days[currentDayIdx]?.[currentSession]?.items) || {};
+        const secItems  = SECTIONS[secIdx].items;
+        const curPos    = secItems.findIndex(it => it.id === itemId);
+
+        // 1. Find next incomplete item in the SAME section (after current position)
+        for (let j = curPos + 1; j < secItems.length; j++) {
+            if (!sessItems[secItems[j].id]) {
+                const row = document.getElementById('row_' + secItems[j].id);
+                // 'nearest' = scroll only if out of viewport, prevents readjustment jitter
+                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+        }
+
+        // 2. No incomplete item found after current → check if section is truly complete
+        if (secFilled < ITEMS_PER_SEC) {
+            // Some items before current are still empty; scroll to the first one
+            for (let j = 0; j < curPos; j++) {
+                if (!sessItems[secItems[j].id]) {
+                    const row = document.getElementById('row_' + secItems[j].id);
+                    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                }
+            }
+            return;
+        }
+
+        // 3. Section fully complete → jump to the FIRST ITEM of the next section
+        //    (not just the header, so the first pick won't require any re-scroll)
+        const nextSecIdx = secIdx + 1;
+        if (nextSecIdx < SECTIONS.length) {
+            setTimeout(() => {
+                const firstItem = SECTIONS[nextSecIdx].items[0];
+                const firstRow  = firstItem ? document.getElementById('row_' + firstItem.id) : null;
+                const secHeader = document.getElementById('sec_' + nextSecIdx);
+                // Scroll to header first so it's fully visible, then adjust if needed
+                if (secHeader) secHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                else if (firstRow) firstRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 520);
+        }
+        // If last section complete: updateProgress handles AM→PM auto-switch
+    }
+
+    let _switchToastTimer = null;
+    function showSessionSwitchToast() {
+        const t = document.getElementById('sessionSwitchToast');
+        if (!t) return;
+        t.style.display = 'block';
+        clearTimeout(_switchToastTimer);
+        _switchToastTimer = setTimeout(() => { t.style.display = 'none'; }, 1800);
+    }
+
+    function setItemNote(itemId, val) {
+        if (isFutureDay(currentDayIdx)) return;
+        ensureDaySession();
+        const sess = draft.days[currentDayIdx][currentSession];
+        if (!sess.itemNotes) sess.itemNotes = {};
+        sess.itemNotes[itemId] = val;
+        saveDraft();
+    }
+
+    function clearItemNote(itemId) {
+        const sess = draft.days?.[currentDayIdx]?.[currentSession];
+        if (!sess || !sess.itemNotes) return;
+        delete sess.itemNotes[itemId];
+        saveDraft();
+    }
+
+    /**
+     * Called when a followup chip is tapped.
+     * - Regular chip: saves its text as the item note and marks it selected.
+     * - "أخرى..." chip: shows a free-text input instead.
+     * - Tapping an already-selected chip de-selects it (clears the note).
+     */
+    function selectFollowupChip(itemId, chipText, btnEl) {
+        if (isFutureDay(currentDayIdx)) return;
+
+        const isOther    = chipText === 'أخرى...';
+        const customInp  = document.getElementById('fci_' + itemId);
+        const chipsWrap  = document.getElementById('fcw_' + itemId);
+        const allChips   = chipsWrap ? chipsWrap.querySelectorAll('.followup-chip') : [];
+
+        const wasSelected = btnEl.classList.contains('sel');
+
+        // Clear all chip selections first
+        allChips.forEach(b => b.classList.remove('sel'));
+
+        if (isOther) {
+            if (wasSelected) {
+                // Toggle off: hide text input and clear note
+                if (customInp) customInp.style.display = 'none';
+                clearItemNote(itemId);
+            } else {
+                // Toggle on: show text input
+                btnEl.classList.add('sel');
+                if (customInp) {
+                    customInp.style.display = 'block';
+                    customInp.focus();
+                    // If there's already a custom value, keep it
+                    if (customInp.value) setItemNote(itemId, customInp.value);
+                }
+            }
+        } else {
+            // Hide custom input
+            if (customInp) { customInp.style.display = 'none'; customInp.value = ''; }
+
+            if (wasSelected) {
+                // Toggle off: clear note
+                clearItemNote(itemId);
+            } else {
+                // Select this chip and save its text as the note
+                btnEl.classList.add('sel');
+                setItemNote(itemId, chipText);
+            }
+        }
+    }
+
+    // ── Photo attachment helpers ──────────────────────────────────────────
+    function captureItemPhoto(itemId) {
+        if (isFutureDay(currentDayIdx)) return;
+        document.getElementById('phi_' + itemId)?.click();
+    }
+
+    function onPhotoSelected(input, itemId) {
+        const file = input.files[0];
+        if (!file) return;
+        compressImage(file, 640, 0.75).then(compressed => {
+            ensureDaySession();
+            const sess = draft.days[currentDayIdx][currentSession];
+            if (!sess.itemPhotos) sess.itemPhotos = {};
+            sess.itemPhotos[itemId] = { data: compressed, type: 'image/jpeg' };
+            saveDraft();
+
+            const preview = document.getElementById('php_' + itemId);
+            const captureBtn = document.getElementById('phb_' + itemId);
+            if (preview) {
+                preview.style.display = '';
+                preview.innerHTML = `<img class="item-photo-thumbnail" src="${compressed}" alt="صورة" onclick="window.open('${compressed}','_blank')">
+                    <button class="btn-remove-photo" onclick="removeItemPhoto('${itemId}')" title="حذف الصورة">&times;</button>`;
+            }
+            if (captureBtn) captureBtn.style.display = 'none';
+            input.value = '';
+        });
+    }
+
+    function removeItemPhoto(itemId) {
+        const sess = draft.days?.[currentDayIdx]?.[currentSession];
+        if (sess && sess.itemPhotos) delete sess.itemPhotos[itemId];
+        saveDraft();
+
+        const preview = document.getElementById('php_' + itemId);
+        const captureBtn = document.getElementById('phb_' + itemId);
+        if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+        if (captureBtn) captureBtn.style.display = '';
+    }
+
+    function compressImage(file, maxDim, quality) {
+        return new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    let w = img.width, h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    function onNotesChange(val) {
+        if (isFutureDay(currentDayIdx)) return;
+        if (!draft.days[currentDayIdx]) draft.days[currentDayIdx] = {};
+        draft.days[currentDayIdx].notes = val;
+        saveDraft();
+    }
+
+    function ensureDaySession() {
+        if (!draft.days[currentDayIdx]) draft.days[currentDayIdx] = {};
+        if (!draft.days[currentDayIdx][currentSession]) {
+            const now = new Date();
+            draft.days[currentDayIdx][currentSession] = {
+                time: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'),
+                items: {},
+                itemNotes: {}
+            };
+        }
+    }
+
+    // ============================================================
+    // PROGRESS
+    // ============================================================
+    function updateProgress(filled) {
+        document.getElementById('progressText').textContent = filled + ' / ' + TOTAL_ITEMS;
+        const pct = Math.round((filled / TOTAL_ITEMS) * 100);
+        const bar = document.getElementById('progressBarFill');
+        bar.style.width      = pct + '%';
+        bar.style.background = (filled === TOTAL_ITEMS) ? 'var(--success)' : 'var(--light-blue)';
+
+        // Auto-switch AM → PM when AM is complete
+        if (filled === TOTAL_ITEMS && currentSession === 'am') {
+            const pmItems  = (draft.days[currentDayIdx]?.pm?.items) || {};
+            const pmFilled = Object.values(pmItems).filter(Boolean).length;
+            if (pmFilled < TOTAL_ITEMS) {
+                clearTimeout(window._autoSwitchTimer);
+                // Show a quick top toast before the switch
+                showSessionSwitchToast();
+                window._autoSwitchTimer = setTimeout(() => switchSession('pm'), 1400);
+            }
+        }
+        updateSessionButtons();
+    }
+
+    function updateSessionButtons() {
+        if (isFutureDay(currentDayIdx)) { hideDayCompleteBar(); return; }
+        const dayData = draft.days[currentDayIdx] || {};
+        const hint    = document.getElementById('sessionHint');
+
+        ['am','pm'].forEach(sess => {
+            const items    = (dayData[sess]||{}).items || {};
+            const complete = Object.values(items).filter(Boolean).length >= TOTAL_ITEMS;
+            const btn      = document.getElementById(sess === 'am' ? 'btnAm' : 'btnPm');
+            if (btn) btn.classList.toggle('done', complete);
+        });
+
+        // Hint text: show AM complete notice when viewing PM
+        if (hint) {
+            const amItems    = (dayData.am||{}).items || {};
+            const amComplete = Object.values(amItems).filter(Boolean).length >= TOTAL_ITEMS;
+            const pmItems    = (dayData.pm||{}).items || {};
+            const pmComplete = Object.values(pmItems).filter(Boolean).length >= TOTAL_ITEMS;
+            if (currentSession === 'pm' && amComplete && !pmComplete) {
+                hint.textContent = '✓ فحص الصباح مكتمل';
+            } else if (amComplete && pmComplete) {
+                hint.textContent = '✓ الصباح والمساء مكتملان';
+            } else {
+                hint.textContent = '';
+            }
+        }
+
+        // Show/update the day-complete bar
+        checkDayComplete();
+    }
+
+    // ============================================================
+    // DAY COMPLETE BAR
+    // ============================================================
+    function checkDayComplete() {
+        const bar = document.getElementById('dayCompleteBar');
+        if (!bar) return;
+
+        if (isFutureDay(currentDayIdx)) { hideDayCompleteBar(); return; }
+
+        const dayData  = draft.days[currentDayIdx] || {};
+        const amItems  = (dayData.am||{}).items || {};
+        const pmItems  = (dayData.pm||{}).items || {};
+        const amDone   = Object.values(amItems).filter(Boolean).length >= TOTAL_ITEMS;
+        const pmDone   = Object.values(pmItems).filter(Boolean).length >= TOTAL_ITEMS;
+
+        if (amDone && pmDone) {
+            bar.classList.add('show');
+
+            // Update the next-day button label
+            const nextIdx = findNextAvailableDay();
+            const btn     = document.getElementById('btnSaveAndNext');
+            const sub     = document.getElementById('dayCompleteSubText');
+            if (btn) {
+                if (nextIdx !== null) {
+                    btn.textContent = 'حفظ والانتقال لـ ' + DAY_NAMES_AR[nextIdx];
+                    btn.disabled    = false;
+                    if (sub) sub.textContent = 'الصباح والمساء مسجّلان • يوجد ' + (6 - currentDayIdx) + ' يوم متبقٍ';
+                } else {
+                    btn.textContent = 'حفظ (آخر يوم متاح)';
+                    btn.disabled    = false;
+                    if (sub) sub.textContent = 'الصباح والمساء مسجّلان • لا يوجد يوم تالٍ متاح';
+                }
+            }
+        } else {
+            hideDayCompleteBar();
+        }
+    }
+
+    function hideDayCompleteBar() {
+        document.getElementById('dayCompleteBar')?.classList.remove('show');
+    }
+
+    function findNextAvailableDay() {
+        for (let i = currentDayIdx + 1; i < 7; i++) {
+            if (!isFutureDay(i)) return i;
+        }
+        return null;
+    }
+
+    function saveDayAndNext() {
+        saveDraft(); // already persists to localStorage
+        const nextIdx = findNextAvailableDay();
+        hideDayCompleteBar();
+
+        if (nextIdx !== null) {
+            // Navigate to next day, prefer AM if not done, else PM
+            goToDay(nextIdx, 'right');
+            setTimeout(() => {
+                const nd      = draft.days[nextIdx] || {};
+                const amFilled = Object.values((nd.am||{}).items||{}).filter(Boolean).length;
+                const target   = amFilled < TOTAL_ITEMS ? 'am' : 'pm';
+                if (currentSession !== target) switchSession(target);
+                // Scroll to top of form so driver sees the day tabs
+                document.getElementById('itemsContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 150);
+        } else {
+            // All available days done - show a soft success message
+            showAlert('تم حفظ جميع الأيام المتاحة. يمكنك إرسال الأسبوع عند اكتماله.', 'success');
+            document.getElementById('btnSubmitWeek')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    let _prevSecComplete = [false, false, false, false];
+    function updateSectionProgress(secIdx, filled) {
+        const sp = document.getElementById('sp_' + secIdx);
+        if (!sp) return;
+        const complete = (filled >= ITEMS_PER_SEC);
+        if (complete) {
+            sp.textContent = '✓ مكتمل';
+            sp.classList.add('complete');
+        } else {
+            sp.textContent = filled + ' / ' + ITEMS_PER_SEC;
+            sp.classList.remove('complete');
+        }
+        // Show toast only when newly completed
+        if (complete && !_prevSecComplete[secIdx]) {
+            const secName = SECTIONS[secIdx].title.split(':')[0];
+            showToast('✓ ' + secName + ' — اكتمل');
+        }
+        _prevSecComplete[secIdx] = complete;
+    }
+
+    let _toastTimer = null;
+    function showToast(msg) {
+        const t = document.getElementById('secDoneToast');
+        t.textContent = msg;
+        t.style.display = 'block';
+        if (_toastTimer) clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2500);
+    }
+
+    // ============================================================
+    // WEEK SUMMARY & VALIDATION
+    // ============================================================
+    function updateWeekSummary() {
+        let completedSessions = 0, faultSessions = 0;
+        for (let d = 0; d < 7; d++) {
+            if (isFutureDay(d)) continue;
+            const day = draft.days[d] || {};
+            ['am','pm'].forEach(s => {
+                const items = (day[s]||{}).items || {};
+                const vals  = Object.values(items).filter(Boolean);
+                if (vals.length === TOTAL_ITEMS) completedSessions++;
+                if (vals.some(v => v === 'fault')) faultSessions++;
+            });
+        }
+        const today = new Date(); today.setHours(0,0,0,0);
+        const daysElapsed = weekDates.length
+            ? Math.min(7, Math.max(1, Math.floor((today - weekDates[0]) / 86400000) + 1))
+            : 1;
+        const maxSessions = daysElapsed * 2;
+        let txt = `جلسات مكتملة: <strong>${completedSessions}</strong> من <strong>${maxSessions}</strong>`;
+        if (faultSessions > 0)
+            txt += ` &nbsp;|&nbsp; <strong style="color:var(--error)">${faultSessions} جلسة تحتوي عطلاً</strong>`;
+        document.getElementById('weekSummary').innerHTML = txt;
+    }
+
+    function validateWeekForSubmission() {
+        const errors = [];
+        for (let d = 0; d < 7; d++) {
+            if (isFutureDay(d)) continue;
+            const dayData = draft.days[d] || {};
+            const dayName = DAY_NAMES_AR[d];
+            ['am','pm'].forEach(sess => {
+                const label  = (sess === 'am') ? 'الصباح' : 'المساء';
+                const items  = (dayData[sess]||{}).items || {};
+                const filled = Object.values(items).filter(Boolean).length;
+                if (filled < TOTAL_ITEMS) {
+                    errors.push(`${dayName} — ${label}: ${TOTAL_ITEMS - filled} بند لم يُحدَّد`);
+                }
+            });
+        }
+        return errors;
+    }
+
+    function showValidationErrors(errors) {
+        const el = document.getElementById('validationErrors');
+        if (!errors.length) { el.style.display = 'none'; return; }
+        el.style.display = 'block';
+        el.innerHTML = `
+            <div class="validation-errors-title">⚠ لا يمكن الإرسال — توجد بنود غير مكتملة:</div>
+            <ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>`;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ============================================================
+    // DRAFT
+    // ============================================================
+    function saveDraft() {
+        localStorage.setItem(DRAFT_KEY + (loggedInUser?.staffNumber || 'x'), JSON.stringify(draft));
+        updateWeekSummary();
+        const badge = document.getElementById('savedBadge');
+        if (badge) { badge.style.display = 'block'; clearTimeout(window._savedTimer); window._savedTimer = setTimeout(() => { badge.style.display = 'none'; }, 2000); }
+        // Re-evaluate reminder in case the user just completed an incomplete day
+        clearTimeout(window._reminderCheckTimer);
+        window._reminderCheckTimer = setTimeout(checkIncompleteReminder, 300);
+    }
+
+    // ============================================================
+    // SUBMIT WEEK
+    // ============================================================
+    async function submitWeek() {
+        // 1. Validate all days up to today are complete
+        const errors = validateWeekForSubmission();
+        if (errors.length) {
+            showValidationErrors(errors);
+            return;
+        }
+        document.getElementById('validationErrors').style.display = 'none';
+
+        if (!hasDraftData()) { showAlert('لا توجد بيانات فحص لإرسالها', 'error'); return; }
+
+        const btn = document.getElementById('btnSubmitWeek');
+        btn.disabled = true;
+        btn.textContent = 'جارٍ الإرسال...';
+
+        const payload = {
+            action: 'submitInspectionWeek',
+            weekStart:    draft.weekStart,
+            weekEnd:      draft.weekEnd,
+            driverName:   draft.driverName   || loggedInUser.nameAr   || '',
+            staffNumber:  draft.staffNumber  || loggedInUser.staffNumber  || '',
+            vehicleNumber:draft.vehicleNumber|| loggedInUser.vehicleNumber|| '',
+            days: draft.days
+        };
+
+        let success = false;
+        try {
+            const res = await fetch(WEB_APP_URL, {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            success = data.success;
+        } catch(e) {
+            try {
+                const enc = encodeURIComponent(JSON.stringify(payload));
+                const res = await fetch(`${WEB_APP_URL}?action=postViaGet&payload=${enc}`);
+                const data = await res.json();
+                success = data.success;
+            } catch(e2) {}
+        }
+
+        if (success) {
+            showAlert('تم إرسال الفحص الأسبوعي بنجاح', 'success');
+            // Track edit count if in edit mode
+            const origKey = 'insp_orig_' + (loggedInUser?.staffNumber||'');
+            if (localStorage.getItem(origKey)) {
+                incrementEditCount(draft.weekStart);
+                localStorage.removeItem(origKey);
+                const bar = document.getElementById('editBar_' + draft.weekStart);
+                if (bar) bar.remove();
+            }
+            localStorage.removeItem(DRAFT_KEY + loggedInUser.staffNumber);
+            localStorage.removeItem('insp_hist_' + loggedInUser.staffNumber); // invalidate history cache
+            loadHistory();
+            // Reset to new week after short delay
+            setTimeout(() => {
+                initWeek(toISO(new Date()));
+                document.getElementById('weekDateInput').value = toISO(new Date());
+                const diff = Math.floor((new Date() - weekDates[0]) / 86400000);
+                currentDayIdx = (diff >= 0 && diff < 7) ? diff : 0;
+                renderDayTabs(); renderForm(); updateWeekSummary();
+            }, 2000);
+        } else {
+            showAlert('تعذّر الإرسال. البيانات محفوظة محلياً — تحقق من الاتصال وأعد المحاولة.', 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'إرسال الأسبوع كاملاً';
+    }
+
+    // ============================================================
+    // HISTORY + EDIT
+    // ============================================================
+    const EDIT_LIMIT = 2;
+    let _historyWeeks = {}; // cache for edit functionality
+
+    function getEditCount(weekStart) {
+        const key = 'insp_edits_' + (loggedInUser?.staffNumber||'') + '_' + weekStart;
+        return parseInt(localStorage.getItem(key) || '0');
+    }
+    function incrementEditCount(weekStart) {
+        const key = 'insp_edits_' + (loggedInUser?.staffNumber||'') + '_' + weekStart;
+        localStorage.setItem(key, String(getEditCount(weekStart) + 1));
+    }
+
+    async function loadHistory() {
+        const sn = loggedInUser?.staffNumber;
+        if (!sn) return;
+        const el = document.getElementById('historyContainer');
+
+        // Show cached instantly if available
+        const cacheKey = 'insp_hist_' + sn;
+        const cached   = localStorage.getItem(cacheKey);
+        if (cached) {
+            try { renderHistoryData(JSON.parse(cached)); } catch(e) {}
+        } else {
+            el.innerHTML = '<div class="history-empty" style="font-size:12px;color:#9ca3af;">جارٍ التحميل...</div>';
+        }
+
+        try {
+            const res  = await fetch(`${WEB_APP_URL}?action=getDriverInspections&staffNumber=${encodeURIComponent(sn)}`);
+            const data = await res.json();
+            if (data.success && data.weeks) {
+                localStorage.setItem(cacheKey, JSON.stringify(data.weeks));
+            }
+            if (!data.success || !data.weeks || !Object.keys(data.weeks).length) {
+                el.innerHTML = '<div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div>'; return;
+            }
+            renderHistoryData(data.weeks);
+        } catch(e) {
+            if (!cached) el.innerHTML = '<div class="history-empty">تعذّر تحميل السجل</div>';
+        }
+    }
+
+    function renderHistoryData(weeks) {
+        _historyWeeks = weeks;
+        const el   = document.getElementById('historyContainer');
+        const keys = Object.keys(weeks).sort().reverse();
+        if (!keys.length) { el.innerHTML = '<div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div>'; return; }
+        el.innerHTML = '';
+        keys.slice(0,8).forEach(ws => {
+            const rows      = weeks[ws];
+            const faults    = rows.filter(r => r.Has_Fault    === 'نعم').length;
+            const fup       = rows.filter(r => r.Has_Followup === 'نعم').length;
+            const we        = rows[0]?.Week_End || '';
+            const editCount = getEditCount(ws);
+            const canEdit   = editCount < EDIT_LIMIT;
+            const fmt = s => {
+                if (!s) return '—';
+                const d = new Date(s + 'T00:00:00');
+                return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+            };
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.id = 'hist_' + ws;
+            item.innerHTML = `
+                <div class="history-item-header">
+                    <div>
+                        <span class="history-week">${fmt(ws)} – ${fmt(we)}</span>
+                        <div class="history-driver" style="margin-top:2px;">${rows[0]?.Driver_Name||''}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <div class="history-badges">
+                            <span class="history-badge badge-ok">${rows.length} يوم</span>
+                            ${faults ? `<span class="history-badge badge-fault">${faults} عطل</span>` : ''}
+                            ${fup    ? `<span class="history-badge badge-followup">${fup} متابعة</span>` : ''}
+                        </div>
+                        <button class="btn-edit-week" id="editBtn_${ws}" ${canEdit?'':'disabled'}
+                            onclick="startEditWeek('${ws}')"
+                            title="${canEdit ? 'تعديل الفحص (متاح ' + (EDIT_LIMIT - editCount) + ' مرة)' : 'تجاوزت الحد الأقصى للتعديل'}">
+                            ${canEdit ? 'تعديل' : 'لا تعديل'}</button>
+                    </div>
+                </div>`;
+            el.appendChild(item);
+        });
+    }
+
+    function startEditWeek(weekStart) {
+        const editCount = getEditCount(weekStart);
+        if (editCount >= EDIT_LIMIT) {
+            showAlert('تم الوصول للحد الأقصى من التعديلات (' + EDIT_LIMIT + ' مرات)', 'error'); return;
+        }
+        const rows = _historyWeeks[weekStart];
+        if (!rows || !rows.length) { showAlert('لا توجد بيانات لهذا الأسبوع', 'error'); return; }
+
+        // Build draft from server rows
+        const newDraft = {
+            weekStart: weekStart,
+            weekEnd:   rows[0].Week_End || '',
+            driverName:   loggedInUser.nameAr        || '',
+            staffNumber:  loggedInUser.staffNumber   || '',
+            vehicleNumber:loggedInUser.vehicleNumber || '',
+            days: {}
+        };
+        rows.forEach(row => {
+            const d = parseInt(row.Day_Index);
+            if (isNaN(d)) return;
+            newDraft.days[d] = { notes: row.Day_Notes || '' };
+            try { const am = JSON.parse(row.AM_Items||'{}'); newDraft.days[d].am = { time: row.AM_Time||'', items: am.items||{}, itemNotes: am.notes||{} }; } catch(e) {}
+            try { const pm = JSON.parse(row.PM_Items||'{}'); newDraft.days[d].pm = { time: row.PM_Time||'', items: pm.items||{}, itemNotes: pm.notes||{} }; } catch(e) {}
+        });
+
+        // Store original draft in case of cancel
+        const origDraftKey = 'insp_orig_' + loggedInUser.staffNumber;
+        localStorage.setItem(origDraftKey, JSON.stringify(draft));
+
+        // Load this week for editing
+        draft     = newDraft;
+        weekDates = buildWeekFromStart(weekStart);
+        document.getElementById('weekDateInput').value = weekStart;
+        updateWeekRangeDisplay();
+        currentDayIdx = 0;
+        saveDraft();
+        renderDayTabs();
+        renderForm();
+        updateWeekSummary();
+
+        // Show edit-mode banner on the history item
+        const histEl = document.getElementById('hist_' + weekStart);
+        if (histEl) {
+            const bar = document.createElement('div');
+            bar.className = 'edit-mode-bar';
+            bar.id = 'editBar_' + weekStart;
+            bar.innerHTML = `
+                <span class="edit-mode-label">⚠ وضع التعديل — التعديل ${editCount+1} من ${EDIT_LIMIT}</span>
+                <button class="btn-cancel-edit" onclick="cancelEdit('${weekStart}')">إلغاء التعديل</button>`;
+            histEl.appendChild(bar);
+        }
+
+        // Scroll to top of form
+        document.querySelector('.main-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit(weekStart) {
+        const origDraftKey = 'insp_orig_' + loggedInUser.staffNumber;
+        const orig = localStorage.getItem(origDraftKey);
+        if (orig) {
+            try {
+                draft = JSON.parse(orig);
+                weekDates = draft.weekStart ? buildWeekFromStart(draft.weekStart) : buildWeek(toISO(new Date()));
+                document.getElementById('weekDateInput').value = draft.weekStart || toISO(new Date());
+                updateWeekRangeDisplay();
+                currentDayIdx = 0;
+                renderDayTabs(); renderForm(); updateWeekSummary();
+            } catch(e) {}
+            localStorage.removeItem(origDraftKey);
+        }
+        const bar = document.getElementById('editBar_' + weekStart);
+        if (bar) bar.remove();
+    }
+
+    function fmtWeekAr(isoDate) {
+        if (!isoDate) return '—';
+        const d = new Date(isoDate + 'T00:00:00');
+        return d.toLocaleDateString('ar-OM', { day:'numeric', month:'short' });
+    }
+
+    // ============================================================
+    // ALERT
+    // ============================================================
+    function showAlert(msg, type) {
+        const el = document.getElementById('alertMsg');
+        el.textContent = msg;
+        el.className = 'alert-msg ' + type + ' show';
+        setTimeout(() => el.classList.remove('show'), 6000);
+    }
+
+    function logout() {
+        localStorage.removeItem('userSession');
+        window.location.href = 'login.html';
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

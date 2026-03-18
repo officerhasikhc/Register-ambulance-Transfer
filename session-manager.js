@@ -60,6 +60,7 @@
         if (currentPage.includes('admin')) return 'admin';
         if (currentPage.includes('nurse')) return 'nurse';
         if (currentPage.includes('driver')) return 'driver';
+        if (currentPage.includes('inspection')) return 'driver';
         if (currentPage.includes('settings')) return 'admin';
         return null;
     }
