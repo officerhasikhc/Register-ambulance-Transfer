@@ -64,32 +64,26 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-blue: #898b91;
-            --light-blue: #918e8e;
+            --primary-blue: #1e40af;
+            --light-blue:   #2563eb;
             --lighter-blue: #eff6ff;
-            --dark-blue: #1e3a8a;
-            --bg-blue: #dbeafe;
-            --white: #ffffff;
-            --text-primary: #1f2937;
+            --dark-blue:    #0f2748;
+            --accent-red:   #c0392b;
+            --white:        #ffffff;
+            --text-primary:   #1a2333;
             --text-secondary: #6b7280;
-            --border-color: #d1d5db;
+            --border-color:   #d1d5db;
             --success: #10b981;
             --warning: #f59e0b;
-            --error: #ef4444;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --error:   #ef4444;
+            --shadow-xl: 0 20px 50px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.1);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
-            background: linear-gradient(135deg, var(--dark-blue) 0%, var(--primary-blue) 50%, var(--light-blue) 100%);
+            background: linear-gradient(160deg, #0f2748 0%, #1a3d7c 45%, #1e55b5 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -102,388 +96,329 @@
             font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
+        /* ── Card ─────────────────────────────────────────── */
         .login-container {
             background: var(--white);
-            border-radius: 20px;
-            padding: 40px;
+            border-radius: 16px;
+            padding: 0;
             width: 100%;
             max-width: 420px;
             box-shadow: var(--shadow-xl);
             position: relative;
+            overflow: hidden;
         }
 
+        /* Omani accent stripe at top */
+        .login-container::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, #c0392b 30%, #ffffff 50%, #1a7a3c 70%);
+        }
+
+        .login-inner {
+            padding: 36px 40px 32px;
+        }
+
+        /* ── Header ───────────────────────────────────────── */
         .login-header {
             text-align: center;
-            margin-bottom: 32px;
-            margin-top: 20px;
+            margin-bottom: 28px;
+            margin-top: 14px;
         }
 
         .login-logo {
-            width: 80px;
-            height: 80px;
+            width: 76px;
+            height: 76px;
             object-fit: contain;
-            margin: 0 auto 16px auto;
+            margin: 0 auto 14px auto;
             display: block;
         }
 
         .login-org-name {
-            color: var(--text-primary);
-            font-size: 15px;
-            font-weight: 600;
-            line-height: 1.7;
-            margin-bottom: 12px;
+            color: #1a2333;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.8;
+            margin-bottom: 10px;
+        }
+
+        .login-divider {
+            width: 48px;
+            height: 2px;
+            background: var(--primary-blue);
+            margin: 10px auto;
+            border-radius: 2px;
+            opacity: 0.4;
         }
 
         .login-system-name {
-            color: #2c4d77;
-            font-size: 15.5px;
-            font-weight: 600;
-            padding: 8px 18px;
+            color: #1e3a8a;
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 6px 18px;
             margin-top: 10px;
-            background: #d4dbec;
-            border-radius: 8px;
+            background: #eef2ff;
+            border: 1.5px solid #c7d2fe;
+            border-radius: 6px;
             display: inline-block;
             letter-spacing: 0.3px;
         }
-        
-        /* Mobile: Larger elements - scaled up ~25% for better readability on phones */
 
+        /* ── Language Switch ──────────────────────────────── */
         .lang-switch {
             position: absolute;
-            top: 16px;
-            right: 16px;
+            top: 14px;
+            right: 14px;
             display: flex;
-            gap: 4px;
-            background: var(--lighter-blue);
-            padding: 4px;
-            border-radius: 10px;
+            gap: 3px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 3px;
+            border-radius: 8px;
             z-index: 10;
         }
 
-        [dir="ltr"] .lang-switch {
-            right: auto;
-            left: 16px;
-        }
+        [dir="ltr"] .lang-switch { right: auto; left: 14px; }
 
         .lang-btn {
-            padding: 6px 12px;
+            padding: 5px 11px;
             border: none;
             background: transparent;
             color: var(--text-secondary);
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.2s;
-            font-size: 12px;
+            border-radius: 6px;
+            transition: all 0.18s;
+            font-size: 11px;
             font-family: inherit;
-            min-width: 36px;
+            min-width: 34px;
         }
 
         .lang-btn.active {
             background: var(--primary-blue);
             color: var(--white);
-            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+            box-shadow: 0 1px 4px rgba(30,64,175,0.3);
         }
 
-        .lang-btn:hover:not(.active) {
-            background: rgba(30, 64, 175, 0.1);
-        }
+        .lang-btn:hover:not(.active) { background: #e2e8f0; }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        /* ── Form ─────────────────────────────────────────── */
+        .form-group { margin-bottom: 18px; }
 
         .form-label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 14px;
+            margin-bottom: 7px;
+            font-weight: 700;
+            color: #374151;
+            font-size: 13px;
         }
 
-        .input-with-icon {
-            position: relative;
-        }
+        .input-with-icon { position: relative; }
 
         .input-icon {
             position: absolute;
             top: 50%;
-            right: 16px;
+            right: 14px;
             transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             color: #9ca3af;
             pointer-events: none;
             transition: color 0.2s;
         }
 
-        [dir="ltr"] .input-icon {
-            right: auto;
-            left: 16px;
-        }
+        [dir="ltr"] .input-icon { right: auto; left: 14px; }
 
-        .input-with-icon .form-input {
-            padding-right: 48px;
-        }
+        .input-with-icon .form-input { padding-right: 44px; }
 
-        [dir="ltr"] .input-with-icon .form-input {
-            padding-right: 16px;
-            padding-left: 48px;
-        }
+        [dir="ltr"] .input-with-icon .form-input { padding-right: 14px; padding-left: 44px; }
 
-        .input-with-icon:focus-within .input-icon {
-            color: var(--primary-blue);
-        }
+        .input-with-icon:focus-within .input-icon { color: var(--primary-blue); }
 
         .form-input {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            font-size: 16px;
+            padding: 13px 14px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 9px;
+            font-size: 15px;
             font-family: inherit;
             transition: all 0.2s;
-            background: var(--white);
+            background: #fafafa;
+            color: var(--text-primary);
         }
 
         .form-input:focus {
             outline: none;
             border-color: var(--primary-blue);
-            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+            background: var(--white);
+            box-shadow: 0 0 0 3px rgba(30,64,175,0.1);
         }
 
-        .form-input::placeholder {
-            color: var(--text-secondary);
-        }
+        .form-input::placeholder { color: #b0b7c3; }
 
-        .login-btn {
-            width: 100%;
-            padding: 14px;
-            background: #e5e7eb;
-            color: #4b5563;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.25s ease;
-            font-family: inherit;
-        }
-
-        .login-btn:hover {
-            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-            color: var(--white);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
-        }
-
-        .login-btn:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
-        }
-
-        .login-btn:disabled {
-            cursor: not-allowed;
-            transform: none;
-            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-            color: var(--white);
-            opacity: 0.8;
-        }
-
-        .error-message {
-            background: #fee2e2;
-            color: #dc2626;
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .footer-text {
-            text-align: center;
-            margin-top: 24px;
-            color: var(--text-secondary);
-            font-size: 12px;
-        }
-
-        .footer-text a {
-            color: var(--primary-blue);
-            text-decoration: none;
-        }
-
-        .footer-text a:hover {
-            text-decoration: underline;
-        }
-
+        /* ── Remember Me ──────────────────────────────────── */
         .remember-me {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
 
         .remember-me input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             accent-color: var(--primary-blue);
             cursor: pointer;
         }
 
         .remember-me label {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-secondary);
             cursor: pointer;
         }
 
-        .install-btn {
-            display: inline-flex;
-            width: auto;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        /* ── Login Button ─────────────────────────────────── */
+        .login-btn {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #1e40af, #2563eb);
             color: var(--white);
             border: none;
-            border-radius: 25px;
+            border-radius: 9px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.22s ease;
+            font-family: inherit;
+            letter-spacing: 0.3px;
+            box-shadow: 0 3px 12px rgba(30,64,175,0.3);
+        }
+
+        .login-btn:hover {
+            background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+            transform: translateY(-1px);
+            box-shadow: 0 5px 16px rgba(30,64,175,0.4);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(30,64,175,0.25);
+        }
+
+        .login-btn:disabled {
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.75;
+            box-shadow: none;
+        }
+
+        /* ── Error ────────────────────────────────────────── */
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
             font-size: 13px;
-            font-weight: 600;
+            display: none;
+        }
+
+        .error-message.show { display: block; }
+
+        /* ── Install Button ───────────────────────────────── */
+        .install-container {
+            text-align: center;
+            margin-top: 18px;
+            display: none; /* hidden until PWA is installable */
+        }
+
+        .install-container.visible { display: block; }
+
+        .install-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            background: #f0f4ff;
+            color: #3730a3;
+            border: 1.5px solid #c7d2fe;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
             font-family: inherit;
-            margin-top: 16px;
-            gap: 6px;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
 
         .install-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            background: #e0e7ff;
+            border-color: #a5b4fc;
+            transform: translateY(-1px);
         }
 
-        .install-btn .device-icon {
-            font-size: 16px;
-        }
+        .install-btn .device-icon { font-size: 14px; }
 
-        .install-container {
+        /* ── Footer ───────────────────────────────────────── */
+        .footer-text {
             text-align: center;
             margin-top: 20px;
+            color: #9ca3af;
+            font-size: 11px;
         }
 
+        /* ── Spinner ──────────────────────────────────────── */
         .loading-spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.35);
             border-radius: 50%;
             border-top-color: white;
             animation: spin 0.8s linear infinite;
             margin-left: 8px;
+            vertical-align: middle;
         }
 
-        [dir="ltr"] .loading-spinner {
-            margin-left: 0;
-            margin-right: 8px;
-        }
+        [dir="ltr"] .loading-spinner { margin-left: 0; margin-right: 8px; }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-
+        /* ── Mobile ───────────────────────────────────────── */
         @media (max-width: 480px) {
-            body {
-                padding: 12px;
-            }
+            body { padding: 10px; align-items: flex-start; padding-top: 30px; }
 
-            .login-container {
-                padding: 32px 28px;
-                padding-top: 44px;
-                max-width: 100%;
-                border-radius: 24px;
-            }
+            .login-container { border-radius: 20px; max-width: 100%; }
 
-            .login-logo {
-                width: 110px;
-                height: 110px;
-                margin-bottom: 20px;
-            }
+            .login-inner { padding: 28px 24px 28px; }
 
-            .login-header {
-                margin-bottom: 36px;
-                margin-top: 16px;
-            }
+            .login-logo { width: 96px; height: 96px; margin-bottom: 16px; }
 
-            .login-org-name {
-                font-size: 17px;
-                margin-bottom: 14px;
-            }
+            .login-header { margin-bottom: 30px; margin-top: 12px; }
 
-            .login-system-name {
-                font-size: 15.5px;
-            }
+            .login-org-name { font-size: 15px; }
 
-            .form-label {
-                font-size: 16px;
-                margin-bottom: 10px;
-            }
+            .login-system-name { font-size: 13.5px; }
 
-            .form-input {
-                padding: 16px 18px;
-                font-size: 18px;
-                border-radius: 12px;
-            }
+            .form-label { font-size: 14px; }
 
-            .form-group {
-                margin-bottom: 24px;
-            }
+            .form-input { padding: 14px 16px; font-size: 16px; border-radius: 10px; }
 
-            .remember-me {
-                margin-bottom: 24px;
-            }
+            .form-group { margin-bottom: 20px; }
 
-            .remember-me input[type="checkbox"] {
-                width: 22px;
-                height: 22px;
-            }
+            .remember-me { margin-bottom: 20px; }
+            .remember-me input[type="checkbox"] { width: 18px; height: 18px; }
+            .remember-me label { font-size: 14px; }
 
-            .remember-me label {
-                font-size: 16px;
-            }
+            .login-btn { padding: 15px; font-size: 17px; border-radius: 11px; }
 
-            .login-btn {
-                padding: 16px;
-                font-size: 18px;
-                border-radius: 12px;
-            }
+            .footer-text { font-size: 12px; margin-top: 24px; }
 
-            .install-btn {
-                padding: 12px 24px;
-                font-size: 15px;
-            }
-
-            .footer-text {
-                font-size: 13px;
-                margin-top: 28px;
-            }
-
-            .lang-switch {
-                top: 14px;
-                right: 14px;
-            }
-
-            [dir="ltr"] .lang-switch {
-                left: 14px;
-            }
-
-            .lang-btn {
-                padding: 8px 14px;
-                font-size: 13px;
-            }
+            .lang-switch { top: 12px; right: 12px; }
+            [dir="ltr"] .lang-switch { left: 12px; }
+            .lang-btn { padding: 6px 12px; font-size: 12px; }
         }
     </style>
 </head>
@@ -494,47 +429,52 @@
             <button class="lang-btn" onclick="setLanguage('en')">EN</button>
         </div>
 
-        <div class="login-header">
-            <img src="moh-logo.png" alt="Logo" class="login-logo">
-            <p class="login-org-name" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
-            <div class="login-system-name" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</div>
-        </div>
+        <div class="login-inner">
 
-        <div class="error-message" id="errorMessage"></div>
+            <div class="login-header">
+                <img src="moh-logo.png" alt="Logo" class="login-logo">
+                <p class="login-org-name" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
+                <div class="login-divider"></div>
+                <div class="login-system-name" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</div>
+            </div>
 
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="form-group">
-                <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number">الرقم الوظيفي أو المدني</label>
-                <div class="input-with-icon">
-                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                    <input type="text" class="form-input" id="staffNumber" 
-                           placeholder="أدخل الرقم الوظيفي أو المدني" 
-                           data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
-                           data-placeholder-en="Enter Staff Number"
-                           required autocomplete="off">
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number">الرقم الوظيفي أو المدني</label>
+                    <div class="input-with-icon">
+                        <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                        </svg>
+                        <input type="text" class="form-input" id="staffNumber"
+                               placeholder="أدخل الرقم الوظيفي أو المدني"
+                               data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
+                               data-placeholder-en="Enter Staff Number"
+                               required autocomplete="off">
+                    </div>
                 </div>
+
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberMe" checked>
+                    <label for="rememberMe" data-ar="تذكرني" data-en="Remember me">تذكرني</label>
+                </div>
+
+                <button type="submit" class="login-btn" id="loginBtn">
+                    <span data-ar="تسجيل الدخول" data-en="Login">تسجيل الدخول</span>
+                </button>
+            </form>
+
+            <div class="install-container" id="installContainer">
+                <button class="install-btn" id="installBtn" onclick="installApp()">
+                    <span class="device-icon" id="deviceIcon">📲</span>
+                    <span data-ar="تثبيت التطبيق" data-en="Install App" id="installText">تثبيت التطبيق</span>
+                </button>
             </div>
 
-            <div class="remember-me">
-                <input type="checkbox" id="rememberMe" checked>
-                <label for="rememberMe" data-ar="تذكرني" data-en="Remember me">تذكرني</label>
-            </div>
+            <p class="footer-text" data-ar="© 2026 مركز حاسك الصحي — جميع الحقوق محفوظة" data-en="© 2026 Hasik Health Center — All Rights Reserved">© 2026 مركز حاسك الصحي — جميع الحقوق محفوظة</p>
 
-            <button type="submit" class="login-btn" id="loginBtn">
-                <span data-ar="تسجيل الدخول" data-en="Login">تسجيل الدخول</span>
-            </button>
-        </form>
-
-        <div class="install-container">
-            <button class="install-btn" id="installBtn" onclick="installApp()">
-                <span class="device-icon" id="deviceIcon">📱</span>
-                <span data-ar="تثبيت التطبيق" data-en="Install App" id="installText">تثبيت التطبيق</span>
-            </button>
-        </div>
-
-        <p class="footer-text" data-ar="© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة" data-en="© 2026 Hasik Health Center - All Rights Reserved">© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة</p>
+        </div><!-- /.login-inner -->
     </div>
 
     <script>
@@ -827,63 +767,72 @@
             }
         }
 
-        // Check if app can be installed
+        // Smart PWA install detection
         function checkInstallPrompt() {
-            // Detect device type and update icon
+            const container = document.getElementById('installContainer');
+
+            // If already running as installed PWA (standalone mode) → never show
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                              || window.navigator.standalone === true;
+            if (isStandalone) {
+                container.style.display = 'none';
+                return;
+            }
+
+            // Update device icon based on platform
             updateDeviceIcon();
-            
+
+            // Chrome / Edge / Android: fires when app is installable
             window.addEventListener('beforeinstallprompt', (e) => {
                 e.preventDefault();
                 deferredPrompt = e;
-                document.getElementById('installBtn').classList.add('show');
+                container.classList.add('visible');
             });
 
-            // Hide install button if already installed
+            // Fired after user installs via the prompt — hide button immediately
             window.addEventListener('appinstalled', () => {
-                document.getElementById('installBtn').classList.remove('show');
+                container.classList.remove('visible');
                 deferredPrompt = null;
             });
+
+            // iOS Safari: beforeinstallprompt never fires, but if not in standalone mode
+            // show a subtle hint so the user knows they can add to home screen
+            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+            const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|chrome/i.test(navigator.userAgent);
+            if (isIOS && isSafari && !isStandalone) {
+                document.getElementById('deviceIcon').textContent = '🍏';
+                document.getElementById('installText').setAttribute('data-ar', 'أضف للشاشة الرئيسية');
+                document.getElementById('installText').setAttribute('data-en', 'Add to Home Screen');
+                document.getElementById('installText').textContent = currentLang === 'ar' ? 'أضف للشاشة الرئيسية' : 'Add to Home Screen';
+                container.classList.add('visible');
+            }
         }
 
         // Detect device type and update install button icon
         function updateDeviceIcon() {
             const deviceIcon = document.getElementById('deviceIcon');
-            const installText = document.getElementById('installText');
-            const userAgent = navigator.userAgent.toLowerCase();
-            
-            if (/android/i.test(userAgent)) {
-                // Android phone
-                deviceIcon.textContent = '📱';
-            } else if (/iphone|ipad|ipod/i.test(userAgent)) {
-                // iOS device
-                deviceIcon.textContent = '🍏';
-            } else if (/windows/i.test(userAgent)) {
-                // Windows PC
-                deviceIcon.textContent = '💻';
-            } else if (/macintosh|mac os x/i.test(userAgent)) {
-                // Mac
-                deviceIcon.textContent = '🖥️';
-            } else if (/linux/i.test(userAgent)) {
-                // Linux
-                deviceIcon.textContent = '🖥️';
-            } else {
-                // Default
-                deviceIcon.textContent = '📲';
-            }
+            const ua = navigator.userAgent;
+            if (/android/i.test(ua))              deviceIcon.textContent = '📱';
+            else if (/iphone|ipad|ipod/i.test(ua)) deviceIcon.textContent = '🍏';
+            else if (/windows/i.test(ua))          deviceIcon.textContent = '💻';
+            else                                   deviceIcon.textContent = '📲';
         }
 
         // Install app
         async function installApp() {
+            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
             if (!deferredPrompt) {
-                alert(currentLang === 'ar' ? 'التطبيق مثبت بالفعل أو غير متاح للتثبيت' : 'App is already installed or not available for installation');
+                if (isIOS) {
+                    alert(currentLang === 'ar'
+                        ? 'لإضافة التطبيق: اضغط على زر المشاركة ثم اختر "إضافة إلى الشاشة الرئيسية"'
+                        : 'To install: tap the Share button, then "Add to Home Screen"');
+                }
                 return;
             }
-            
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            
             if (outcome === 'accepted') {
-                document.getElementById('installBtn').classList.remove('show');
+                document.getElementById('installContainer').classList.remove('visible');
             }
             deferredPrompt = null;
         }
