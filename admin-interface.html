@@ -4239,7 +4239,9 @@
 
         // Returns {month:1-12, year:YYYY} for a week — uses Wednesday of the week as representative day
         function getWeekMonth(weekStartISO) {
-            const d = new Date(weekStartISO + 'T00:00:00');
+            if (!weekStartISO || typeof weekStartISO !== 'string') return null;
+            const d = new Date(weekStartISO.trim() + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
             d.setDate(d.getDate() + 3);
             return { month: d.getMonth() + 1, year: d.getFullYear() };
         }
@@ -4282,7 +4284,10 @@
             const curM = mSel.value;
             const monthSet = new Map(); // key: "YYYY-MM" → {year, month, label}
             weeks.forEach(w => {
-                const { month, year } = getWeekMonth(w);
+                const wm = getWeekMonth(w);
+                if (!wm) return; // skip invalid week dates
+                const { month, year } = wm;
+                if (isNaN(month) || isNaN(year)) return;
                 const key = year + '-' + String(month).padStart(2,'0');
                 if (!monthSet.has(key)) {
                     const label = new Date(year, month - 1, 1).toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
