@@ -4223,16 +4223,19 @@
             el.innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>';
 
             try {
-                const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections');
+                const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections&_t=' + Date.now());
                 const data = await res.json();
                 if (!data.success || !data.inspections || data.inspections.length === 0) {
                     el.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">لا توجد فحوصات مرسلة حتى الآن</div>';
+                    console.log('[Inspections] No data or error:', data);
                     return;
                 }
                 _allInspections = data.inspections;
+                console.log('[Inspections] Loaded', _allInspections.length, 'rows');
                 populateInspectionFilters(_allInspections);
                 renderInspectionsTable(_allInspections);
             } catch(e) {
+                console.error('[Inspections] Load error:', e);
                 el.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444;font-size:13px;">تعذّر تحميل الفحوصات</div>';
             }
         }
@@ -4259,7 +4262,7 @@
         }
 
         function populateInspectionFilters(rows) {
-            const weeks   = [...new Set(rows.map(r => r.Week_Start).filter(Boolean))].sort().reverse();
+            const weeks   = [...new Set(rows.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort().reverse();
             const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
 
             const wSel = document.getElementById('inspWeekFilter');
@@ -4319,7 +4322,7 @@
             const filterDriver = document.getElementById('inspDriverFilter').value;
 
             const filtered = rows.filter(r =>
-                (!filterWeek   || r.Week_Start   === filterWeek)   &&
+                (!filterWeek   || String(r.Week_Start||'').trim() === filterWeek)   &&
                 (!filterDriver || r.Driver_Name  === filterDriver)
             );
 
@@ -4329,11 +4332,12 @@
                 return;
             }
 
-            // Group by driver + week, keeping only the latest row per Day_Index
+            // Group by driver + week
             const groups = {};
             filtered.forEach(r => {
-                const key = (r.Staff_Number || '') + '|' + (r.Week_Start || '');
-                if (!groups[key]) groups[key] = { dayMap: {}, driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: r.Week_Start, weekEnd: r.Week_End };
+                const ws  = String(r.Week_Start || '').trim().substring(0, 10);
+                const key = (r.Staff_Number || '') + '|' + ws;
+                if (!groups[key]) groups[key] = { dayMap: {}, driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: ws, weekEnd: String(r.Week_End||'').trim().substring(0,10) };
                 const di = String(r.Day_Index);
                 const prev = groups[key].dayMap[di];
                 if (!prev || String(r.Submitted_At || '') >= String(prev.Submitted_At || '')) {
@@ -4496,10 +4500,10 @@
             const targetMonth = parseInt(monthStr);
 
             // Collect weeks that belong to this month (Wednesday Rule)
-            const allWeeks = [...new Set(_allInspections.map(r => r.Week_Start).filter(Boolean))].sort();
+            const allWeeks = [...new Set(_allInspections.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort();
             const monthWeeks = allWeeks.filter(w => {
                 const wm = getWeekMonth(w);
-                return wm.year === targetYear && wm.month === targetMonth;
+                return wm && wm.year === targetYear && wm.month === targetMonth;
             });
 
             if (monthWeeks.length === 0) {
@@ -4513,7 +4517,8 @@
             // Collect all drivers who appear in these weeks
             const driverMap = new Map(); // staffNumber → {name, staff, vehicle}
             _allInspections.forEach(r => {
-                if (weeksForReport.includes(r.Week_Start) && r.Staff_Number) {
+                var rws = String(r.Week_Start||'').trim().substring(0,10);
+                if (weeksForReport.includes(rws) && r.Staff_Number) {
                     if (!driverMap.has(r.Staff_Number)) {
                         driverMap.set(r.Staff_Number, {
                             name: r.Driver_Name || '—',
