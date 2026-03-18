@@ -4244,6 +4244,14 @@
             return { month: d.getMonth() + 1, year: d.getFullYear() };
         }
 
+        // Safe date formatter — returns Arabic locale string or fallback
+        function fmtDateAr(isoStr, opts) {
+            if (!isoStr || typeof isoStr !== 'string' || isoStr.trim() === '') return '—';
+            const d = new Date(isoStr.trim() + 'T00:00:00');
+            if (isNaN(d.getTime())) return isoStr; // return raw if unparseable
+            return d.toLocaleDateString('ar-OM', opts || { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
         function populateInspectionFilters(rows) {
             const weeks   = [...new Set(rows.map(r => r.Week_Start).filter(Boolean))].sort().reverse();
             const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
@@ -4252,8 +4260,7 @@
             const curW = wSel.value;
             wSel.innerHTML = '<option value="">جميع الأسابيع</option>';
             weeks.forEach(w => {
-                const d   = new Date(w + 'T00:00:00');
-                const lbl = d.toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+                const lbl = fmtDateAr(w, { day:'numeric', month:'long', year:'numeric' });
                 const opt = document.createElement('option');
                 opt.value = w; opt.textContent = 'أسبوع ' + lbl;
                 if (w === curW) opt.selected = true;
@@ -4334,8 +4341,8 @@
                 const activeDays   = g.rows.filter(r => _inspItemCount(r.AM_Items) > 0 || _inspItemCount(r.PM_Items) > 0);
                 const faultDays    = activeDays.filter(r => r.Has_Fault    === 'نعم').length;
                 const followupDays = activeDays.filter(r => r.Has_Followup === 'نعم').length;
-                const weekStartFmt = new Date(g.weekStart + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long' });
-                const weekEndFmt   = new Date(g.weekEnd   + 'T00:00:00').toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+                const weekStartFmt = fmtDateAr(g.weekStart, { day:'numeric', month:'long' });
+                const weekEndFmt   = fmtDateAr(g.weekEnd,   { day:'numeric', month:'long', year:'numeric' });
 
                 html += `<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
@@ -4608,7 +4615,9 @@
                         const r = _allInspections.find(r => r.Week_Start === weekStart);
                         return r ? r.Week_End : '';
                     })();
-                    const weekLabel = weekStart + ' — ' + (weekEnd || '');
+                    const weekLabel = fmtDateAr(weekStart, { day:'numeric', month:'long', year:'numeric' })
+                                   + ' — '
+                                   + fmtDateAr(weekEnd, { day:'numeric', month:'long', year:'numeric' });
                     const weekRows = _allInspections.filter(r =>
                         r.Week_Start === weekStart && r.Staff_Number === driver.staff
                     );
