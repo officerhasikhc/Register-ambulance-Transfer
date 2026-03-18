@@ -739,8 +739,11 @@
         renderForm();
         loadHistory();
         updateWeekSummary();
-        // Check after a brief delay to ensure draft is fully loaded
         setTimeout(checkIncompleteReminder, 400);
+        // Sync any pending draft data immediately on page load
+        if (hasDraftData()) {
+            setTimeout(autoSyncDraft, 2000);
+        }
     }
 
     // ============================================================
