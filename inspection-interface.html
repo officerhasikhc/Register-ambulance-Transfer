@@ -1766,9 +1766,9 @@
         updateWeekSummary();
         const badge = document.getElementById('savedBadge');
         if (badge) { badge.style.display = 'block'; clearTimeout(window._savedTimer); window._savedTimer = setTimeout(() => { badge.style.display = 'none'; }, 2000); }
-        // Re-evaluate reminder in case the user just completed an incomplete day
         clearTimeout(window._reminderCheckTimer);
         window._reminderCheckTimer = setTimeout(checkIncompleteReminder, 300);
+        scheduleAutoSync();
     }
 
     // ============================================================
@@ -1779,12 +1779,15 @@
 
     function scheduleAutoSync() {
         clearTimeout(_autoSyncTimer);
-        _autoSyncTimer = setTimeout(autoSyncDraft, 4000); // debounce 4 s
+        _autoSyncTimer = setTimeout(autoSyncDraft, 5000);
     }
 
+    let _syncPendingRetry = false;
+
     async function autoSyncDraft() {
-        if (_syncInProgress || !loggedInUser?.staffNumber || !draft.weekStart) return;
+        if (!loggedInUser?.staffNumber || !draft.weekStart) return;
         if (!hasDraftData()) return;
+        if (_syncInProgress) { _syncPendingRetry = true; return; }
         _syncInProgress = true;
 
         const payload = {
@@ -1799,10 +1802,8 @@
 
         const syncDot = document.getElementById('sessionHint');
         try {
-            // ReliablePost handles 3 strategies + offline queue automatically
             const result = await ReliablePost.send(WEB_APP_URL, payload);
             if (result.success) {
-                // Invalidate history cache so next loadHistory() gets fresh data
                 DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber);
                 if (syncDot) {
                     const prev = syncDot.textContent;
@@ -1813,11 +1814,13 @@
                     }, 3000);
                 }
             }
-            // If result.queued/offline: data is safely queued in localStorage, will retry automatically
         } catch(_) {
-            // silent fail — data stays safe in localStorage
         } finally {
             _syncInProgress = false;
+            if (_syncPendingRetry) {
+                _syncPendingRetry = false;
+                scheduleAutoSync();
+            }
         }
     }
 
