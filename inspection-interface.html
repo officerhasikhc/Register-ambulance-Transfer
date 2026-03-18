@@ -681,7 +681,7 @@
         hazard:  `<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 L18.5 17.5 L1.5 17.5 Z"/><line x1="10" y1="9" x2="10" y2="13"/><circle cx="10" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg>`
     };
 
-    const DAY_NAMES_AR = ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+    const DAY_NAMES_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 
     // ============================================================
     // STATE
@@ -1004,12 +1004,14 @@
             const t = document.getElementById('dayTab_' + i);
             if (t) t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }, 60);
+        // Re-evaluate reminder: hide it if the user is now on the incomplete day
+        setTimeout(checkIncompleteReminder, 100);
     }
 
     // ============================================================
     // SESSION SWITCH
     // ============================================================
-    function switchSession(type) {
+    function switchSession(type, scrollTop) {
         if (type === currentSession) return;
         const dir = type === 'pm' ? 'right' : 'left';
         currentSession = type;
@@ -1017,6 +1019,14 @@
         document.getElementById('btnPm').classList.toggle('active', type === 'pm');
         _prevSecComplete = [false, false, false, false]; // reset toast guards for new session
         renderFormAnimated(dir);
+        if (scrollTop) {
+            setTimeout(() => {
+                const tabs = document.getElementById('dayTabs');
+                if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        }
+        // Re-evaluate reminder: hide it if user is now on the incomplete session
+        setTimeout(checkIncompleteReminder, 100);
     }
 
     function onTimeChange(val) {
@@ -1214,7 +1224,16 @@
         if (!banner) return;
 
         if (_incompleteTarget) {
-            const t    = _incompleteTarget;
+            const t = _incompleteTarget;
+            // Hide reminder if the user is currently viewing the incomplete day/session
+            const userIsHere = (currentDayIdx === t.dayIdx) &&
+                ((t.missingAm && currentSession === 'am') ||
+                 (t.missingPm && currentSession === 'pm') ||
+                 (t.missingAm && t.missingPm));
+            if (userIsHere) {
+                banner.classList.remove('show');
+                return;
+            }
             const what = (t.missingAm && t.missingPm)
                 ? 'الصباح والمساء غير مكتملين'
                 : (t.missingAm ? 'فحص الصباح غير مكتمل' : 'فحص المساء غير مكتمل');
@@ -1534,7 +1553,7 @@
                 clearTimeout(window._autoSwitchTimer);
                 // Show a quick top toast before the switch
                 showSessionSwitchToast();
-                window._autoSwitchTimer = setTimeout(() => switchSession('pm'), 1400);
+                window._autoSwitchTimer = setTimeout(() => switchSession('pm', true), 1400);
             }
         }
         updateSessionButtons();
@@ -1633,8 +1652,11 @@
                 const amFilled = Object.values((nd.am||{}).items||{}).filter(Boolean).length;
                 const target   = amFilled < TOTAL_ITEMS ? 'am' : 'pm';
                 if (currentSession !== target) switchSession(target);
-                // Scroll to top of form so driver sees the day tabs
-                document.getElementById('itemsContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Scroll up so day tabs are visible at the top
+                setTimeout(() => {
+                    const tabs = document.getElementById('dayTabs');
+                    if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
             }, 150);
         } else {
             // All available days done - show a soft success message
