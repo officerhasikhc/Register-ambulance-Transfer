@@ -3130,6 +3130,18 @@
                 document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
                 _nurseSubmitAt = Date.now();
                 _pendingOptimisticRecord = optimisticRecord;
+
+                // ── SHARE WITH ADMIN PAGE via localStorage (same device/browser) ──
+                // Admin reads admin_optimistic_records on load + on nurse_submit signal
+                // and displays the record INSTANTLY before server responds.
+                try {
+                    var _aor = JSON.parse(localStorage.getItem('admin_optimistic_records') || '[]');
+                    // Keep only records < 5 minutes old (not yet confirmed by server)
+                    var _now = Date.now();
+                    _aor = _aor.filter(function(r) { return r._ts && _now - r._ts < 5 * 60 * 1000; });
+                    _aor.unshift(Object.assign({}, optimisticRecord, { _ts: _now, _optimistic: true }));
+                    localStorage.setItem('admin_optimistic_records', JSON.stringify(_aor));
+                } catch(e) {}
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===

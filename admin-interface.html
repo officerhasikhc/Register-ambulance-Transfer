@@ -1155,6 +1155,51 @@
             color: #9ca3af;
         }
 
+        /* Bell Ring Animation */
+        @keyframes bell-ring {
+            0%,100% { transform: rotate(0); }
+            15%     { transform: rotate(18deg); }
+            30%     { transform: rotate(-14deg); }
+            45%     { transform: rotate(10deg); }
+            60%     { transform: rotate(-6deg); }
+            75%     { transform: rotate(3deg); }
+        }
+        .bell-ringing svg { animation: bell-ring 0.7s ease; transform-origin: top center; }
+
+        /* New Record Row Flash */
+        @keyframes row-new-flash {
+            0%,75% { background: #fefce8; }
+            100%   { background: transparent; }
+        }
+        .record-row-new { animation: row-new-flash 4s ease forwards; }
+        .record-row-new td:first-child::before {
+            content: '⏳ ';
+            font-size: 10px;
+        }
+
+        /* Sync confirmation banner */
+        #adminSyncBanner {
+            display: none;
+            background: linear-gradient(135deg,#eff6ff,#dbeafe);
+            border: 1.5px solid #93c5fd;
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #1d4ed8;
+            direction: rtl;
+            align-items: center;
+            gap: 10px;
+        }
+        #adminSyncBanner.visible { display: flex; }
+
+        /* Last-updated label */
+        #adminLastUpdated {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-right: 8px;
+        }
+
         /* Notification Bell Styles */
 
         .notification-badge {
@@ -1922,6 +1967,11 @@
 
                 <!-- Records Section -->
                 <div id="recordsSection" class="main-content">
+                    <!-- Sync confirmation banner: shown when nurse submits, hidden when server confirms -->
+                    <div id="adminSyncBanner">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;animation:spin 1s linear infinite;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-6.49"/></svg>
+                        <span id="adminSyncBannerText">⏳ تم تسجيل رحلة جديدة من الممرضة — جاري التأكيد من الخادم...</span>
+                    </div>
                     <div class="controls">
                         <h2 id="recordsTitle">رحلات الشهر الحالي</h2>
                         <div class="filter-controls">
@@ -1950,6 +2000,8 @@
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
                             <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة">طباعة كشف PDF</button>
+                            <button class="btn btn-export" id="btnForceRefresh" onclick="forceAdminRefresh()" title="تحديث السجلات الآن" style="padding:6px 10px;min-width:0;">🔄</button>
+                            <span id="adminLastUpdated"></span>
                         </div>
                     </div>
 
@@ -2436,62 +2488,126 @@
             );
         }
 
-        function displayNotificationsDropdown(pendingTrips, approvedTrips) {
+        function displayNotificationsDropdown(pendingTrips, completeTrips, submittedTrips) {
             const container = document.getElementById('notificationDropdownContent');
             if (!container) return;
 
             let html = '';
 
-            // Show approved/submitted trips first (new from nursing)
-            approvedTrips.slice(0, 3).forEach(trip => {
+            // submitted = nurse finished → green "تم التسجيل"
+            submittedTrips.slice(0, 2).forEach(trip => {
                 const driverName = trip.driverNameAr || trip.driverName || '';
                 html += `
-                    <div class="notification-dropdown-item" style="border-right: 3px solid var(--success);">
-                        <div style="font-weight: 600; color: #065f46; margin-bottom: 4px;">
-                            رحلة معتمدة - ${trip.tripId || '-'}
+                    <div class="notification-dropdown-item" style="border-right: 3px solid #22c55e;">
+                        <div style="font-weight:600;color:#15803d;margin-bottom:4px;">
+                            ✅ تم التسجيل — ${trip.tripId || '-'}
                         </div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">
-                            السائق: ${driverName}
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                            ${trip.departureDate || ''} ${trip.departureTime || ''}
-                        </div>
-                    </div>
-                `;
+                        <div style="font-size:12px;color:var(--text-secondary);">السائق: ${driverName}</div>
+                        <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${trip.departureDate || ''} ${trip.departureTime || ''}</div>
+                    </div>`;
             });
 
-            // Show pending trips
+            // complete = driver returned, nurse not yet done → yellow "في انتظار الممرضة"
+            completeTrips.slice(0, 3).forEach(trip => {
+                const driverName = trip.driverNameAr || trip.driverName || '';
+                html += `
+                    <div class="notification-dropdown-item" style="border-right: 3px solid #f59e0b;">
+                        <div style="font-weight:600;color:#92400e;margin-bottom:4px;">
+                            ⏳ في انتظار إكمال الممرضة — ${trip.tripId || '-'}
+                        </div>
+                        <div style="font-size:12px;color:var(--text-secondary);">السائق: ${driverName}</div>
+                        <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${trip.departureDate || ''} ${trip.departureTime || ''}</div>
+                    </div>`;
+            });
+
+            // pending = driver still out → orange "قيد التنفيذ"
             pendingTrips.slice(0, 3).forEach(trip => {
                 const driverName = trip.driverNameAr || trip.driverName || '';
                 html += `
-                    <div class="notification-dropdown-item" style="border-right: 3px solid var(--warning);">
-                        <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
-                            رحلة معلقة - ${trip.tripId || '-'}
+                    <div class="notification-dropdown-item" style="border-right: 3px solid #ef4444;">
+                        <div style="font-weight:600;color:#b91c1c;margin-bottom:4px;">
+                            🚑 رحلة قيد التنفيذ — ${trip.tripId || '-'}
                         </div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">
-                            السائق: ${driverName}
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                        <div style="font-size:12px;color:var(--text-secondary);">السائق: ${driverName}</div>
+                        <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">
                             المغادرة: ${trip.departureDate || ''} ${trip.departureTime || ''}
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
 
             if (!html) {
-                html = '<div style="padding: 16px; text-align: center; color: var(--text-secondary);">لا توجد إشعارات</div>';
+                html = '<div style="padding:16px;text-align:center;color:var(--text-secondary);">لا توجد إشعارات</div>';
             }
+
+            // Mark-all-as-read button
+            html += `<div style="padding:10px 16px;border-top:1px solid var(--border-color);">
+                <button onclick="clearAllTripNotifications()" style="width:100%;background:none;border:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:4px;">تحديد الكل كمقروء ✓</button>
+            </div>`;
 
             container.innerHTML = html;
         }
 
+        // ============================================
+        // BELL RING + WEB NOTIFICATIONS — detect new trips
+        // ============================================
+        var _knownTripIds = new Set();
+        (function initKnownTripIds() {
+            try {
+                var stored = JSON.parse(localStorage.getItem('_adminKnownTripIds') || '[]');
+                stored.forEach(function(id) { _knownTripIds.add(id); });
+            } catch(e) {}
+        })();
+
+        function detectAndNotifyNewTrips(trips) {
+            if (!trips || !trips.length) return;
+            var newOnes = trips.filter(function(t) { return t.tripId && !_knownTripIds.has(t.tripId); });
+            trips.forEach(function(t) { if (t.tripId) _knownTripIds.add(t.tripId); });
+            try { localStorage.setItem('_adminKnownTripIds', JSON.stringify([..._knownTripIds])); } catch(e) {}
+            if (newOnes.length === 0) return;
+            // Ring bell
+            var bell = document.getElementById('notificationBell');
+            if (bell) {
+                bell.classList.remove('bell-ringing');
+                void bell.offsetWidth; // force reflow to restart animation
+                bell.classList.add('bell-ringing');
+                setTimeout(function() { bell.classList.remove('bell-ringing'); }, 800);
+            }
+            // Web Notification (only when tab is hidden)
+            if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                try {
+                    new Notification('🚑 رحلة جديدة — حاسك', {
+                        body: (newOnes[0].driverNameAr || newOnes[0].driverName || '') + ' — ' + (newOnes[0].departureTime || ''),
+                        icon: './ambulancelogo.png',
+                        tag: 'ambulance-new-trip'
+                    });
+                } catch(e) {}
+            }
+        }
+
+        function clearAllTripNotifications() {
+            _knownTripIds.clear();
+            // Re-add current trips so they don't trigger again immediately
+            if (pendingTripsArr) pendingTripsArr.forEach(function(t) { if (t.tripId) _knownTripIds.add(t.tripId); });
+            if (approvedTripsArr) approvedTripsArr.forEach(function(t) { if (t.tripId) _knownTripIds.add(t.tripId); });
+            try { localStorage.setItem('_adminKnownTripIds', JSON.stringify([..._knownTripIds])); } catch(e) {}
+            var badge = document.getElementById('notificationCount');
+            if (badge) badge.style.display = 'none';
+            var sidebarBadge = document.getElementById('sidebarPendingCount');
+            if (sidebarBadge) sidebarBadge.style.display = 'none';
+            var dropdown = document.getElementById('notificationDropdown');
+            if (dropdown) dropdown.classList.remove('active');
+        }
+
         function updateNotificationBadges(trips) {
             if (!trips) return;
-            const pendingOnly = trips.filter(t => t.status === 'pending');
-            const approvedOnly = trips.filter(t => t.status === 'complete' || t.status === 'submitted');
-            const totalNotif = pendingOnly.length + approvedOnly.length;
-            
-            displayNotificationsDropdown(pendingOnly, approvedOnly);
+            const pendingOnly  = trips.filter(t => t.status === 'pending');    // driver still out
+            const completeOnly = trips.filter(t => t.status === 'complete');   // driver back, nurse pending
+            const submittedOnly = trips.filter(t => t.status === 'submitted'); // nurse done
+            const totalNotif = pendingOnly.length + completeOnly.length + submittedOnly.length;
+
+            detectAndNotifyNewTrips(trips); // ring bell if any new trip IDs
+
+            displayNotificationsDropdown(pendingOnly, completeOnly, submittedOnly);
             
             const badge = document.getElementById('notificationCount');
             const sidebarBadge = document.getElementById('sidebarPendingCount');
@@ -2674,6 +2790,7 @@
 
         function displayRecords(records) {
             const container = document.getElementById('recordsContainer');
+            const optimisticIds = window._adminOptimisticIds || new Set();
 
             if (records.length === 0) {
                 container.innerHTML = `
@@ -2721,8 +2838,9 @@
                             const fullNurse = resolveNurseArabicName(record);
                             const isExtSupport = !!(record['Ext Support'] || '').toString().trim() || (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
                             
+                            const isOptimistic = optimisticIds.has(record.ID || '') || optimisticIds.has(record.tripId || '') || record._optimistic;
                             return `
-                            <tr data-record-id="${recordId}">
+                            <tr data-record-id="${recordId}" class="${isOptimistic ? 'record-row-new' : ''}">
                                 <td><span style="background:var(--lighter-blue);color:var(--primary-blue);padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;">${recordId}</span></td>
                                 <td><strong>${record['Vehicle Number']}</strong></td>
                                 <td>${record['Driver Name']}</td>
@@ -3006,6 +3124,28 @@
             });
         }
 
+        // ============================================
+        // PDF CACHING — reuse last build for same filter (5 min TTL)
+        // Saves the full round-trip to GAS on second click
+        // ============================================
+        var _pdfCache = null; // { result, key, ts }
+
+        function _getPdfCacheKey() {
+            var y = document.getElementById('yearFilter') ? document.getElementById('yearFilter').value : 'all';
+            var m = document.getElementById('monthFilter') ? document.getElementById('monthFilter').value : 'all';
+            return y + '_' + m;
+        }
+
+        async function buildPdfHtmlCached() {
+            var key = _getPdfCacheKey();
+            if (_pdfCache && _pdfCache.key === key && Date.now() - _pdfCache.ts < 5 * 60 * 1000) {
+                return _pdfCache.result; // instant reuse
+            }
+            var result = await buildPdfHtml();
+            if (result) _pdfCache = { result: result, key: key, ts: Date.now() };
+            return result;
+        }
+
         async function buildPdfHtml() {
             var completed = (allRecords || []).filter(function (r) {
                 return r['Return Date'] && r['Return Time'];
@@ -3076,7 +3216,7 @@
             var btn = document.getElementById('btnDownloadPdf');
             if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
             try {
-                var result = await buildPdfHtml();
+                var result = await buildPdfHtmlCached();
                 if (!result) return;
 
                 if (btn) { btn.textContent = 'جاري التنزيل...'; }
@@ -3125,7 +3265,7 @@
             var btn = document.getElementById('btnPrintPdf');
             if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
             try {
-                var result = await buildPdfHtml();
+                var result = await buildPdfHtmlCached();
                 if (!result) return;
 
                 var printWindow = window.open('', '_blank', 'width=1100,height=750');
@@ -3362,17 +3502,99 @@
             document.getElementById('approvedTripsContainer').innerHTML = skeletonHTML.repeat(2);
         }
 
+        // ============================================
+        // OPTIMISTIC RECORDS — shared localStorage with nurse page
+        // Written by nurse on submit; read here for instant display.
+        // Entries expire after 5 minutes (server should confirm by then).
+        // ============================================
+        function getAdminOptimisticRecords() {
+            try {
+                var raw = localStorage.getItem('admin_optimistic_records');
+                if (!raw) return [];
+                var arr = JSON.parse(raw);
+                var now = Date.now();
+                var fresh = arr.filter(function(r) { return r._ts && now - r._ts < 5 * 60 * 1000; });
+                if (fresh.length !== arr.length)
+                    localStorage.setItem('admin_optimistic_records', JSON.stringify(fresh));
+                return fresh;
+            } catch(e) { return []; }
+        }
+
+        function clearConfirmedOptimisticRecords(serverRecords) {
+            try {
+                var raw = localStorage.getItem('admin_optimistic_records');
+                if (!raw) return;
+                var arr = JSON.parse(raw);
+                var confirmedIds = new Set();
+                (serverRecords || []).forEach(function(r) {
+                    if (r.ID) confirmedIds.add(String(r.ID).trim());
+                    if (r.tripId) confirmedIds.add(String(r.tripId).trim());
+                });
+                var unconfirmed = arr.filter(function(r) {
+                    return !confirmedIds.has(String(r.ID || '').trim()) &&
+                           !confirmedIds.has(String(r.tripId || '').trim());
+                });
+                localStorage.setItem('admin_optimistic_records', JSON.stringify(unconfirmed));
+                // Hide sync banner when all confirmed
+                if (unconfirmed.length === 0) hideSyncBanner();
+            } catch(e) {}
+        }
+
+        function showSyncBanner(text) {
+            var b = document.getElementById('adminSyncBanner');
+            var t = document.getElementById('adminSyncBannerText');
+            if (b) b.classList.add('visible');
+            if (t && text) t.textContent = text;
+        }
+
+        function hideSyncBanner() {
+            var b = document.getElementById('adminSyncBanner');
+            if (b) b.classList.remove('visible');
+        }
+
+        var _adminLastUpdatedTs = 0;
+        function updateLastUpdatedLabel() {
+            _adminLastUpdatedTs = Date.now();
+            var el = document.getElementById('adminLastUpdated');
+            if (!el) return;
+            var d = new Date(_adminLastUpdatedTs);
+            var h = d.getHours(), m = d.getMinutes();
+            var ampm = h >= 12 ? 'م' : 'ص';
+            h = h % 12 || 12;
+            el.textContent = 'آخر تحديث: ' + h + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+        }
+
+        function forceAdminRefresh() {
+            var btn = document.getElementById('btnForceRefresh');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+            DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+            DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            Promise.all([loadAdminData(), loadPendingTrips()]).finally(function() {
+                if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+                updateLastUpdatedLabel();
+            });
+        }
+
         function applyRecords(records) {
-            var newRecords = filterDeleted(records || []);
-            var newHash = DataCache.hash(newRecords);
+            var serverRecords = filterDeleted(records || []);
+            // Clean up optimistic entries now confirmed by server
+            clearConfirmedOptimisticRecords(serverRecords);
+            // Merge: unconfirmed optimistic first (shown with flash)
+            var optimistic = getAdminOptimisticRecords();
+            var merged = optimistic.concat(serverRecords);
+            var newHash = DataCache.hash(merged);
             // Skip re-render if data is identical to what's already displayed
-            if (newHash === _displayedRecordsHash) return;
-            allRecords = newRecords;
+            if (newHash === _displayedRecordsHash && optimistic.length === 0) return;
+            // Track which IDs are newly optimistic (for row flash)
+            var _newOptimisticIds = new Set(optimistic.map(function(r) { return r.ID || r.tripId || ''; }));
+            allRecords = merged;
+            window._adminOptimisticIds = _newOptimisticIds;
             _displayedRecordsHash = newHash;
             const totalPages = Math.ceil(allRecords.length / recordsPerPage);
             if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
             displayRecordsWithPagination();
+            updateLastUpdatedLabel();
         }
 
         // === INSTANT DISPLAY: Show cached data immediately on page load ===
@@ -3388,11 +3610,21 @@
             } catch(e) {}
         }
         
+        // Show optimistic records (from nurse submit) even if no server cache yet
+        var _optimisticOnLoad = getAdminOptimisticRecords();
+        if (_optimisticOnLoad.length > 0) {
+            showSyncBanner('⏳ يوجد سجل جديد من الممرضة — جاري التأكيد من الخادم...');
+        }
+
         var _tripsDisplayed = false;
         if (_instantData) {
             if (_instantData.stats) applyStats(_instantData.stats);
-            if (_instantData.records) applyRecords(_instantData.records);
+            if (_instantData.records) applyRecords(_instantData.records); // applyRecords merges optimistic automatically
+            else if (_optimisticOnLoad.length > 0) applyRecords([]); // show optimistic even with empty server data
             if (_instantData.trips) { applyTrips(_instantData.trips); _tripsDisplayed = true; }
+        } else if (_optimisticOnLoad.length > 0) {
+            // No server cache, but have optimistic records — show them
+            applyRecords([]);
         }
         
         // Try separate pending trips cache (updated by login page or previous visit)
@@ -3435,7 +3667,7 @@
         
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v37';
+            var codeVer = 'v39';
             if (localStorage.getItem('_adminCodeVer') !== codeVer) {
                 localStorage.setItem('_adminCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4207,10 +4439,25 @@
                 DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 await loadAdminData();
                 loadNurseNameMap();
+                updateLastUpdatedLabel();
             } finally {
                 isAdminRefreshing = false;
             }
         }, 15000);
+
+        // Separate lightweight poll every 8s for pending trips only
+        // (getPendingTrips is fast ~1-3s; keeps trips section fresh without heavy full reload)
+        setInterval(function() {
+            if (!document.hidden) loadPendingTrips();
+        }, 8000);
+
+        // Request Web Notifications permission on first user interaction
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            document.addEventListener('click', function _reqNotifPerm() {
+                Notification.requestPermission().catch(function() {});
+                document.removeEventListener('click', _reqNotifPerm);
+            }, { once: true });
+        }
 
         // Instant refresh when admin returns to the tab
         document.addEventListener('visibilitychange', function() {
@@ -4236,11 +4483,18 @@
         DataCache.listenForInvalidation(function(signal) {
             if (signal.source === 'nurse_submit' || signal.source === 'driver_return' || signal.source === 'driver_trip') {
                 console.log('[Admin] Cross-tab signal received:', signal.source, '— refreshing data');
+                // Show sync banner immediately for nurse_submit (record incoming)
+                if (signal.source === 'nurse_submit') {
+                    var _opt = getAdminOptimisticRecords();
+                    if (_opt.length > 0) {
+                        showSyncBanner('⏳ تم تسجيل رحلة جديدة من الممرضة — جاري التأكيد من الخادم...');
+                    }
+                }
                 if (!isAdminRefreshing) {
                     isAdminRefreshing = true;
                     DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                     DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                    loadAdminData().finally(function() { isAdminRefreshing = false; });
+                    loadAdminData().finally(function() { isAdminRefreshing = false; updateLastUpdatedLabel(); });
                     loadPendingTrips();
                 }
             }
