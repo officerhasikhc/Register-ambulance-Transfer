@@ -1,7 +1,7 @@
 {
-  "name": "Ambulance Activity Log System - Hasik Health Center",
-  "short_name": "Ambulance Log",
-  "description": "Ambulance Activity Log System - Directorate General of Health Services - Dhofar - Hasik Health Center",
+  "name": "Ambulance Activity Record System - Hasik Health Center",
+  "short_name": "Ambulance Record",
+  "description": "Ambulance Activity Record System - Directorate General of Health Services - Dhofar - Hasik Health Center",
   "start_url": "./login.html?lang=en",
   "scope": "./",
   "display": "standalone",

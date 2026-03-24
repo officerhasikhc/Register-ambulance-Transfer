@@ -366,18 +366,142 @@
         }
 
         .btn-use-trip {
-            padding: 8px 18px;
-            background: #374151;
+            padding: 9px 20px;
+            background: linear-gradient(135deg, #d97706, #f59e0b);
             color: #fff;
             border: none;
-            border-radius: 6px;
-            font-weight: 500;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
         }
 
         .btn-use-trip:hover {
-            background: #1f2937;
+            background: linear-gradient(135deg, #b45309, #d97706);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.4);
+        }
+
+        .btn-use-trip:active {
+            transform: translateY(0);
+        }
+
+        .btn-use-trip.departure-only-pulse {
+            animation: completePulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes completePulse {
+            0%, 100% { box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3); }
+            50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.2), 0 2px 6px rgba(217, 119, 6, 0.4); }
+        }
+
+        .pending-trip-card.active-editing {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .pending-trip-card.dimmed {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .pending-trip-card.slide-out {
+            animation: slideOutCard 0.4s ease-out forwards;
+        }
+
+        @keyframes slideOutCard {
+            0% { opacity: 1; transform: translateX(0) scaleY(1); max-height: 300px; margin-bottom: 10px; }
+            60% { opacity: 0; transform: translateX(40px) scaleY(0.8); }
+            100% { opacity: 0; transform: translateX(40px) scaleY(0); max-height: 0; margin-bottom: 0; padding: 0; overflow: hidden; }
+        }
+
+        /* Toast notification */
+        .nurse-toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #065f46;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .nurse-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Trip link bar above form */
+        .trip-link-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: #fffbeb;
+            border: 1.5px solid #fcd34d;
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #92400e;
+            flex-wrap: wrap;
+        }
+
+        .trip-link-bar.visible {
+            display: flex;
+        }
+
+        .trip-link-bar .cancel-link {
+            margin-right: auto;
+            color: #9ca3af;
+            font-weight: 500;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: underline;
+            border: none;
+            background: none;
+            font-family: inherit;
+        }
+
+        .trip-link-bar .cancel-link:hover { color: #374151; }
+
+        /* Submit button validation color */
+        #submitBtn.form-complete {
+            background: linear-gradient(135deg, #059669, #10b981) !important;
+        }
+
+        /* Refresh timestamp */
+        .refresh-timestamp {
+            font-size: 11px;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        /* All trips done empty state */
+        .all-done-card {
+            background: #f0fdf4;
+            border: 1.5px solid #86efac;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            color: #166534;
+            font-weight: 600;
+            font-size: 14px;
+>>>>>>> master
         }
 
         /* Form Card */
@@ -1251,10 +1375,13 @@
                     <span data-en="Driver Trips" data-ar="رحلات السائقين">Driver Trips</span>
                     <span class="driver-trips-badge" id="driverTripsBadge">!</span>
                 </h3>
-                <button class="btn-refresh-trips" id="btnRefreshTrips" onclick="refreshDriverTrips(this)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.4-4.3L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.3L2.5 16"/></svg>
-                    <span data-en="Refresh" data-ar="تحديث">Refresh</span>
-                </button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="refresh-timestamp" id="refreshTimestamp"></span>
+                    <button class="btn-refresh-trips" id="btnRefreshTrips" onclick="refreshDriverTrips(this)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.4-4.3L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.3L2.5 16"/></svg>
+                        <span data-en="Refresh" data-ar="تحديث">Refresh</span>
+                    </button>
+                </div>
             </div>
             <div id="pendingTripsContainer">
                 <div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;">
@@ -1263,8 +1390,17 @@
             </div>
         </div>
 
+        <!-- Toast notification -->
+        <div class="nurse-toast" id="nurseToast"></div>
+
         <!-- Registration Form -->
         <div class="form-card">
+            <!-- Trip link bar: shown when completing a pending trip -->
+            <div class="trip-link-bar" id="tripLinkBar">
+                <span>&#9654;</span>
+                <span id="tripLinkText"></span>
+                <button class="cancel-link" onclick="cancelPendingTripLink()" data-en="Cancel / New record" data-ar="إلغاء / سجل جديد">Cancel / New record</button>
+            </div>
             <div class="form-header">
                 <div class="form-header-icon" style="display:flex;align-items:center;justify-content:center;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
                 <h2 data-en="Register New Ambulance Case" data-ar="تسجيل حالة إسعاف جديدة">Register New Ambulance Case</h2>
@@ -2194,9 +2330,58 @@
             if (btn) btn.classList.add('refreshing');
             try {
                 await loadPendingTrips(true, true);
+                updateRefreshTimestamp();
             } finally {
                 if (btn) setTimeout(() => btn.classList.remove('refreshing'), 600);
             }
+        }
+
+        let _lastRefreshTime = null;
+        function updateRefreshTimestamp() {
+            _lastRefreshTime = Date.now();
+            const el = document.getElementById('refreshTimestamp');
+            if (!el) return;
+            el.textContent = currentLang === 'en' ? 'Updated just now' : 'تحديث: الآن';
+            // Update to relative time after 1 min
+            setTimeout(function tick() {
+                if (!_lastRefreshTime) return;
+                const mins = Math.round((Date.now() - _lastRefreshTime) / 60000);
+                const elNow = document.getElementById('refreshTimestamp');
+                if (!elNow) return;
+                if (mins < 1) { elNow.textContent = currentLang === 'en' ? 'Updated just now' : 'تحديث: الآن'; setTimeout(tick, 30000); }
+                else { elNow.textContent = currentLang === 'en' ? `Updated ${mins}m ago` : `تحديث: منذ ${mins} دق`; if (mins < 60) setTimeout(tick, 60000); }
+            }, 60000);
+        }
+
+        function showNurseToast(message, duration) {
+            const toast = document.getElementById('nurseToast');
+            if (!toast) return;
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration || 2800);
+        }
+
+        function cancelPendingTripLink() {
+            const linkBar = document.getElementById('tripLinkBar');
+            if (linkBar) linkBar.classList.remove('visible');
+            document.querySelectorAll('.pending-trip-card').forEach(c => {
+                c.classList.remove('active-editing', 'dimmed');
+            });
+            selectedTripIndex = null;
+            selectedTripId = null;
+            document.getElementById('ambulanceForm').reset();
+            clearDatePickers();
+            hideValidation();
+            // Re-enable all trip buttons
+            document.querySelectorAll('.btn-use-trip').forEach(b => {
+                if (b.disabled) {
+                    b.disabled = false;
+                    b.innerHTML = '&#9998; ' + (currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات');
+                    b.style.background = '';
+                    b.style.cursor = '';
+                    b.style.opacity = '';
+                }
+            });
         }
 
         // Store trips globally for usePendingTrip function
@@ -2212,6 +2397,8 @@
             }
             currentPendingTrips = filtered;
             localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+            // Update last-refresh timestamp whenever trips data arrives
+            if (typeof updateRefreshTimestamp === 'function') updateRefreshTimestamp();
 
             const alertEl = document.getElementById('pendingTripsAlert');
             const badge = document.getElementById('driverTripsBadge');
@@ -2226,11 +2413,10 @@
 
             if (!hasTrips) {
                 const container = document.getElementById('pendingTripsContainer');
-                container.innerHTML = `
-                    <div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;">
-                        <span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span>
-                    </div>
-                `;
+                const wasFilledBefore = container.querySelector('.pending-trip-card');
+                container.innerHTML = wasFilledBefore
+                    ? `<div class="all-done-card">&#10003; ${currentLang === 'en' ? 'All trips completed' : 'تم إكمال جميع الرحلات'}</div>`
+                    : `<div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;"><span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span></div>`;
                 return;
             }
 
@@ -2257,14 +2443,15 @@
                 return `
                 <div class="pending-trip-card" id="trip-card-${index}" data-trip-id="${trip.tripId}" style="border-right: 4px solid ${hasReturn ? '#10b981' : '#f59e0b'}; transition: all 0.4s ease-out;">
                     <div class="pending-trip-info">
-                        <div style="grid-column: span 2; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="background: #e0e7ff; color: #1e40af; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 700;">
-                                ${tripIdDisplay}
-                            </span>
+                        <div style="grid-column: span 4; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="background: #e0e7ff; color: #1e40af; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 700;">${tripIdDisplay}</span>
+                                ${trip.vehicleNumber ? `<span style="background:#f3f4f6;color:#374151;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">&#128661; ${trip.vehicleNumber}</span>` : ''}
+                            </div>
                             <span style="background: ${hasReturn ? '#d1fae5' : '#fef3c7'}; color: ${hasReturn ? '#065f46' : '#92400e'}; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                                 ${hasReturn ?
-                                    (currentLang === 'en' ? 'Departure & Return Recorded' : 'تم تسجيل الذهاب والعودة') :
-                                    (currentLang === 'en' ? 'Departure Only - Waiting Return' : 'ذهاب فقط - العودة لم تُسجل بعد')}
+                                    (currentLang === 'en' ? '&#10003; Departure &amp; Return Recorded' : '&#10003; تم تسجيل الذهاب والعودة') :
+                                    (currentLang === 'en' ? '&#9651; Departure Only' : '&#9651; ذهاب فقط - بانتظار العودة')}
                             </span>
                         </div>
                         <div>
@@ -2286,8 +2473,8 @@
                                 `<span style="color: #f59e0b; font-weight: 600;">${currentLang === 'en' ? 'Not recorded yet' : 'لم تُسجل بعد'}</span>`}
                         </div>
                     </div>
-                    <button class="btn-use-trip" onclick="usePendingTrip(${index})" style="align-self: stretch; margin-top: 8px;">
-                        ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
+                    <button class="btn-use-trip${!hasReturn ? ' departure-only-pulse' : ''}" onclick="usePendingTrip(${index})" style="align-self: stretch; margin-top: 8px;">
+                        &#9998; ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
                     </button>
                 </div>`;
             }).join('');
@@ -2401,10 +2588,34 @@
             const clickedBtn = document.getElementById(`trip-card-${index}`)?.querySelector('.btn-use-trip');
             if (clickedBtn) {
                 clickedBtn.disabled = true;
-                clickedBtn.textContent = currentLang === 'en' ? '✓ Editing...' : '✓ جاري التعديل...';
-                clickedBtn.style.background = '#9ca3af';
+                clickedBtn.innerHTML = currentLang === 'en' ? '&#10003; Editing...' : '&#10003; جاري التعديل...';
+                clickedBtn.style.background = '#6b7280';
                 clickedBtn.style.cursor = 'not-allowed';
-                clickedBtn.style.opacity = '0.7';
+                clickedBtn.style.opacity = '0.75';
+                clickedBtn.classList.remove('departure-only-pulse');
+            }
+
+            // Highlight active card + dim all others
+            document.querySelectorAll('.pending-trip-card').forEach(card => {
+                const cardId = card.id;
+                if (cardId === `trip-card-${index}`) {
+                    card.classList.add('active-editing');
+                    card.classList.remove('dimmed');
+                } else {
+                    card.classList.add('dimmed');
+                    card.classList.remove('active-editing');
+                }
+            });
+
+            // Show trip link bar above the form
+            const linkBar = document.getElementById('tripLinkBar');
+            const linkText = document.getElementById('tripLinkText');
+            if (linkBar && linkText) {
+                const driverLabel = trip.driverName || trip.driverNameAr || '';
+                linkText.textContent = currentLang === 'en'
+                    ? `Trip ${trip.tripId} — ${driverLabel}`
+                    : `رحلة ${trip.tripId} — ${driverLabel}`;
+                linkBar.classList.add('visible');
             }
 
             // Wait for layout to settle after form filling, then scroll
@@ -2565,12 +2776,53 @@
             // Vehicles are loaded via the combined getNurseData endpoint
             // Just ensure default vehicle is selected from cached data
             const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
-            if (defaultVehicle) {
-                const vehicleSelect = document.getElementById('vehicleNumber');
-                if (vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
-                    vehicleSelect.value = defaultVehicle.number;
-                }
+            const vehicleSelect = document.getElementById('vehicleNumber');
+            if (defaultVehicle && vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
+                vehicleSelect.value = defaultVehicle.number;
+            } else if (!defaultVehicle && VEHICLES_DATA.length === 1 && vehicleSelect) {
+                // Auto-select if only one vehicle exists (no need for dropdown)
+                vehicleSelect.value = VEHICLES_DATA[0].number;
             }
+
+            // Submit button turns green when all required fields are filled
+            initSubmitBtnColorWatch();
+        }
+
+        function getFormRequiredFields() {
+            return [
+                document.getElementById('vehicleNumber'),
+                document.getElementById('driverName'),
+                document.getElementById('departureDate'),
+                document.getElementById('departureTimeHour'),
+                document.getElementById('departureTimeMinute'),
+                document.getElementById('destination'),
+                document.getElementById('patientName')
+            ];
+        }
+
+        function checkFormComplete() {
+            const fields = getFormRequiredFields();
+            return fields.every(f => f && f.value && f.value.trim() !== '');
+        }
+
+        function updateSubmitBtnColor() {
+            const btn = document.getElementById('submitBtn');
+            if (!btn || btn.disabled) return;
+            if (checkFormComplete()) {
+                btn.classList.add('form-complete');
+            } else {
+                btn.classList.remove('form-complete');
+            }
+        }
+
+        let _submitWatchInit = false;
+        function initSubmitBtnColorWatch() {
+            if (_submitWatchInit) return;
+            _submitWatchInit = true;
+            const form = document.getElementById('ambulanceForm');
+            if (!form) return;
+            form.addEventListener('input', updateSubmitBtnColor);
+            form.addEventListener('change', updateSubmitBtnColor);
         }
 
         function updateStaffNumber() {
@@ -2899,9 +3151,14 @@
                 submitBtn.textContent = 'Submit Record';
                 submitBtn.style.background = '';
             } else {
-                document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
-                document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
-                document.getElementById('successModal').classList.add('active');
+                // Show toast instead of modal for pending trip completion
+                if (selectedTripId) {
+                    showNurseToast(currentLang === 'en' ? '✓ Trip recorded successfully' : '✓ تم تسجيل الرحلة بنجاح');
+                } else {
+                    document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
+                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
+                    document.getElementById('successModal').classList.add('active');
+                }
             }
             
             resetForm();
@@ -2937,6 +3194,7 @@
 
             // Re-enable button immediately
             submitBtn.disabled = false;
+            updateSubmitBtnColor();
         });
 
         function resetForm() {
@@ -2945,6 +3203,15 @@
             document.getElementById('staffNumber').style.background = '#f3f4f6';
             hideValidation();
             editingRecordId = null;
+            // Remove submit btn completion color
+            const sb = document.getElementById('submitBtn');
+            if (sb) sb.classList.remove('form-complete');
+            // Hide trip link bar and undim all cards
+            const linkBar = document.getElementById('tripLinkBar');
+            if (linkBar) linkBar.classList.remove('visible');
+            document.querySelectorAll('.pending-trip-card').forEach(c => {
+                c.classList.remove('active-editing', 'dimmed');
+            });
 
             // Reset external support fields via toggle
             var extCheck = document.getElementById('externalSupportCheck');
@@ -4255,10 +4522,22 @@
                     
                     // 5. Apply vehicles
                     if (data.vehicles && data.vehicles.length > 0) {
-                        VEHICLES_DATA = data.vehicles.map(v => ({
+                        const newVehicles = data.vehicles.map(v => ({
+                            id: v.id,
                             number: v.vehicleNumber,
                             isDefault: v.isDefault || false
                         }));
+                        // Guard: if server/stale-cache returns no default but we already have one
+                        // locally (from admin's last update), preserve it to avoid resetting the dropdown
+                        const serverHasDefault = newVehicles.some(v => v.isDefault);
+                        const localHasDefault = VEHICLES_DATA.some(v => v.isDefault);
+                        if (!serverHasDefault && localHasDefault) {
+                            newVehicles.forEach(v => {
+                                const local = VEHICLES_DATA.find(l => l.number === v.number);
+                                if (local && local.isDefault) v.isDefault = true;
+                            });
+                        }
+                        VEHICLES_DATA = newVehicles;
                         localStorage.setItem('ambulance_vehicles', JSON.stringify(VEHICLES_DATA));
                         populateVehicleDropdown();
                         const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
