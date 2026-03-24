@@ -2411,6 +2411,10 @@
             if (_adminDeleted.size > 0) {
                 filtered = filtered.filter(function(t) { return !_adminDeleted.has(String(t.tripId || '')); });
             }
+            // v40: Filter out trips deleted on server (cross-device sync)
+            if (window._serverDeletedIds && window._serverDeletedIds.size > 0) {
+                filtered = filtered.filter(function(t) { return !window._serverDeletedIds.has(String(t.tripId || '')); });
+            }
             // Filter out trips that were recently submitted by this nurse (stale cache protection)
             if (_recentlySubmittedTripIds.size > 0) {
                 filtered = filtered.filter(t => !_recentlySubmittedTripIds.has(t.tripId));
@@ -4397,6 +4401,11 @@
         document.getElementById('yearFilter').value = currentYear;
         document.getElementById('monthFilter').value = currentMonth;
         updateYearlyTotalLabel();
+        // v40: Instant yearlyTotal from localStorage (before any server fetch)
+        try {
+            var _cachedTotal = localStorage.getItem('nurse_yearly_total_' + currentYear);
+            if (_cachedTotal) document.getElementById('yearlyTotalCount').textContent = _cachedTotal;
+        } catch(e) {}
 
         initializeTimePickers();
         initializeDatePickers();
@@ -4540,6 +4549,8 @@
                     if (data.yearlyTotal !== undefined) {
                         document.getElementById('yearlyTotalCount').textContent = data.yearlyTotal;
                         updateYearlyTotalLabel();
+                        // v40: Cache yearlyTotal for instant display on next load
+                        try { localStorage.setItem('nurse_yearly_total_' + year, String(data.yearlyTotal)); } catch(e) {}
                     }
                     
                     // 4. Apply pending trips
@@ -4552,6 +4563,10 @@
                                     _recentlySubmittedTripIds.delete(id);
                                 }
                             });
+                        }
+                        // v40: Store server deletedIds for cross-device sync
+                        if (data.deletedIds && data.deletedIds.length > 0) {
+                            window._serverDeletedIds = new Set(data.deletedIds);
                         }
                         cachedPendingTrips = nurseTrips;
                         displayPendingTrips(nurseTrips);
@@ -4727,7 +4742,7 @@
 
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v39';
+            var codeVer = 'v40';
             if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
                 localStorage.setItem('_nurseCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4834,6 +4849,8 @@
                 }
                 // Also force a fresh fetch to stay in sync
                 loadPendingTrips(false, true);
+                // v40: Reset smart poll to fast mode after cross-tab signal
+                if (typeof _resetNursePollSpeed === 'function') _resetNursePollSpeed();
             }
         });
 
@@ -4850,25 +4867,46 @@
             }
         });
 
-        // Smart adaptive auto-refresh using combined endpoint
-        let lastDataHash = '';
+        // v40: Smart adaptive polling — starts fast, backs off when data unchanged
+        var _nursePollInterval = 5000;
+        var _nursePollMin = 5000;
+        var _nursePollMax = 30000;
+        var _nursePollTimer = null;
         let isRefreshing = false;
         
         async function smartRefreshNurseData() {
             if (document.hidden || isRefreshing) return;
             isRefreshing = true;
             try {
+                var prevHash = _nurseDisplayedHash;
                 const year = document.getElementById('yearFilter').value;
                 const month = document.getElementById('monthFilter').value;
                 const cacheKey = 'cache_nurse_data_' + year + '_' + month;
                 DataCache.invalidate(cacheKey);
                 await loadAllNurseData();
+                if (_nurseDisplayedHash === prevHash) {
+                    _nursePollInterval = Math.min(_nursePollInterval * 1.5, _nursePollMax);
+                } else {
+                    _nursePollInterval = _nursePollMin;
+                }
             } finally {
                 isRefreshing = false;
             }
         }
         
-        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 10000);
+        function _nurseSmartPoll() {
+            clearTimeout(_nursePollTimer);
+            _nursePollTimer = setTimeout(function() {
+                smartRefreshNurseData().then(function() { _nurseSmartPoll(); });
+            }, _nursePollInterval);
+        }
+        _nurseSmartPoll();
+
+        function _resetNursePollSpeed() {
+            _nursePollInterval = _nursePollMin;
+            clearTimeout(_nursePollTimer);
+            _nurseSmartPoll();
+        }
 
         // Instant refresh when nurse returns to the tab
         document.addEventListener('visibilitychange', function() {

@@ -1808,10 +1808,32 @@
                     _lastHistoryRender = now;
                     // Update SyncManager's ID tracker with server trips
                     if (typeof SyncManager !== 'undefined') SyncManager.updateMaxIdFromRecords(trips);
+                    // v40: Cross-device deletion sync — check server deletedIds
+                    if (window._serverDeletedIds && window._serverDeletedIds.length > 0 && selectedDriver) {
+                        var _sdSet = new Set(window._serverDeletedIds);
+                        var pendingKey2 = 'pending_trip_' + selectedDriver.staffNumber;
+                        var lp = localStorage.getItem(pendingKey2);
+                        if (lp) {
+                            try {
+                                var lpObj = JSON.parse(lp);
+                                if (lpObj && lpObj.tripId && _sdSet.has(String(lpObj.tripId))) {
+                                    localStorage.removeItem(pendingKey2);
+                                    clearReturnCompletedFlag(selectedDriver.staffNumber);
+                                }
+                            } catch(e) {}
+                        }
+                    }
                     processPendingTripsData(trips);
                     renderTripHistoryFromData(trips);
                 },
-                (result) => (result.success && Array.isArray(result.trips)) ? result.trips : null
+                (result) => {
+                    if (result.success && Array.isArray(result.trips)) {
+                        // v40: Store server deletedIds for cross-device sync
+                        window._serverDeletedIds = result.deletedIds || [];
+                        return result.trips;
+                    }
+                    return null;
+                }
             );
         }
 
@@ -2938,9 +2960,16 @@
                 if (deleted.length === 0) return;
                 var deletedIds = new Set(deleted.map(function(e) { return String(e.tripId || ''); }));
                 var staffStr   = String(selectedDriver.staffNumber || '').trim();
+                // v40: Also collect staffNumbers targeted by admin deletions (for record-type deletions)
+                var deletedByStaff = new Set(deleted
+                    .filter(function(e) { return e.type === 'record' && e.staffNumber; })
+                    .map(function(e) { return String(e.staffNumber).trim(); }));
 
                 // 1. Clear active pending trip if admin deleted it
-                if (pendingTrip && pendingTrip.tripId && deletedIds.has(String(pendingTrip.tripId))) {
+                // v40: Match by tripId OR by staffNumber (when admin deletes a record, tripId = recordId which may differ)
+                var tripMatch = pendingTrip && pendingTrip.tripId && deletedIds.has(String(pendingTrip.tripId));
+                var staffMatch = !tripMatch && pendingTrip && staffStr && deletedByStaff.has(staffStr);
+                if (tripMatch || staffMatch) {
                     var pendingKey = 'pending_trip_' + selectedDriver.staffNumber;
                     localStorage.removeItem(pendingKey);
                     clearReturnCompletedFlag(selectedDriver.staffNumber);

@@ -3667,7 +3667,7 @@
         
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v39';
+            var codeVer = 'v40';
             if (localStorage.getItem('_adminCodeVer') !== codeVer) {
                 localStorage.setItem('_adminCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4079,6 +4079,10 @@
             });
             if (!confirmed) return;
             
+            // v40: Extract staffNumber from record BEFORE removing from array
+            var _deletedRecord = allRecords.find(r => String(r.ID || r.id).trim() === String(id).trim());
+            var _deletedStaffNumber = _deletedRecord ? String(_deletedRecord['Staff Number'] || '').trim() : '';
+            
             // Two-phase animation: fade-out → collapse → re-render
             const tableRow = document.querySelector(`tr[data-record-id="${id}"]`);
             if (tableRow) {
@@ -4112,7 +4116,7 @@
                 showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
                 invalidateAdminCaches(id, false);
                 clearLocalPendingTripCaches();
-                signalTripDeletion(id, '', 'record');
+                signalTripDeletion(id, _deletedStaffNumber, 'record');
             } catch (error) {
                 console.error('SyncManager direct delete error:', error);
                 // Fallback to original GET method
@@ -4123,7 +4127,7 @@
                         showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
                         invalidateAdminCaches(id, false);
                         clearLocalPendingTripCaches();
-                        signalTripDeletion(id, '', 'record');
+                        signalTripDeletion(id, result.staffNumber || _deletedStaffNumber, 'record');
                     } else {
                         showToast(result.error || 'فشل في الحذف', 'error');
                         loadAdminData();
@@ -4178,6 +4182,9 @@
             var confirmedRecordId = pendingRecordId;
             var confirmedVehicle = pendingVehicleNumber;
             var confirmedAction = pendingAction;
+            // v40: Extract staffNumber BEFORE removing from array
+            var _confRecord = allRecords.find(r => String(r.ID || r.id).trim() === String(confirmedRecordId).trim());
+            var _confStaffNumber = _confRecord ? String(_confRecord['Staff Number'] || '').trim() : '';
             markAsDeleted(confirmedRecordId);
             allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(confirmedRecordId).trim());
             _displayedRecordsHash = DataCache.hash(allRecords);
@@ -4186,7 +4193,7 @@
             invalidateAdminCaches(confirmedRecordId, false);
             if (confirmedAction === 'delete') {
                 clearLocalPendingTripCaches();
-                signalTripDeletion(confirmedRecordId, '', 'record');
+                signalTripDeletion(confirmedRecordId, _confStaffNumber, 'record');
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
@@ -4455,26 +4462,50 @@
             }
         }
 
-        // Refresh data every 15 seconds (skip if hidden or already refreshing)
+        // v40: Smart adaptive polling — starts fast, backs off when data unchanged
+        var _adminPollInterval = 5000;   // Start at 5s
+        var _adminPollMin = 5000;        // Fastest poll (after signal)
+        var _adminPollMax = 30000;       // Slowest poll (no changes)
+        var _adminPollTimer = null;
+        var _adminLastDataHash = null;
         let isAdminRefreshing = false;
-        setInterval(async () => {
-            if (document.hidden || isAdminRefreshing) return;
-            isAdminRefreshing = true;
-            try {
-                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
-                await loadAdminData();
-                loadNurseNameMap();
-                updateLastUpdatedLabel();
-            } finally {
-                isAdminRefreshing = false;
-            }
-        }, 15000);
 
-        // Separate lightweight poll every 8s for pending trips only
-        // (getPendingTrips is fast ~1-3s; keeps trips section fresh without heavy full reload)
-        setInterval(function() {
-            if (!document.hidden) loadPendingTrips();
-        }, 8000);
+        function _adminSmartPoll() {
+            clearTimeout(_adminPollTimer);
+            _adminPollTimer = setTimeout(async function() {
+                if (document.hidden || isAdminRefreshing) {
+                    _adminSmartPoll(); // reschedule
+                    return;
+                }
+                isAdminRefreshing = true;
+                try {
+                    var prevHash = DataCache.hash(allRecords);
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    await loadAdminData();
+                    await loadPendingTrips();
+                    updateLastUpdatedLabel();
+                    var newHash = DataCache.hash(allRecords);
+                    if (newHash === prevHash) {
+                        // No changes — slow down
+                        _adminPollInterval = Math.min(_adminPollInterval * 1.5, _adminPollMax);
+                    } else {
+                        // Data changed — speed up
+                        _adminPollInterval = _adminPollMin;
+                    }
+                } finally {
+                    isAdminRefreshing = false;
+                }
+                _adminSmartPoll();
+            }, _adminPollInterval);
+        }
+        _adminSmartPoll();
+
+        // Reset polling speed on cross-tab signals (nurse submit, driver return, etc.)
+        function _resetAdminPollSpeed() {
+            _adminPollInterval = _adminPollMin;
+            clearTimeout(_adminPollTimer);
+            _adminSmartPoll();
+        }
 
         // Request Web Notifications permission on first user interaction
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -4522,6 +4553,8 @@
                     loadAdminData().finally(function() { isAdminRefreshing = false; updateLastUpdatedLabel(); });
                     loadPendingTrips();
                 }
+                // v40: Reset smart poll to fast mode after cross-tab signal
+                _resetAdminPollSpeed();
             }
         });
 

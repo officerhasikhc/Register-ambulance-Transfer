@@ -295,6 +295,42 @@ function invalidatePendingTripsCache() {
 }
 
 /**
+ * v40: Server-side deletion log — enables cross-device deletion sync.
+ * Stores recent deletions in CacheService (6h TTL). Client pages read this
+ * via getPendingTrips/getAdminData responses and filter out deleted items.
+ */
+function recordServerDeletion(tripId, staffNumber) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var raw = cache.get('deleted_trips_log') || '[]';
+    var log = JSON.parse(raw);
+    log.push({ id: String(tripId || ''), staff: String(staffNumber || ''), ts: Date.now() });
+    // Keep only last 50 entries
+    if (log.length > 50) log = log.slice(-50);
+    cache.put('deleted_trips_log', JSON.stringify(log), 21600); // 6 hours
+    // Bump deletion version counter
+    var ver = parseInt(cache.get('deletion_version') || '0') + 1;
+    cache.put('deletion_version', String(ver), 21600);
+  } catch(e) {
+    Logger.log('recordServerDeletion error: ' + e.toString());
+  }
+}
+
+function getServerDeletionLog() {
+  try {
+    var cache = CacheService.getScriptCache();
+    var raw = cache.get('deleted_trips_log');
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function getServerDeletionVersion() {
+  try {
+    return parseInt(CacheService.getScriptCache().get('deletion_version') || '0');
+  } catch(e) { return 0; }
+}
+
+/**
  * FAST version: Get next trip ID using cached counter.
  * Avoids scanning all sheets on every call. Falls back to full scan if cache is empty.
  */
@@ -1584,7 +1620,8 @@ function getAdminData(params) {
         stats: stats,
         records: records,
         recordsCount: records.length,
-        trips: trips
+        trips: trips,
+        deletedIds: getServerDeletionLog().map(function(e) { return e.id; })
       }))
       .setMimeType(ContentService.MimeType.JSON);
       
@@ -1782,7 +1819,8 @@ function getNurseData(params) {
         yearlyTotal: yearlyTotal,
         trips: trips,
         vehicles: vehicles,
-        userData: userData
+        userData: userData,
+        deletedIds: getServerDeletionLog().map(function(e) { return e.id; })
       }))
       .setMimeType(ContentService.MimeType.JSON);
       
@@ -2332,6 +2370,18 @@ function getPendingTrips() {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // v40: Self-heal — remove stale "submitted" rows left by older versions
+    cleanupSubmittedTrips();
+    
+    // Re-read after cleanup (rows may have been deleted)
+    if (sheet.getLastRow() <= 1) {
+      const emptyResult = JSON.stringify({ success: true, trips: [] });
+      cache.put('pending_trips_json', emptyResult, 120);
+      return ContentService
+        .createTextOutput(emptyResult)
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, 13);
     const values = dataRange.getValues();
     
@@ -2368,7 +2418,12 @@ function getPendingTrips() {
       return numB - numA;
     });
     
-    const result = JSON.stringify({ success: true, trips: trips });
+    // v40: Include deletion version + recent deleted IDs for cross-device sync
+    var delVer = getServerDeletionVersion();
+    var delLog = getServerDeletionLog();
+    var deletedIds = delLog.map(function(e) { return e.id; });
+    
+    const result = JSON.stringify({ success: true, trips: trips, deletionVersion: delVer, deletedIds: deletedIds });
     cache.put('pending_trips_json', result, 60);
     
     return ContentService
@@ -2387,7 +2442,8 @@ function getPendingTrips() {
 }
 
 /**
- * Mark trip as submitted - تحديث حالة الرحلة بعد إرسالها
+ * Mark trip as submitted - حذف الرحلة من PendingTrips بعد إرسالها
+ * v40: Changed from status update to row deletion — submitted trips no longer accumulate
  */
 function markTripAsSubmitted(tripId) {
   try {
@@ -2402,10 +2458,10 @@ function markTripAsSubmitted(tripId) {
     const tripIdStr = String(tripId).trim();
     for (let i = 1; i < values.length; i++) {
       if (String(values[i][0]).trim() === tripIdStr) {
-        // Status is in column 10 (1-indexed) with new structure
-        sheet.getRange(i + 1, 10).setValue('submitted');
-        // Invalidate pending trips cache so next fetch shows updated data
-        try { CacheService.getScriptCache().remove('pending_trips_json'); } catch(e) {}
+        // v40: Delete the row entirely instead of just marking as submitted
+        sheet.deleteRow(i + 1);
+        invalidatePendingTripsCache();
+        Logger.log('markTripAsSubmitted: Deleted pending trip row for ' + tripIdStr);
         return true;
       }
     }
@@ -2414,6 +2470,40 @@ function markTripAsSubmitted(tripId) {
   } catch (error) {
     Logger.log('Error in markTripAsSubmitted: ' + error.toString());
     return false;
+  }
+}
+
+/**
+ * v40: Cleanup stale submitted trips that were left from older versions
+ * Deletes any PendingTrips rows with status "submitted" (they should have been deleted)
+ * Called from getPendingTrips() to self-heal
+ */
+function cleanupSubmittedTrips() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('PendingTrips');
+    if (!sheet || sheet.getLastRow() <= 1) return 0;
+    
+    const values = sheet.getDataRange().getValues();
+    let deletedCount = 0;
+    
+    // Delete from bottom to top to avoid index shifting
+    for (let i = values.length - 1; i >= 1; i--) {
+      const status = (values[i][9] || '').toString().trim().toLowerCase();
+      if (status === 'submitted') {
+        sheet.deleteRow(i + 1);
+        deletedCount++;
+      }
+    }
+    
+    if (deletedCount > 0) {
+      invalidatePendingTripsCache();
+      Logger.log('cleanupSubmittedTrips: Removed ' + deletedCount + ' stale submitted trips');
+    }
+    return deletedCount;
+  } catch (e) {
+    Logger.log('cleanupSubmittedTrips error: ' + e.toString());
+    return 0;
   }
 }
 
@@ -2458,9 +2548,30 @@ function deleteRecord(id) {
           
           sheet.deleteRow(i + 1);
           Logger.log('Deleted record: ' + idStr + ' from sheet ' + sheetNames[s]);
+          // v40: Record deletion for cross-device sync
+          recordServerDeletion(idStr, staffNumber);
           
+          // v40: Try both methods to clean PendingTrips — by tripId first, then by staffNumber+date
           try {
-            if (staffNumber && depDate) {
+            var ptDeleted = false;
+            // Method 1: Direct tripId match (most reliable — record ID often = trip ID)
+            try {
+              var ptSheet = ss.getSheetByName('PendingTrips');
+              if (ptSheet && ptSheet.getLastRow() > 1) {
+                var ptVals = ptSheet.getDataRange().getValues();
+                for (var p = ptVals.length - 1; p >= 1; p--) {
+                  if ((ptVals[p][0] || '').toString().trim() === idStr) {
+                    ptSheet.deleteRow(p + 1);
+                    invalidatePendingTripsCache();
+                    ptDeleted = true;
+                    Logger.log('deleteRecord: Also deleted PendingTrip by tripId: ' + idStr);
+                    break;
+                  }
+                }
+              }
+            } catch(e1) {}
+            // Method 2: Fallback — staffNumber + departure date
+            if (!ptDeleted && staffNumber && depDate) {
               deletePendingTripByStaffNumber(staffNumber, depDate);
             }
           } catch (pendingError) {
@@ -2471,7 +2582,8 @@ function deleteRecord(id) {
             .createTextOutput(JSON.stringify({
               success: true,
               message: 'تم حذف السجل بنجاح',
-              deletedId: idStr
+              deletedId: idStr,
+              staffNumber: staffNumber
             }))
             .setMimeType(ContentService.MimeType.JSON);
         }
@@ -2530,10 +2642,13 @@ function deletePendingTrip(tripId) {
       const rowTripId = values[i][0] ? values[i][0].toString().trim() : '';
       
       if (rowTripId === tripIdStr) {
+        var staffNum = values[i][4] ? values[i][4].toString().trim() : '';
         // Delete the row
         sheet.deleteRow(i + 1);
         Logger.log('Deleted trip: ' + tripIdStr);
         invalidatePendingTripsCache();
+        // v40: Record deletion for cross-device sync
+        recordServerDeletion(tripIdStr, staffNum);
         
         return ContentService
           .createTextOutput(JSON.stringify({
