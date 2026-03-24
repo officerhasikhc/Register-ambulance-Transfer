@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Record PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v36';
+const CACHE_NAME = 'ambulance-log-v37';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -34,7 +34,7 @@ const urlsToCache = [
 
 // Install event - Skip waiting to activate immediately
 self.addEventListener('install', event => {
-  console.log('[SW] Installing Service Worker v36...');
+  console.log('[SW] Installing Service Worker v37...');
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -213,7 +213,7 @@ function getAllFromStore(store) {
 
 // Activate event - Take control immediately and clean old caches
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating Service Worker v36...');
+  console.log('[SW] Activating Service Worker v37...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
@@ -235,7 +235,7 @@ self.addEventListener('activate', event => {
           client.postMessage({
             type: 'SW_UPDATED',
             message: 'تم تحديث التطبيق بنجاح',
-            version: CACHE_NAME
+            version: CACHE_NAME  // ambulance-log-v37
           });
         });
       });

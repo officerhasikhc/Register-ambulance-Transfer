@@ -3435,7 +3435,7 @@
         
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v36';
+            var codeVer = 'v37';
             if (localStorage.getItem('_adminCodeVer') !== codeVer) {
                 localStorage.setItem('_adminCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -3948,10 +3948,19 @@
                 }, { background: true, timeout: 30000 }).catch(() => {});
             });
 
+            // Faster refresh: 1.5s first attempt (GAS usually processes within 1-2s)
+            var _confirmHash = _displayedRecordsHash;
             setTimeout(() => {
                 DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 loadAdminData();
-            }, 3000);
+            }, 1500);
+            // Safety retry at 3.5s in case server was slow
+            setTimeout(() => {
+                if (_displayedRecordsHash === _confirmHash) {
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    loadAdminData();
+                }
+            }, 3500);
         }
 
         // ============================================
@@ -4156,11 +4165,20 @@
             });
 
             invalidateAdminCaches(recordId, true);
+            // Faster refresh: 1.5s first attempt instead of 5s
+            var _editHash = _displayedRecordsHash;
             setTimeout(() => {
                 DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 loadAdminData();
                 loadNurseNameMap();
-            }, 5000);
+            }, 1500);
+            // Safety retry at 3.5s in case server was slow
+            setTimeout(() => {
+                if (_displayedRecordsHash === _editHash) {
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    loadAdminData();
+                }
+            }, 3500);
         }
 
         // Admin logout confirmation
@@ -4212,6 +4230,50 @@
                 }
             }
         });
+
+        // Cross-tab invalidation: when nurse submits or driver completes a trip in another
+        // tab, bust admin cache and reload so admin sees fresh data without manual refresh.
+        DataCache.listenForInvalidation(function(signal) {
+            if (signal.source === 'nurse_submit' || signal.source === 'driver_return' || signal.source === 'driver_trip') {
+                console.log('[Admin] Cross-tab signal received:', signal.source, '— refreshing data');
+                if (!isAdminRefreshing) {
+                    isAdminRefreshing = true;
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+                    loadAdminData().finally(function() { isAdminRefreshing = false; });
+                    loadPendingTrips();
+                }
+            }
+        });
+
+        // Prefetch nurse/driver data on nav link hover — so destination page loads instantly
+        (function() {
+            var navLinks = document.querySelectorAll('a[href="nurse-interface.html"], a[href="driver-interface.html"]');
+            navLinks.forEach(function(link) {
+                var prefetched = false;
+                link.addEventListener('mouseenter', function() {
+                    if (prefetched) return;
+                    prefetched = true;
+                    var dest = link.getAttribute('href');
+                    if (dest === 'nurse-interface.html') {
+                        DataCache.preload(WEB_APP_URL, 'nurse');
+                    } else if (dest === 'driver-interface.html') {
+                        DataCache.preload(WEB_APP_URL, 'driver');
+                    }
+                }, { passive: true });
+                // Also trigger on touchstart for mobile
+                link.addEventListener('touchstart', function() {
+                    if (prefetched) return;
+                    prefetched = true;
+                    var dest = link.getAttribute('href');
+                    if (dest === 'nurse-interface.html') {
+                        DataCache.preload(WEB_APP_URL, 'nurse');
+                    } else if (dest === 'driver-interface.html') {
+                        DataCache.preload(WEB_APP_URL, 'driver');
+                    }
+                }, { passive: true });
+            });
+        })();
 
         // ── Inspections Module ──────────────────────────────────────────
         const WEB_APP_URL_INSP = WEB_APP_URL; // same endpoint

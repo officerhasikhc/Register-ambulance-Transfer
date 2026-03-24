@@ -1067,6 +1067,7 @@
         <img src="moh-logo.png" alt="شعار وزارة الصحة" class="logo">
         <h1>المديرية العامة للخدمات الصحية بمحافظة ظفار</h1>
         <h2>ولاية سدح - مركز حاسك الصحي</h2>
+        <a href="admin-interface.html" id="backToAdminBtnDriver" style="display:none; margin-top:10px; padding:8px 18px; background:rgba(255,255,255,0.9); color:#1e40af; border-radius:10px; font-size:13px; font-weight:600; text-decoration:none; border:none; cursor:pointer;">← لوحة الإدارة</a>
     </div>
 
     <!-- Module Navigation -->
@@ -1386,6 +1387,9 @@
                     document.getElementById('driverSelection').style.display = 'block';
                     document.getElementById('driverInfoSection').style.display = 'none';
                     window.loggedInUser = userData;
+                    // Show Back to Admin button for admin
+                    var backBtn = document.getElementById('backToAdminBtnDriver');
+                    if (backBtn) backBtn.style.display = 'inline-block';
                     return;
                 }
                 
@@ -1429,6 +1433,11 @@
                     updateButtons();
                     
                     window.loggedInUser = userData;
+                    // Show Back to Admin button if session type is admin
+                    if (userData.type === 'admin') {
+                        var backBtnD = document.getElementById('backToAdminBtnDriver');
+                        if (backBtnD) backBtnD.style.display = 'inline-block';
+                    }
                     return;
                 }
                 
@@ -2191,6 +2200,8 @@
             updatePendingTripForNurseWithReturn(selectedDriver.staffNumber, date, time);
             localStorage.removeItem(key);
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            // Signal admin/nurse pages in other tabs to refresh their data
+            DataCache.signalCacheInvalidation('driver_return');
 
             // === STEP 4: SAVE VIA SYNC MANAGER — instant local + background server sync ===
             SyncManager.save('driverReturn', returnData).catch(err => {
@@ -2249,7 +2260,8 @@
         
         // Update the pending trip for nurse with return data
         function updatePendingTripForNurseWithReturn(staffNumber, returnDate, returnTime) {
-            let pendingTrips = JSON.parse(localStorage.getItem('pending_trips_for_nurse')) || [];
+            const cached = DataCache.getPendingTripsForNurse();
+            let pendingTrips = (cached && cached.trips) ? cached.trips : [];
             
             // Find and update the trip for this driver
             pendingTrips = pendingTrips.map(trip => {
@@ -2265,12 +2277,13 @@
                 return trip;
             });
             
-            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(pendingTrips));
+            DataCache.setPendingTripsForNurse(pendingTrips);
             console.log('🚗 [DRIVER] Updated pending_trips_for_nurse in localStorage');
         }
 
         function savePendingTripForNurse(trip) {
-            let pendingTrips = JSON.parse(localStorage.getItem('pending_trips_for_nurse')) || [];
+            const cached = DataCache.getPendingTripsForNurse();
+            let pendingTrips = (cached && cached.trips) ? cached.trips : [];
             
             // Remove old entry for same driver if exists
             pendingTrips = pendingTrips.filter(t => t.staffNumber !== trip.staffNumber);
@@ -2278,7 +2291,9 @@
             // Add new entry
             pendingTrips.push(trip);
             
-            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(pendingTrips));
+            DataCache.setPendingTripsForNurse(pendingTrips);
+            // Signal nurse page (other tab) to refresh pending trips
+            DataCache.signalCacheInvalidation('driver_trip');
         }
 
         function saveTripToHistory(trip) {

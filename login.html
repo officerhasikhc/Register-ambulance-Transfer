@@ -639,7 +639,7 @@
                     if (result && result.success && Array.isArray(result.trips)) {
                         try {
                             var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify({ trips: nt, ts: Date.now() }));
                         } catch(e) {}
                     }
                 }).catch(function() {});
@@ -654,7 +654,7 @@
                     if (result && result.trips) {
                         try {
                             var nurseTrips = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nurseTrips));
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify({ trips: nurseTrips, ts: Date.now() }));
                         } catch(e) {}
                     }
                 }).catch(function() {});

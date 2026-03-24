@@ -26,7 +26,8 @@
             if (result && result.trips) {
                 try {
                     var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                    // Timestamped format so nurse page knows if data is fresh
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify({ trips: nt, ts: Date.now() }));
                 } catch(e) {}
             }
             if (result && result.success) {
@@ -45,7 +46,8 @@
             if (result && result.success && Array.isArray(result.trips)) {
                 try {
                     var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                    // Timestamped format — marks data as fresh from server
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify({ trips: nt, ts: Date.now() }));
                 } catch(e) {}
                 return nt;
             }
@@ -1364,6 +1366,7 @@
                     <button class="lang-btn active" data-lang="en">EN</button>
                     <button class="lang-btn" data-lang="ar">عربي</button>
                 </div>
+                <a href="admin-interface.html" id="backToAdminBtn" class="nav-link" style="display:none; background:#eff6ff; color:#1e40af;" data-en="&#8592; Admin" data-ar="الإدارة &#8592;">&#8592; Admin</a>
                 <a href="#" class="nav-link" onclick="showNurseLogoutConfirm(event)" style="background: #fee2e2; color: #dc2626;" data-en="Logout" data-ar="تسجيل الخروج">Logout</a>
             </div>
         </div>
@@ -1820,10 +1823,10 @@
         }
         
         function checkLocalStorage() {
-            const localTrips = localStorage.getItem('pending_trips_for_nurse');
-            if (localTrips) {
+            const cached = DataCache.getPendingTripsForNurse();
+            if (cached) {
                 try {
-                    const trips = JSON.parse(localTrips);
+                    const trips = cached.trips;
                     addDiagMessage('info', `   localStorage has ${trips.length} trips`);
                     trips.forEach((trip, i) => {
                         addDiagMessage('info', `   Local Trip ${i+1}: ${trip.driverName}, status=${trip.status}`);
@@ -2396,7 +2399,7 @@
                 filtered = filtered.filter(t => !_recentlySubmittedTripIds.has(t.tripId));
             }
             currentPendingTrips = filtered;
-            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+            DataCache.setPendingTripsForNurse(currentPendingTrips);
             // Update last-refresh timestamp whenever trips data arrives
             if (typeof updateRefreshTimestamp === 'function') updateRefreshTimestamp();
 
@@ -3026,7 +3029,7 @@
                 if (tripIndex !== -1) {
                     // Remove from array and re-render synchronously — zero delay
                     currentPendingTrips.splice(tripIndex, 1);
-                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+                    DataCache.setPendingTripsForNurse(currentPendingTrips);
                     const totalPages = Math.ceil(currentPendingTrips.length / NURSE_PENDING_PER_PAGE);
                     if (nursePendingPage > totalPages && totalPages > 0) nursePendingPage = totalPages;
                     renderNursePendingPage();
@@ -3171,6 +3174,8 @@
                 'cache_nurse_data_' + _invYear + '_' + _invMonth,
                 'cache_nurse_data_' + _invYear + '_all'
             );
+            // Signal admin page (open in another tab) to refresh its data
+            DataCache.signalCacheInvalidation('nurse_submit');
             
             // Scroll to records to show the entry
             setTimeout(() => {
@@ -4334,6 +4339,9 @@
 
                     if (userData.type === 'admin') {
                         document.getElementById('externalSupportGroup').style.display = 'block';
+                        // Show Back to Admin button — admin only
+                        var backBtn = document.getElementById('backToAdminBtn');
+                        if (backBtn) backBtn.style.display = 'flex';
                     }
                     
                     // Store for later use
@@ -4559,36 +4567,58 @@
         }
         
         // Show pending trips — prioritise the FAST lightweight fetch over the heavy one.
+        // Smart stale-flash prevention: if cached data is old (>45s), defer display until
+        // the fast fetch resolves so users never see outdated trips flash on screen.
         (async function showPendingTripsFromBestSource() {
             try {
-                // Step 1: Show cached data immediately (zero-delay) so the section is never empty
+                // Step 1: Check cached data age before deciding to show it
                 var shownFromCache = false;
-                var localTrips = localStorage.getItem('pending_trips_for_nurse');
-                if (localTrips) {
-                    try {
-                        var trips = JSON.parse(localTrips);
-                        if (Array.isArray(trips)) { displayPendingTrips(trips); shownFromCache = true; }
-                    } catch(e) {}
+                var cachedNurseTrips = DataCache.getPendingTripsForNurse();
+
+                if (cachedNurseTrips && Array.isArray(cachedNurseTrips.trips)) {
+                    if (cachedNurseTrips.isFresh) {
+                        // Fresh cache (< 45s old) — show immediately, no flash risk
+                        displayPendingTrips(cachedNurseTrips.trips);
+                        shownFromCache = true;
+                    } else {
+                        // Stale cache — show with a subtle refreshing badge so users
+                        // know the data is being updated (avoids misleading old data)
+                        displayPendingTrips(cachedNurseTrips.trips);
+                        shownFromCache = true;
+                        var container = document.getElementById('pendingTripsContainer');
+                        if (container) {
+                            var badge = document.createElement('div');
+                            badge.id = '_staleRefreshBadge';
+                            badge.style.cssText = 'text-align:center;padding:6px 10px;font-size:11px;color:#9ca3af;display:flex;align-items:center;justify-content:center;gap:6px;';
+                            badge.innerHTML = '<div style="width:12px;height:12px;border:2px solid #e5e7eb;border-top-color:#6b7280;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>' +
+                                '<span>' + (currentLang === 'en' ? 'Checking for updates...' : 'جاري التحقق من التحديثات...') + '</span>';
+                            container.appendChild(badge);
+                        }
+                    }
                 }
+
                 if (!shownFromCache) {
                     var year = new Date().getFullYear();
                     var month = new Date().getMonth() + 1;
                     var cacheKey = 'cache_nurse_data_' + year + '_' + month;
-                    var cached = null;
-                    try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
-                    if (cached && cached.data && cached.data.trips) {
-                        var ct = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    var dcCached = null;
+                    try { dcCached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
+                    if (dcCached && dcCached.data && dcCached.data.trips) {
+                        var ct = dcCached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
                         displayPendingTrips(ct);
                         shownFromCache = true;
                     }
                 }
 
-                // Step 2: Wait for the FAST pending-trips fetch (1-2s) to replace stale cache
+                // Step 2: Wait for the FAST pending-trips fetch (1-2s) — removes stale badge
                 if (window.__earlyNursePendingTrips) {
                     var freshTrips = await Promise.race([
                         window.__earlyNursePendingTrips,
                         new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
                     ]);
+                    // Remove stale badge regardless of outcome
+                    var oldBadge = document.getElementById('_staleRefreshBadge');
+                    if (oldBadge) oldBadge.remove();
                     if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
                         displayPendingTrips(freshTrips);
                         return;
@@ -4601,6 +4631,8 @@
                         window.__earlyNurseFetch,
                         new Promise(function(r) { setTimeout(function() { r(null); }, 500); })
                     ]);
+                    var oldBadge2 = document.getElementById('_staleRefreshBadge');
+                    if (oldBadge2) oldBadge2.remove();
                     if (result && result.trips) {
                         var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
                         displayPendingTrips(nt);
@@ -4623,7 +4655,7 @@
 
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v36';
+            var codeVer = 'v37';
             if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
                 localStorage.setItem('_nurseCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4708,11 +4740,22 @@
         window.addEventListener('storage', function(e) {
             if (e.key === 'pending_trips_for_nurse' && e.newValue) {
                 try {
-                    var trips = JSON.parse(e.newValue);
-                    if (Array.isArray(trips) && trips.length > 0) {
+                    var parsed = JSON.parse(e.newValue);
+                    // Handle both new { trips, ts } format and legacy plain array
+                    var trips = (parsed && parsed.trips) ? parsed.trips : (Array.isArray(parsed) ? parsed : null);
+                    if (trips && trips.length > 0) {
                         smartRefreshNurseData();
                     }
                 } catch(err) {}
+            }
+        });
+
+        // Cross-tab invalidation signal: driver departure/return from another tab
+        // Forces nurse page to refresh pending trips immediately (no waiting for 10s poll)
+        DataCache.listenForInvalidation(function(signal) {
+            if (signal.source === 'driver_trip' || signal.source === 'driver_return') {
+                console.log('[Nurse] Cross-tab signal:', signal.source, '— refreshing pending trips');
+                loadPendingTrips(false, true);
             }
         });
 
@@ -4756,7 +4799,7 @@
                 fetch(WEB_APP_URL + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
                     if (result && result.success && Array.isArray(result.trips)) {
                         var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        DataCache.setPendingTripsForNurse(nt);
                         displayPendingTrips(nt);
                     }
                 }).catch(function() {});

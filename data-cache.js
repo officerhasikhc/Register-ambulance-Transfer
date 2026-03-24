@@ -280,7 +280,7 @@ const DataCache = {
                 fetch(`${webAppUrl}?action=getPendingTrips`).then(r => r.json()).then(result => {
                     if (result && result.success && Array.isArray(result.trips)) {
                         const nt = result.trips.filter(t => t.status !== 'submitted');
-                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        DataCache.setPendingTripsForNurse(nt);
                     }
                 }).catch(() => {})
             );
@@ -360,5 +360,101 @@ const DataCache = {
      */
     invalidateAll() {
         this.clearAll();
+    },
+
+    // ============================================================
+    // PENDING TRIPS FOR NURSE — timestamped storage
+    // Stores { trips: [...], ts: Date.now() } so pages can detect
+    // stale data and decide whether to show it immediately or wait.
+    // ============================================================
+    PENDING_TRIPS_NURSE_KEY: 'pending_trips_for_nurse',
+    PENDING_TRIPS_MAX_AGE_FRESH: 45 * 1000,  // 45s → considered fresh (show immediately)
+
+    /**
+     * Save pending trips with a timestamp for freshness detection.
+     * @param {Array} trips - Array of pending trip objects
+     */
+    setPendingTripsForNurse(trips) {
+        try {
+            localStorage.setItem(this.PENDING_TRIPS_NURSE_KEY, JSON.stringify({
+                trips: trips,
+                ts: Date.now()
+            }));
+        } catch (e) {
+            // fallback: store without wrapper (backwards compat)
+            try { localStorage.setItem(this.PENDING_TRIPS_NURSE_KEY, JSON.stringify(trips)); } catch(e2) {}
+        }
+    },
+
+    /**
+     * Get pending trips for nurse with age metadata.
+     * Returns { trips, ts, age, isFresh } or null.
+     * Handles both the new timestamped format AND the legacy plain-array format.
+     */
+    getPendingTripsForNurse() {
+        try {
+            const raw = localStorage.getItem(this.PENDING_TRIPS_NURSE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed) return null;
+
+            // New format: { trips: [...], ts: number }
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.trips) {
+                const age = Date.now() - (parsed.ts || 0);
+                return {
+                    trips: parsed.trips,
+                    ts: parsed.ts || 0,
+                    age: age,
+                    isFresh: age < this.PENDING_TRIPS_MAX_AGE_FRESH
+                };
+            }
+            // Legacy format: plain array (treat as old)
+            if (Array.isArray(parsed)) {
+                return {
+                    trips: parsed,
+                    ts: 0,
+                    age: Infinity,
+                    isFresh: false
+                };
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    // ============================================================
+    // CROSS-PAGE CACHE INVALIDATION SIGNAL
+    // Pages write a signal to localStorage; other open tabs/pages
+    // listen via the 'storage' event and bust their own caches.
+    // ============================================================
+    INVALIDATION_KEY: '_cache_invalidation_signal',
+
+    /**
+     * Broadcast a cache invalidation signal to other tabs/pages.
+     * @param {string} source - e.g. 'nurse_submit', 'driver_trip', 'admin_edit'
+     */
+    signalCacheInvalidation(source) {
+        try {
+            localStorage.setItem(this.INVALIDATION_KEY, JSON.stringify({
+                source: source,
+                ts: Date.now()
+            }));
+        } catch (e) {}
+    },
+
+    /**
+     * Listen for invalidation signals from other tabs/pages.
+     * @param {function} callback - ({ source, ts }) => void
+     * Called whenever another tab writes a new invalidation signal.
+     */
+    listenForInvalidation(callback) {
+        window.addEventListener('storage', function(e) {
+            if (e.key !== DataCache.INVALIDATION_KEY || !e.newValue) return;
+            try {
+                const signal = JSON.parse(e.newValue);
+                if (signal && signal.source) callback(signal);
+            } catch(err) {}
+        });
     }
 };
