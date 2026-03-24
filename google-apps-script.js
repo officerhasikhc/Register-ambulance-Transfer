@@ -1,9 +1,9 @@
 /**
- * Google Apps Script - Ambulance Activity Log System
+ * Google Apps Script - Ambulance Activity Record System
  * نظام سجل نشاط الإسعاف
  * 
  * Instructions | التعليمات:
- * 1. Create new Google Sheet named "Ambulance Activity Log"
+ * 1. Create new Google Sheet named "Ambulance Activity Record"
  * 2. Go to Extensions > Apps Script
  * 3. Delete existing code and paste this entire file
  * 4. Click Deploy > New deployment
@@ -23,7 +23,7 @@ const CONFIG = {
   NURSE_EMAIL: 'hasikhealthcenter@gmail.com',  // Nurses email - receives driver departure/return notifications
   ADMIN_EMAIL: 'officerhasikhc@gmail.com',     // Admin email - receives approved records and 24h reminders
   TIME_ZONE: 'Asia/Muscat',
-  EMAIL_FROM_NAME: 'Hasik Health Center - Ambulance Log',
+  EMAIL_FROM_NAME: 'Hasik Health Center - Ambulance Record',
   REMINDER_7H_ENABLED: true,   // Send 7-hour reminder to nurses (in English)
   REMINDER_24H_ENABLED: true   // Send 24-hour reminder to admin (in Arabic)
 };
@@ -87,7 +87,8 @@ function setupSheet(year) {
     'Destination',
     'Patient Name',
     'Nurse Name',
-    'Nurse Staff Number'
+    'Nurse Staff Number',
+    'Ext Support'
   ];
   
   // Check if headers exist
@@ -122,6 +123,13 @@ function setupSheet(year) {
       const lastCol = sheet.getLastColumn();
       sheet.getRange(1, lastCol + 1).setValue('Nurse Staff Number');
       sheet.getRange(1, lastCol + 1).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    // Ensure Ext Support column exists (migration)
+    const headersAfterNurse = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headersAfterNurse.indexOf('Ext Support') === -1) {
+      const lastCol2 = sheet.getLastColumn();
+      sheet.getRange(1, lastCol2 + 1).setValue('Ext Support');
+      sheet.getRange(1, lastCol2 + 1).setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold');
     }
   }
   
@@ -222,51 +230,59 @@ function splitRecordsByYear_(oldSheet, years) {
 }
 
 /**
- * Add month separator borders to an existing year-based Records sheet.
- * Adds a thick bottom border on the last row of each month group.
+ * Sort records by Departure Date and apply month separator shading.
+ * Called after migrating records to year-based sheets.
  */
 function addMonthSeparatorsToSheet_(sheet, depDateIdx) {
-  if (sheet.getLastRow() <= 1) return;
-  var data = sheet.getRange(2, depDateIdx + 1, sheet.getLastRow() - 1, 1).getValues();
-  var numCols = sheet.getLastColumn();
-  
-  for (var i = 0; i < data.length - 1; i++) {
-    try {
-      var curMonth = new Date(data[i][0]).getMonth();
-      var nextMonth = new Date(data[i + 1][0]).getMonth();
-      if (curMonth !== nextMonth) {
-        var rowNum = i + 2; // +2 because header row + 0-indexed
-        sheet.getRange(rowNum, 1, 1, numCols).setBorder(null, null, true, null, null, null, '#1e40af', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-      }
-    } catch(e) {}
-  }
+  sortAndFormatSheet_(sheet);
 }
 
 /**
- * Ensure a month separator border is added when appending a new row.
- * Call after appendRow to check if the new row is in a different month than the previous.
+ * After appending a new row: sort by departure date, then shade month boundaries.
  */
 function ensureMonthSeparator(sheet) {
+  sortAndFormatSheet_(sheet);
+}
+
+/**
+ * Core function: sort all data rows by Departure Date, then shade the first
+ * row of each month group with a light tint so months are visually separated.
+ */
+function sortAndFormatSheet_(sheet) {
   var lastRow = sheet.getLastRow();
-  if (lastRow <= 2) return; // Need at least 2 data rows
-  
+  if (lastRow <= 1) return;
+
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var depDateIdx = headers.indexOf('Departure Date');
   if (depDateIdx < 0) return;
-  
+
   var numCols = sheet.getLastColumn();
-  var prevDateVal = sheet.getRange(lastRow - 1, depDateIdx + 1).getValue();
-  var curDateVal = sheet.getRange(lastRow, depDateIdx + 1).getValue();
-  
-  try {
-    var prevMonth = new Date(prevDateVal).getMonth();
-    var curMonth = new Date(curDateVal).getMonth();
-    if (prevMonth !== curMonth) {
-      // Add thick border on bottom of previous row (month boundary)
-      sheet.getRange(lastRow - 1, 1, 1, numCols).setBorder(null, null, true, null, null, null, '#1e40af', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-    }
-  } catch(e) {
-    Logger.log('ensureMonthSeparator error: ' + e.toString());
+  var dataRows = lastRow - 1;
+
+  // 1. Sort data rows by Departure Date (ascending)
+  var dataRange = sheet.getRange(2, 1, dataRows, numCols);
+  dataRange.sort({ column: depDateIdx + 1, ascending: true });
+
+  // 2. Clear all previous borders and backgrounds on data rows
+  dataRange.setBackground(null);
+  dataRange.setBorder(false, false, false, false, false, false);
+
+  // 3. Read departure dates after sorting
+  var dates = sheet.getRange(2, depDateIdx + 1, dataRows, 1).getValues();
+
+  // 4. Shade first row of each new month group
+  var prevMonth = -1;
+  for (var i = 0; i < dates.length; i++) {
+    try {
+      var d = new Date(dates[i][0]);
+      if (isNaN(d.getTime())) continue;
+      var curMonth = d.getMonth();
+      if (curMonth !== prevMonth && prevMonth !== -1) {
+        // This row starts a new month — shade it
+        sheet.getRange(i + 2, 1, 1, numCols).setBackground('#dbeafe');
+      }
+      prevMonth = curMonth;
+    } catch(e) {}
   }
 }
 
@@ -276,6 +292,28 @@ function ensureMonthSeparator(sheet) {
 
 function invalidatePendingTripsCache() {
   try { CacheService.getScriptCache().remove('pending_trips_json'); } catch(e) {}
+}
+
+/**
+ * FAST version: Get next trip ID using cached counter.
+ * Avoids scanning all sheets on every call. Falls back to full scan if cache is empty.
+ */
+function getNextTripIdFast() {
+  const cache = CacheService.getScriptCache();
+  const cachedMax = cache.get('max_trip_id_num');
+  
+  if (cachedMax) {
+    const nextNum = parseInt(cachedMax) + 1;
+    // Update cache with new max (6 hour TTL)
+    cache.put('max_trip_id_num', String(nextNum), 21600);
+    return 'R' + String(nextNum).padStart(3, '0');
+  }
+  
+  // Cache miss — do full scan, then cache the result
+  const fullId = getNextTripId();
+  const num = parseInt(String(fullId).replace(/\D/g, '')) || 1;
+  cache.put('max_trip_id_num', String(num), 21600);
+  return fullId;
 }
 
 /**
@@ -348,9 +386,6 @@ function doGet(e) {
       case 'getNurseData':
         return getNurseData(e.parameter);
       
-      case 'diagnosePendingTrips':
-        return diagnosePendingTrips();
-      
       case 'deletePendingTrip':
         return deletePendingTrip(e.parameter.tripId);
       
@@ -386,11 +421,52 @@ function doGet(e) {
       case 'getSettings':
         return getSystemSettings();
       
+      case 'getDriverInspections':
+        return getDriverInspections(e.parameter);
+
+      case 'getWeeklyInspections':
+        return getWeeklyInspections(e.parameter);
+
       case 'checkReminders':
         checkPendingTripsAndSendReminders();
         return ContentService
           .createTextOutput(JSON.stringify({ success: true, message: 'Reminders checked and sent if needed' }))
           .setMimeType(ContentService.MimeType.JSON);
+      
+      case 'postViaGet': {
+        // GET-based fallback for POST operations.
+        // Solves CORS/redirect failures in PWA/installed app contexts.
+        // Data is sent as a URL-encoded JSON payload parameter.
+        var payload = e.parameter.payload;
+        if (!payload) {
+          return ContentService.createTextOutput(JSON.stringify({
+            success: false, error: 'Missing payload parameter'
+          })).setMimeType(ContentService.MimeType.JSON);
+        }
+        var postData;
+        try {
+          postData = JSON.parse(decodeURIComponent(payload));
+        } catch (parseErr) {
+          try { postData = JSON.parse(payload); } catch(e2) {
+            return ContentService.createTextOutput(JSON.stringify({
+              success: false, error: 'Invalid payload: ' + parseErr.toString()
+            })).setMimeType(ContentService.MimeType.JSON);
+          }
+        }
+        var postAction = postData.action;
+        Logger.log('postViaGet routing action: ' + postAction);
+        switch (postAction) {
+          case 'submitCase':      return submitCase(postData);
+          case 'driverDeparture':       return recordDriverDeparture(postData);
+          case 'driverReturn':          return recordDriverReturn(postData);
+          case 'updateRecord':          return updateRecord(postData);
+          case 'submitInspectionWeek':  return submitInspectionWeek(postData);
+          default:
+            return ContentService.createTextOutput(JSON.stringify({
+              success: false, error: 'Action not supported via GET: ' + postAction
+            })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
       
       default:
         return ContentService
@@ -458,7 +534,13 @@ function doPost(e) {
       
       case 'saveSettings':
         return saveSystemSettings(data);
-      
+
+      case 'generatePdf':
+        return generatePdfFromHtml(data);
+
+      case 'submitInspectionWeek':
+        return submitInspectionWeek(data);
+
       default:
         return ContentService
           .createTextOutput(JSON.stringify({
@@ -485,7 +567,7 @@ function doPost(e) {
  * Submit new ambulance case
  */
 function submitCase(data) {
-  Logger.log('submitCase called with data: ' + JSON.stringify(data));
+  Logger.log('submitCase called');
   
   try {
     // Use lock to prevent duplicate processing from simultaneous requests
@@ -496,92 +578,119 @@ function submitCase(data) {
     const depYear = data.departureDate ? new Date(data.departureDate).getFullYear() : new Date().getFullYear();
     const sheet = setupSheet(depYear);
     
-    // Check if this case was already submitted (duplicate protection)
-    const existingData = sheet.getDataRange().getValues();
-    for (let i = 1; i < existingData.length; i++) {
-      if (existingData[i][3] === (data.driverName || '') && 
-          existingData[i][4] === (data.staffNumber || '') && 
-          existingData[i][5] === (data.departureDate || '') && 
-          existingData[i][6] === (data.departureTime || '')) {
-        // Already submitted - return success without sending emails again
-        lock.releaseLock();
-        Logger.log('Duplicate submitCase detected, skipping');
-        return ContentService
-          .createTextOutput(JSON.stringify({
-            success: true,
-            message: 'Case already submitted',
-            id: existingData[i][0],
-            duplicate: true
-          }))
-          .setMimeType(ContentService.MimeType.JSON);
+    // FAST duplicate check: only scan last 20 rows instead of entire sheet
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const checkRows = Math.min(20, lastRow - 1);
+      const startRow = lastRow - checkRows + 1;
+      const recentData = sheet.getRange(startRow, 1, checkRows, 7).getValues();
+      for (let i = 0; i < recentData.length; i++) {
+        if (recentData[i][3] === (data.driverName || '') && 
+            recentData[i][4] === (data.staffNumber || '') && 
+            recentData[i][5] === (data.departureDate || '') && 
+            recentData[i][6] === (data.departureTime || '')) {
+          lock.releaseLock();
+          Logger.log('Duplicate submitCase detected, skipping');
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true,
+              message: 'Case already submitted',
+              id: recentData[i][0],
+              duplicate: true
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
       }
     }
     
-    // Use the pending trip's ID if provided, otherwise generate a new one
-    const id = data.tripId ? data.tripId : getNextTripId();
+    // Use the pending trip's ID if provided, otherwise generate with cache
+    const id = data.tripId ? data.tripId : getNextTripIdFast();
+    // If client provided a tripId, update server cache so future IDs don't collide
+    if (data.tripId) {
+      try {
+        const clientNum = parseInt(String(data.tripId).replace(/\D/g, '')) || 0;
+        const cache = CacheService.getScriptCache();
+        const currentMax = parseInt(cache.get('max_trip_id_num')) || 0;
+        if (clientNum > currentMax) {
+          cache.put('max_trip_id_num', String(clientNum), 21600);
+        }
+      } catch(e) {}
+    }
     const timestamp = new Date();
     
-    const rowData = [
-      id,
-      Utilities.formatDate(timestamp, CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
-      data.vehicleNumber || '',
-      data.driverName || '',
-      data.staffNumber || '',
-      data.departureDate || '',
-      data.departureTime || '',
-      data.returnDate || '',
-      data.returnTime || '',
-      data.destination || '',
-      data.patientName || '',
-      data.nurseName || '',
-      data.nurseStaffNumber || ''
-    ];
+    var dataMap = {
+      'ID': id,
+      'Timestamp': Utilities.formatDate(timestamp, CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
+      'Vehicle Number': data.vehicleNumber || '',
+      'Driver Name': data.driverName || '',
+      'Staff Number': data.staffNumber || '',
+      'Departure Date': data.departureDate || '',
+      'Departure Time': data.departureTime || '',
+      'Return Date': data.returnDate || '',
+      'Return Time': data.returnTime || '',
+      'Destination': data.destination || '',
+      'Patient Name': data.patientName || '',
+      'Nurse Name': data.nurseName || '',
+      'Nurse Staff Number': data.nurseStaffNumber || '',
+      'Ext Support': data.extSupport || ''
+    };
+    var sheetHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var rowData = sheetHeaders.map(function(h) {
+      return dataMap[h] !== undefined ? dataMap[h] : '';
+    });
     
-    // Append to sheet
+    // Append to sheet — this is the critical save operation
     sheet.appendRow(rowData);
     
-    // Add month separator if crossing month boundary
-    ensureMonthSeparator(sheet);
-    
-    // Send email to admin only (nurses don't need email on submission)
-    const emailResults = {
-      adminEmail: false
-    };
-    
-    Logger.log('Attempting to send admin email...');
-    Logger.log('Admin email target: ' + CONFIG.ADMIN_EMAIL);
-    
-    try {
-      sendAdminEmail(data);
-      emailResults.adminEmail = true;
-      Logger.log('Admin email sent successfully');
-    } catch (emailError) {
-      Logger.log('Admin email error: ' + emailError.toString());
-      emailResults.adminEmailError = emailError.toString();
-    }
-    
-    // Mark the pending trip as 'submitted' so admin can see the status change
-    try {
-      if (data.tripId) {
-        markTripAsSubmitted(data.tripId);
-        Logger.log('Pending trip marked as submitted: ' + data.tripId);
-      } else {
-        // Fallback: try to find by staff number and date
-        deletePendingTripByStaffNumber(data.staffNumber, data.departureDate);
-        Logger.log('Pending trip deleted for staff: ' + data.staffNumber);
+    // Mark pending trip as submitted SYNCHRONOUSLY (before response)
+    // This ensures the next getNurseData call won't return this trip as pending
+    let tripMarkedSubmitted = false;
+    if (data.tripId) {
+      try {
+        tripMarkedSubmitted = markTripAsSubmitted(data.tripId);
+        if (tripMarkedSubmitted) {
+          Logger.log('Pending trip ' + data.tripId + ' marked as submitted (sync)');
+        }
+      } catch (markErr) {
+        Logger.log('markTripAsSubmitted sync error (will retry in deferred): ' + markErr.toString());
       }
-    } catch (deleteError) {
-      Logger.log('Error updating pending trip: ' + deleteError.toString());
     }
     
     lock.releaseLock();
+    
+    // Schedule deferred tasks (email, month separator, pending trip update if not already done)
+    // These run in a separate trigger execution so the response returns FAST
+    try {
+      const props = PropertiesService.getScriptProperties();
+      const taskData = JSON.stringify({
+        data: data,
+        id: id,
+        depYear: depYear,
+        tripAlreadyMarked: tripMarkedSubmitted
+      });
+      
+      // Store task in properties (accessible by trigger in separate execution)
+      const existingQueue = props.getProperty('deferred_submit_queue') || '[]';
+      const queue = JSON.parse(existingQueue);
+      queue.push(taskData);
+      props.setProperty('deferred_submit_queue', JSON.stringify(queue));
+      
+      // Create a time trigger to process deferred tasks
+      ScriptApp.newTrigger('processDeferredSubmit')
+        .timeBased()
+        .after(1)
+        .create();
+    } catch (deferErr) {
+      // If trigger setup fails, run cleanup inline as fallback
+      Logger.log('Deferred trigger failed, running inline: ' + deferErr.toString());
+      _runSubmitCleanup(data, id, depYear, tripMarkedSubmitted);
+    }
     
     return ContentService
       .createTextOutput(JSON.stringify({
         success: true,
         message: 'Case submitted successfully',
-        id: id,
-        emailsSent: emailResults
+        id: id
       }))
       .setMimeType(ContentService.MimeType.JSON);
       
@@ -592,6 +701,112 @@ function submitCase(data) {
         error: error.toString()
       }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Process deferred submit tasks (email, month separator, pending trip update)
+ * Called by time-based trigger after submitCase returns its response to the client
+ */
+function processDeferredSubmit() {
+  try {
+    // Clean up all processDeferredSubmit triggers to avoid accumulation
+    const triggers = ScriptApp.getProjectTriggers();
+    for (let i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'processDeferredSubmit') {
+        try { ScriptApp.deleteTrigger(triggers[i]); } catch(e) {}
+      }
+    }
+    
+    // Read and clear the task queue
+    const props = PropertiesService.getScriptProperties();
+    const queueJson = props.getProperty('deferred_submit_queue');
+    props.deleteProperty('deferred_submit_queue');
+    
+    if (!queueJson) return;
+    const queue = JSON.parse(queueJson);
+    
+    for (const taskJson of queue) {
+      try {
+        const task = JSON.parse(taskJson);
+        _runSubmitCleanup(task.data, task.id, task.depYear, task.tripAlreadyMarked);
+        Logger.log('Deferred cleanup completed for: ' + task.id);
+      } catch (e) {
+        Logger.log('Error processing deferred task: ' + e.toString());
+      }
+    }
+  } catch (e) {
+    Logger.log('processDeferredSubmit error: ' + e.toString());
+  }
+}
+
+/**
+ * Run the cleanup tasks for a submitted case (email, month separator, pending trip)
+ */
+function _runSubmitCleanup(data, id, depYear, tripAlreadyMarked) {
+  // 1. Month separator
+  try {
+    const sheet = setupSheet(depYear);
+    ensureMonthSeparator(sheet);
+  } catch (e) {
+    Logger.log('Month separator error: ' + e.toString());
+  }
+  
+  // 2. Send admin email
+  try {
+    sendAdminEmail(data);
+    Logger.log('Admin email sent for ' + id);
+  } catch (e) {
+    Logger.log('Admin email error for ' + id + ': ' + e.toString());
+  }
+  
+  // 3. Update pending trip status (skip if already marked synchronously in submitCase)
+  try {
+    if (tripAlreadyMarked) {
+      Logger.log('Pending trip ' + (data.tripId || '') + ' already marked submitted (sync), skipping');
+    } else if (data.tripId) {
+      markTripAsSubmitted(data.tripId);
+    } else {
+      deletePendingTripByStaffNumber(data.staffNumber, data.departureDate);
+    }
+  } catch (e) {
+    Logger.log('Pending trip update error: ' + e.toString());
+  }
+}
+
+/**
+ * Process deferred return email tasks
+ * Called by time-based trigger after recordDriverReturn returns its response
+ */
+function processDeferredReturnEmail() {
+  try {
+    // Clean up all processDeferredReturnEmail triggers
+    const triggers = ScriptApp.getProjectTriggers();
+    for (let i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'processDeferredReturnEmail') {
+        try { ScriptApp.deleteTrigger(triggers[i]); } catch(e) {}
+      }
+    }
+    
+    // Read and clear the task queue
+    const props = PropertiesService.getScriptProperties();
+    const queueJson = props.getProperty('deferred_return_email_queue');
+    props.deleteProperty('deferred_return_email_queue');
+    
+    if (!queueJson) return;
+    const queue = JSON.parse(queueJson);
+    
+    for (const taskJson of queue) {
+      try {
+        const tripData = JSON.parse(taskJson);
+        sendTripCompleteEmailToNurse(tripData);
+        Logger.log('Deferred return email sent for trip: ' + tripData.tripId);
+      } catch (e) {
+        Logger.log('Error sending deferred return email: ' + e.toString());
+      }
+    }
+  } catch (e) {
+    Logger.log('processDeferredReturnEmail error: ' + e.toString());
   }
 }
 
@@ -672,11 +887,15 @@ function getAllRecords(params) {
       const usersData = usersSheet.getDataRange().getValues();
       var staffToNameEn = {};
       var staffToNameAr = {};
+      var adminNameEn = '';
+      var adminNameAr = '';
       for (var u = 1; u < usersData.length; u++) {
         var sNum = (usersData[u][4] || '').toString().trim();
         var civilId = (usersData[u][5] || '').toString().trim();
         var uNameEn = (usersData[u][3] || '').toString().trim();
         var uNameAr = (usersData[u][2] || '').toString().trim();
+        var uType = (usersData[u][1] || '').toString().trim().toLowerCase();
+        var uActive = (usersData[u][7] || '').toString().trim();
         if (sNum) {
           staffToNameEn[sNum] = uNameEn;
           staffToNameAr[sNum] = uNameAr;
@@ -685,17 +904,33 @@ function getAllRecords(params) {
           staffToNameEn[civilId] = uNameEn;
           staffToNameAr[civilId] = uNameAr;
         }
+        if (uType === 'admin' && (uActive === 'true' || uActive === true) && !adminNameEn) {
+          adminNameEn = uNameEn;
+          adminNameAr = uNameAr;
+        }
       }
       records.forEach(function(r) {
-        // Resolve Nurse Name
         var nurseStaff = (r['Nurse Staff Number'] || '').toString().trim();
         var nurseName = (r['Nurse Name'] || '').toString().trim();
-        if (nurseStaff && staffToNameEn[nurseStaff]) {
+        var extCol = (r['Ext Support'] || '').toString().trim();
+        var isExtRecord = !!extCol || nurseName.indexOf('[External Support]') === 0 || nurseStaff === 'EXT_SUPPORT';
+        if (isExtRecord) {
+          if (!r['Ext Support'] && nurseName.indexOf('[External Support]') === 0) {
+            var content = nurseName.replace('[External Support]', '').trim();
+            r['Ext Support'] = content || 'External Support';
+          }
+          // Resolve admin name: replace [External Support]... with admin's real name
+          if (nurseName.indexOf('[External Support]') === 0 || !nurseName || nurseName === 'Admin') {
+            r['Nurse Name'] = adminNameEn || adminNameAr || nurseName || 'Admin';
+          }
+          if (nurseStaff !== 'EXT_SUPPORT') {
+            r['Nurse Staff Number'] = 'EXT_SUPPORT';
+          }
+        } else if (nurseStaff && staffToNameEn[nurseStaff]) {
           r['Nurse Name'] = staffToNameEn[nurseStaff] || staffToNameAr[nurseStaff] || nurseName;
         } else if (nurseName && /^\d+$/.test(nurseName) && staffToNameEn[nurseName]) {
           r['Nurse Name'] = staffToNameEn[nurseName] || staffToNameAr[nurseName] || nurseName;
         }
-        // Resolve Driver Name
         var driverStaff = (r['Staff Number'] || '').toString().trim();
         if (driverStaff && staffToNameEn[driverStaff]) {
           r['Driver Name'] = staffToNameEn[driverStaff] || staffToNameAr[driverStaff] || r['Driver Name'];
@@ -825,13 +1060,12 @@ function deleteRecordWithNotification(data) {
           Logger.log('Error cleaning PendingTrips: ' + pendingError.toString());
         }
         
-        // Send notification email to nurses
-        sendDeleteNotificationEmail(record, data.reason, 'deleted');
+        // No email to nurses on deletion — nurses don't need to know about admin deletions
         
         return ContentService
           .createTextOutput(JSON.stringify({
             success: true,
-            message: 'Record deleted successfully and notification sent'
+            message: 'Record deleted successfully'
           }))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -883,29 +1117,36 @@ function updateRecord(data) {
     
     if (sheet && foundRow >= 0) {
       var i = foundRow;
-      // Preserve existing Nurse Name and Nurse Staff Number if not provided in update
+      // Preserve existing values if not provided in update
       const existingNurseName = sheetData[i][headers.indexOf('Nurse Name')] || '';
       const nurseName = (data.nurseName && data.nurseName.trim()) ? data.nurseName : existingNurseName;
       const nurseStaffIdx = headers.indexOf('Nurse Staff Number');
       const existingNurseStaff = nurseStaffIdx >= 0 ? (sheetData[i][nurseStaffIdx] || '') : '';
       const nurseStaffNumber = (data.nurseStaffNumber && data.nurseStaffNumber.trim()) ? data.nurseStaffNumber : existingNurseStaff;
+      const extSupportIdx = headers.indexOf('Ext Support');
+      const existingExtSupport = extSupportIdx >= 0 ? (sheetData[i][extSupportIdx] || '') : '';
+      const extSupport = (data.extSupport !== undefined) ? (data.extSupport || '') : existingExtSupport;
       
-      // Update the row with new data
-      const rowData = [
-        data.id, // ID stays the same
-        Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'), // Update timestamp
-        data.vehicleNumber || '',
-        data.driverName || '',
-        data.staffNumber || '',
-        data.departureDate || '',
-        data.departureTime || '',
-        data.returnDate || '',
-        data.returnTime || '',
-        data.destination || '',
-        data.patientName || '',
-        nurseName,
-        nurseStaffNumber
-      ];
+      // Build update using header-based mapping (handles extra columns gracefully)
+      var updateMap = {
+        'ID': data.id,
+        'Timestamp': Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
+        'Vehicle Number': data.vehicleNumber || '',
+        'Driver Name': data.driverName || '',
+        'Staff Number': data.staffNumber || '',
+        'Departure Date': data.departureDate || '',
+        'Departure Time': data.departureTime || '',
+        'Return Date': data.returnDate || '',
+        'Return Time': data.returnTime || '',
+        'Destination': data.destination || '',
+        'Patient Name': data.patientName || '',
+        'Nurse Name': nurseName,
+        'Nurse Staff Number': nurseStaffNumber,
+        'Ext Support': extSupport
+      };
+      var rowData = headers.map(function(h, ci) {
+        return updateMap[h] !== undefined ? updateMap[h] : (sheetData[i][ci] || '');
+      });
       
       // Update the row (i+1 because sheet rows are 1-indexed)
       sheet.getRange(i + 1, 1, 1, rowData.length).setValues([rowData]);
@@ -1014,13 +1255,12 @@ function archiveRecord(data) {
           Logger.log('Error cleaning PendingTrips during archive: ' + pendingError.toString());
         }
         
-        // Send notification email to nurses
-        sendDeleteNotificationEmail(record, data.reason, 'archived');
+        // No email to nurses on archive — nurses don't need to know about admin archiving
         
         return ContentService
           .createTextOutput(JSON.stringify({
             success: true,
-            message: 'Record archived successfully and notification sent'
+            message: 'Record archived successfully'
           }))
           .setMimeType(ContentService.MimeType.JSON);
     }
@@ -1048,7 +1288,7 @@ function sendDeleteNotificationEmail(record, reason, actionType) {
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: ${actionType === 'archived' ? '#4338ca' : '#dc2626'}; color: white; padding: 20px; text-align: center;">
-        <h1 style="margin: 0;">Ambulance Activity Log</h1>
+        <h1 style="margin: 0;">Ambulance Activity Record</h1>
         <p style="margin: 5px 0 0 0;">Record ${actionText} Notification</p>
       </div>
       
@@ -1079,13 +1319,13 @@ function sendDeleteNotificationEmail(record, reason, actionType) {
           </tr>
           <tr>
             <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">Registered By:</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${record['Nurse Name']}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${record['Nurse Name'] || ''}</td>
           </tr>
         </table>
       </div>
       
       <div style="background: #eff6ff; padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-        <p style="margin: 0;">This is an automated notification from Hasik Health Center Ambulance Log System</p>
+        <p style="margin: 0;">This is an automated notification from Hasik Health Center Ambulance Record System</p>
       </div>
     </div>
   `;
@@ -1238,11 +1478,15 @@ function getAdminData(params) {
         const usersData = usersSheet.getDataRange().getValues();
         var staffToNameEn = {};
         var staffToNameAr = {};
+        var adminNameEn = '';
+        var adminNameAr = '';
         for (var u = 1; u < usersData.length; u++) {
           var sNum = (usersData[u][4] || '').toString().trim();
           var civilId = (usersData[u][5] || '').toString().trim();
           var uNameEn = (usersData[u][3] || '').toString().trim();
           var uNameAr = (usersData[u][2] || '').toString().trim();
+          var uType = (usersData[u][1] || '').toString().trim().toLowerCase();
+          var uActive = (usersData[u][7] || '').toString().trim();
           if (sNum) {
             staffToNameEn[sNum] = uNameEn;
             staffToNameAr[sNum] = uNameAr;
@@ -1251,17 +1495,33 @@ function getAdminData(params) {
             staffToNameEn[civilId] = uNameEn;
             staffToNameAr[civilId] = uNameAr;
           }
+          if (uType === 'admin' && (uActive === 'true' || uActive === true) && !adminNameEn) {
+            adminNameEn = uNameEn;
+            adminNameAr = uNameAr;
+          }
         }
         records.forEach(function(r) {
-          // Resolve Nurse Name
           var nurseStaff = (r['Nurse Staff Number'] || '').toString().trim();
           var nurseName = (r['Nurse Name'] || '').toString().trim();
-          if (nurseStaff && staffToNameEn[nurseStaff]) {
+          var extCol = (r['Ext Support'] || '').toString().trim();
+          var isExtRecord = !!extCol || nurseName.indexOf('[External Support]') === 0 || nurseStaff === 'EXT_SUPPORT';
+          if (isExtRecord) {
+            if (!r['Ext Support'] && nurseName.indexOf('[External Support]') === 0) {
+              var content = nurseName.replace('[External Support]', '').trim();
+              r['Ext Support'] = content || 'External Support';
+            }
+            // Resolve admin name: replace [External Support]... with admin's real name
+            if (nurseName.indexOf('[External Support]') === 0 || !nurseName || nurseName === 'Admin') {
+              r['Nurse Name'] = adminNameEn || adminNameAr || nurseName || 'Admin';
+            }
+            if (nurseStaff !== 'EXT_SUPPORT') {
+              r['Nurse Staff Number'] = 'EXT_SUPPORT';
+            }
+          } else if (nurseStaff && staffToNameEn[nurseStaff]) {
             r['Nurse Name'] = staffToNameEn[nurseStaff] || staffToNameAr[nurseStaff] || nurseName;
           } else if (nurseName && /^\d+$/.test(nurseName) && staffToNameEn[nurseName]) {
             r['Nurse Name'] = staffToNameEn[nurseName] || staffToNameAr[nurseName] || nurseName;
           }
-          // Resolve Driver Name
           var driverStaff = (r['Staff Number'] || '').toString().trim();
           if (driverStaff && staffToNameEn[driverStaff]) {
             r['Driver Name'] = staffToNameEn[driverStaff] || staffToNameAr[driverStaff] || r['Driver Name'];
@@ -1385,12 +1645,16 @@ function getNurseData(params) {
         const usersData = usersSheet.getDataRange().getValues();
         var staffToNameEn = {};
         var staffToNameAr = {};
+        var adminNameEn = '';
+        var adminNameAr = '';
         var nameEnToCurrentEn = {};  // old/current nameEn (lowercase) → current nameEn
         for (var u = 1; u < usersData.length; u++) {
           var sNum = (usersData[u][4] || '').toString().trim();
           var civilId = (usersData[u][5] || '').toString().trim();
           var uNameEn = (usersData[u][3] || '').toString().trim();
           var uNameAr = (usersData[u][2] || '').toString().trim();
+          var uType = (usersData[u][1] || '').toString().trim().toLowerCase();
+          var uActive = (usersData[u][7] || '').toString().trim();
           if (sNum) {
             staffToNameEn[sNum] = uNameEn;
             staffToNameAr[sNum] = uNameAr;
@@ -1399,21 +1663,37 @@ function getNurseData(params) {
             staffToNameEn[civilId] = uNameEn;
             staffToNameAr[civilId] = uNameAr;
           }
+          if (uType === 'admin' && (uActive === 'true' || uActive === true) && !adminNameEn) {
+            adminNameEn = uNameEn;
+            adminNameAr = uNameAr;
+          }
           // Build reverse map: any known English name → current English name
           if (uNameEn) {
             nameEnToCurrentEn[uNameEn.toLowerCase()] = uNameEn;
           }
         }
         records.forEach(function(r) {
-          // Resolve Nurse Name
           var nurseStaff = (r['Nurse Staff Number'] || '').toString().trim();
           var nurseName = (r['Nurse Name'] || '').toString().trim();
-          if (nurseStaff && staffToNameEn[nurseStaff]) {
+          var extCol = (r['Ext Support'] || '').toString().trim();
+          var isExtRecord = !!extCol || nurseName.indexOf('[External Support]') === 0 || nurseStaff === 'EXT_SUPPORT';
+          if (isExtRecord) {
+            if (!r['Ext Support'] && nurseName.indexOf('[External Support]') === 0) {
+              var content = nurseName.replace('[External Support]', '').trim();
+              r['Ext Support'] = content || 'External Support';
+            }
+            // Resolve admin name: replace [External Support]... with admin's real name
+            if (nurseName.indexOf('[External Support]') === 0 || !nurseName || nurseName === 'Admin') {
+              r['Nurse Name'] = adminNameEn || adminNameAr || nurseName || 'Admin';
+            }
+            if (nurseStaff !== 'EXT_SUPPORT') {
+              r['Nurse Staff Number'] = 'EXT_SUPPORT';
+            }
+          } else if (nurseStaff && staffToNameEn[nurseStaff]) {
             r['Nurse Name'] = staffToNameEn[nurseStaff] || staffToNameAr[nurseStaff] || nurseName;
           } else if (nurseName && /^\d+$/.test(nurseName) && staffToNameEn[nurseName]) {
             r['Nurse Name'] = staffToNameEn[nurseName] || staffToNameAr[nurseName] || nurseName;
           }
-          // Resolve Driver Name
           var driverStaff = (r['Staff Number'] || '').toString().trim();
           if (driverStaff && staffToNameEn[driverStaff]) {
             r['Driver Name'] = staffToNameEn[driverStaff] || staffToNameAr[driverStaff] || r['Driver Name'];
@@ -1542,13 +1822,13 @@ function sendNurseEmail(data) {
   const destination = data.destination || data['Destination'] || 'N/A';
   const nurseName = data.nurseName || data['Nurse Name'] || 'N/A';
   const patientName = data.patientName || data['Patient Name'] || 'N/A';
-  
+
   const subject = `New Ambulance Case - Vehicle ${vehicleNumber}`;
   
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: #1e40af; color: white; padding: 20px; text-align: center;">
-        <h1 style="margin: 0;">Ambulance Activity Log</h1>
+        <h1 style="margin: 0;">Ambulance Activity Record</h1>
         <p style="margin: 5px 0 0 0;">Hasik Health Center - Ministry of Health</p>
       </div>
       
@@ -1592,7 +1872,7 @@ function sendNurseEmail(data) {
       </div>
       
       <div style="background: #eff6ff; padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-        <p style="margin: 0;">This is an automated notification from Hasik Health Center Ambulance Log System</p>
+        <p style="margin: 0;">This is an automated notification from Hasik Health Center Ambulance Record System</p>
       </div>
     </div>
   `;
@@ -1628,7 +1908,7 @@ function sendAdminEmail(data) {
   const destination = data.destination || data['Destination'] || 'N/A';
   const patientName = data.patientName || data['Patient Name'] || 'N/A';
   const nurseName = data.nurseName || data['Nurse Name'] || 'N/A';
-  
+
   const subject = 'New Ambulance Case - ' + vehicleNumber;
   
   const htmlBody = `
@@ -1753,8 +2033,30 @@ function recordDriverDeparture(data) {
       sheet.setFrozenRows(1);
     }
     
-    // Generate sequential trip ID using global counter across all sheets
-    const tripId = getNextTripId();
+    // Use client-predicted trip ID if valid, otherwise generate server-side
+    let tripId;
+    if (data.tripId) {
+      const clientNum = parseInt(String(data.tripId).replace(/\D/g, '')) || 0;
+      const cache = CacheService.getScriptCache();
+      let currentMax = parseInt(cache.get('max_trip_id_num')) || 0;
+      // If cache is empty, do a full scan to get accurate max before comparing
+      if (currentMax === 0) {
+        const fullNextId = getNextTripId();
+        currentMax = (parseInt(String(fullNextId).replace(/\D/g, '')) || 1) - 1;
+        cache.put('max_trip_id_num', String(currentMax), 21600);
+      }
+      if (clientNum > currentMax) {
+        // Client ID is ahead — use it and update server cache
+        tripId = data.tripId;
+        cache.put('max_trip_id_num', String(clientNum), 21600);
+      } else {
+        // Client ID is stale (≤ server max) — generate a fresh one to avoid duplicates
+        tripId = getNextTripIdFast();
+        Logger.log('Client predicted ' + data.tripId + ' but server max is R' + String(currentMax).padStart(3,'0') + ', using ' + tripId);
+      }
+    } else {
+      tripId = getNextTripIdFast();
+    }
     const timestamp = new Date();
     
     // Add new trip
@@ -1833,40 +2135,63 @@ function recordDriverReturn(data) {
         const rowStatus = values[i][9] ? values[i][9].toString().trim() : '';
         
         if (rowStaffNumber === staffNumberStr && rowStatus === 'pending') {
-          // Update return date, time, and status (columns 8, 9, 10 in 1-indexed)
-          sheet.getRange(i + 1, 8).setValue(data.returnDate);
-          sheet.getRange(i + 1, 9).setValue(data.returnTime);
-          sheet.getRange(i + 1, 10).setValue('complete');
+          // Batch update: return date + time + status in ONE write (instead of 3 separate setValue calls)
+          sheet.getRange(i + 1, 8, 1, 3).setValues([[data.returnDate, data.returnTime, 'complete']]);
           
           Logger.log('Updated row ' + (i + 1) + ' with returnDate=' + data.returnDate + ', returnTime=' + data.returnTime);
           
-          // Get trip details for email - using correct column indices
-          const tripData = {
-            tripId: values[i][0],
-            vehicleNumber: values[i][1],
-            driverName: values[i][2],
-            driverNameAr: values[i][3],
-            staffNumber: values[i][4],
-            departureDate: values[i][5],
-            departureTime: values[i][6],
-            returnDate: data.returnDate,
-            returnTime: data.returnTime
-          };
-          
-          // Send email to nurses
-          try {
-            sendTripCompleteEmailToNurse(tripData);
-            Logger.log('Email sent to nurses for trip: ' + tripData.tripId);
-          } catch (emailError) {
-            Logger.log('Failed to send email to nurses: ' + emailError.toString());
-          }
+          const foundTripId = values[i][0];
           
           lock.releaseLock();
           invalidatePendingTripsCache();
+          
+          // Defer email to background trigger (don't block the response)
+          try {
+            const tripData = {
+              tripId: foundTripId,
+              vehicleNumber: values[i][1],
+              driverName: values[i][2],
+              driverNameAr: values[i][3],
+              staffNumber: values[i][4],
+              departureDate: values[i][5],
+              departureTime: values[i][6],
+              returnDate: data.returnDate,
+              returnTime: data.returnTime
+            };
+            const props = PropertiesService.getScriptProperties();
+            const existingQueue = props.getProperty('deferred_return_email_queue') || '[]';
+            const queue = JSON.parse(existingQueue);
+            queue.push(JSON.stringify(tripData));
+            props.setProperty('deferred_return_email_queue', JSON.stringify(queue));
+            
+            ScriptApp.newTrigger('processDeferredReturnEmail')
+              .timeBased()
+              .after(1)
+              .create();
+          } catch (deferErr) {
+            // Fallback: send email inline if trigger fails
+            Logger.log('Deferred email trigger failed, sending inline: ' + deferErr.toString());
+            try {
+              sendTripCompleteEmailToNurse({
+                tripId: foundTripId,
+                vehicleNumber: values[i][1],
+                driverName: values[i][2],
+                driverNameAr: values[i][3],
+                staffNumber: values[i][4],
+                departureDate: values[i][5],
+                departureTime: values[i][6],
+                returnDate: data.returnDate,
+                returnTime: data.returnTime
+              });
+            } catch (emailErr) {
+              Logger.log('Inline email also failed: ' + emailErr.toString());
+            }
+          }
+          
           return ContentService
             .createTextOutput(JSON.stringify({
               success: true,
-              tripId: values[i][0],
+              tripId: foundTripId,
               message: 'تم تسجيل وقت العودة بنجاح'
             }))
             .setMimeType(ContentService.MimeType.JSON);
@@ -1966,7 +2291,7 @@ function sendTripCompleteEmailToNurse(tripData) {
       </div>
       
       <div style="background: #1e40af; padding: 15px; text-align: center; color: white; font-size: 12px; border-radius: 0 0 10px 10px;">
-        <p style="margin: 0;">Hasik Health Center - Ambulance Activity Log System</p>
+        <p style="margin: 0;">Hasik Health Center - Ambulance Activity Record System</p>
         <p style="margin: 5px 0 0 0; opacity: 0.8;">This is an automated notification</p>
       </div>
     </div>
@@ -2074,10 +2399,13 @@ function markTripAsSubmitted(tripId) {
     const dataRange = sheet.getDataRange();
     const values = dataRange.getValues();
     
+    const tripIdStr = String(tripId).trim();
     for (let i = 1; i < values.length; i++) {
-      if (values[i][0] === tripId) {
+      if (String(values[i][0]).trim() === tripIdStr) {
         // Status is in column 10 (1-indexed) with new structure
         sheet.getRange(i + 1, 10).setValue('submitted');
+        // Invalidate pending trips cache so next fetch shows updated data
+        try { CacheService.getScriptCache().remove('pending_trips_json'); } catch(e) {}
         return true;
       }
     }
@@ -2230,114 +2558,6 @@ function deletePendingTrip(tripId) {
       .createTextOutput(JSON.stringify({
         success: false,
         error: error.toString()
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-/**
- * 🔍 DIAGNOSTIC FUNCTION - دالة التشخيص
- * Returns raw data from PendingTrips sheet for debugging
- */
-function diagnosePendingTrips() {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('PendingTrips');
-    
-    if (!sheet) {
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          success: true,
-          diagnosis: {
-            sheetExists: false,
-            message: 'PendingTrips sheet does not exist'
-          }
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    const lastRow = sheet.getLastRow();
-    const lastCol = sheet.getLastColumn();
-    
-    if (lastRow <= 1) {
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          success: true,
-          diagnosis: {
-            sheetExists: true,
-            hasData: false,
-            lastRow: lastRow,
-            message: 'Sheet exists but has no data rows'
-          }
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // Get headers
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    
-    // Get all data rows with raw values
-    const dataRange = sheet.getRange(2, 1, lastRow - 1, lastCol);
-    const values = dataRange.getValues();
-    
-    // Build detailed diagnosis for each row
-    const rowDiagnosis = values.map((row, index) => {
-      const returnDateCell = row[6];
-      const returnTimeCell = row[7];
-      const statusCell = row[8];
-      
-      return {
-        rowNumber: index + 2,
-        tripId: row[0],
-        driverName: row[1],
-        driverNameAr: row[2],
-        staffNumber: row[3],
-        staffNumberType: typeof row[3],
-        departureDate: row[4],
-        departureDateType: typeof row[4],
-        departureTime: row[5],
-        returnDate: {
-          value: returnDateCell,
-          type: typeof returnDateCell,
-          isEmpty: returnDateCell === '' || returnDateCell === null || returnDateCell === undefined,
-          stringValue: returnDateCell ? returnDateCell.toString() : 'NULL'
-        },
-        returnTime: {
-          value: returnTimeCell,
-          type: typeof returnTimeCell,
-          isEmpty: returnTimeCell === '' || returnTimeCell === null || returnTimeCell === undefined,
-          stringValue: returnTimeCell ? returnTimeCell.toString() : 'NULL'
-        },
-        status: {
-          value: statusCell,
-          type: typeof statusCell,
-          stringValue: statusCell ? statusCell.toString() : 'NULL'
-        },
-        createdAt: row[9]
-      };
-    });
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true,
-        diagnosis: {
-          sheetExists: true,
-          hasData: true,
-          lastRow: lastRow,
-          lastCol: lastCol,
-          headers: headers,
-          totalRows: values.length,
-          rows: rowDiagnosis
-        }
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        error: error.toString(),
-        stack: error.stack
       }))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -3174,7 +3394,7 @@ function send7HourReminderToNurse(tripId, driverName, staffNumber, departureDate
       </div>
       
       <div style="background: #f3f4f6; padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-        <p style="margin: 0;">This is an automated reminder from Hasik Health Center Ambulance Log System</p>
+        <p style="margin: 0;">This is an automated reminder from Hasik Health Center Ambulance Record System</p>
       </div>
     </div>
   `;
@@ -3639,402 +3859,336 @@ function migratePendingTripsToNewStructure() {
   return 'Migration complete';
 }
 
+// ============================================
+// PDF GENERATION FROM HTML | توليد PDF من HTML
+// ============================================
+
+function generatePdfFromHtml(data) {
+  try {
+    var html = data.html;
+    if (!html) throw new Error('No HTML content provided');
+    var blob = HtmlService.createHtmlOutput(html)
+      .setTitle('كشف حركة سيارات الاسعاف')
+      .getBlob()
+      .getAs('application/pdf');
+    var base64 = Utilities.base64Encode(blob.getBytes());
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, pdf: base64 }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ============================================================
+// VEHICLE INSPECTION MODULE | نظام فحص السيارة اليومي
+// ============================================================
+
 /**
- * ========================================
- * سكريبت تشخيص مشكلة عدم تغيّر اسم الممرضة
- * Diagnostic: Why nurse name not updating
- * ========================================
- * شغّل هذه الدالة من Apps Script: Run > diagnoseNurseNameIssue
- * النتائج تظهر في View > Logs
+ * Ensure the Inspections sheet exists and return it.
  */
-function diagnoseNurseNameIssue() {
-  var LOG = [];
-  function log(msg) { LOG.push(msg); Logger.log(msg); }
-  
-  log('========================================');
-  log('🔍 بدء التشخيص - ' + new Date().toLocaleString('ar-OM', {timeZone: 'Asia/Muscat'}));
-  log('========================================');
-  
-  // ===== 1. فحص جدول Users =====
-  log('\n📋 [1] فحص جدول Users...');
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var usersSheet = ss.getSheetByName('Users');
-  if (!usersSheet) {
-    log('❌ جدول Users غير موجود!');
-    return LOG.join('\n');
+function setupInspectionSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Inspections');
+  if (!sheet) {
+    sheet = ss.insertSheet('Inspections');
+    const headers = [
+      'ID', 'Submitted_At', 'Week_Start', 'Week_End',
+      'Driver_Name', 'Staff_Number', 'Vehicle_Number',
+      'Day_Index', 'Day_Name',
+      'AM_Time', 'AM_Items', 'AM_Notes',
+      'PM_Time', 'PM_Items', 'PM_Notes',
+      'Day_Notes', 'Has_Fault', 'Has_Followup'
+    ];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#1e40af').setFontColor('#ffffff')
+      .setFontWeight('bold').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(11, 300); // AM_Items JSON
+    sheet.setColumnWidth(14, 300); // PM_Items JSON
   }
-  
-  var usersData = usersSheet.getDataRange().getValues();
-  var headers = usersData[0];
-  log('✅ جدول Users موجود - عدد الصفوف: ' + (usersData.length - 1));
-  log('   الأعمدة: ' + JSON.stringify(headers));
-  
-  // عرض كل الممرضات
-  log('\n👩‍⚕️ [2] قائمة الممرضات في جدول Users:');
-  var nurses = [];
-  for (var i = 1; i < usersData.length; i++) {
-    var row = usersData[i];
-    if (row[1] === 'nurse') {
-      var nurseInfo = {
-        rowNum: i + 1,
-        id: row[0],
-        type: row[1],
-        nameAr: row[2],
-        nameEn: row[3],
-        staffNumber: row[4],
-        civilId: row[5],
-        active: row[7]
-      };
-      nurses.push(nurseInfo);
-      log('   صف ' + (i+1) + ': ID=' + row[0] + 
-          ' | الاسم العربي="' + row[2] + '"' +
-          ' | الاسم الإنجليزي="' + row[3] + '"' +
-          ' | الرقم الوظيفي=' + row[4] +
-          ' | الرقم المدني=' + row[5] +
-          ' | نشط=' + row[7]);
-    }
-  }
-  log('   إجمالي الممرضات: ' + nurses.length);
-  
-  // ===== 3. فحص جدول Records لأسماء الممرضات =====
-  log('\n📊 [3] فحص أسماء الممرضات في جدول Records...');
-  var recordsSheet = ss.getSheetByName(getRecordsSheetName());
-  if (!recordsSheet || recordsSheet.getLastRow() <= 1) {
-    log('⚠️ جدول Records فارغ أو غير موجود');
-  } else {
-    var recData = recordsSheet.getDataRange().getValues();
-    var recHeaders = recData[0];
-    
-    // إيجاد أعمدة اسم الممرضة والرقم الوظيفي
-    var nurseNameCol = recHeaders.indexOf('Nurse Name');
-    var nurseStaffCol = recHeaders.indexOf('Nurse Staff Number');
-    log('   عمود Nurse Name: ' + nurseNameCol + ' | عمود Nurse Staff Number: ' + nurseStaffCol);
-    
-    // بناء خريطة الأسماء المستخدمة
-    var nameUsage = {};
-    var staffToRecordNames = {};
-    for (var r = 1; r < recData.length; r++) {
-      var nurseName = (recData[r][nurseNameCol] || '').toString().trim();
-      var nurseStaff = nurseStaffCol >= 0 ? (recData[r][nurseStaffCol] || '').toString().trim() : '';
-      
-      if (nurseName) {
-        nameUsage[nurseName] = (nameUsage[nurseName] || 0) + 1;
-      }
-      if (nurseStaff) {
-        if (!staffToRecordNames[nurseStaff]) staffToRecordNames[nurseStaff] = {};
-        staffToRecordNames[nurseStaff][nurseName] = (staffToRecordNames[nurseStaff][nurseName] || 0) + 1;
-      }
-    }
-    
-    log('\n   📌 أسماء الممرضات المستخدمة في السجلات:');
-    var nameKeys = Object.keys(nameUsage).sort(function(a,b){ return nameUsage[b] - nameUsage[a]; });
-    nameKeys.forEach(function(name) {
-      var isNumeric = /^\d+$/.test(name);
-      log('   ' + (isNumeric ? '⚠️' : '  ') + ' "' + name + '" → ' + nameUsage[name] + ' سجل' + (isNumeric ? ' (رقم وظيفي!)' : ''));
-    });
-    
-    log('\n   📌 ربط الرقم الوظيفي بالأسماء في السجلات:');
-    Object.keys(staffToRecordNames).forEach(function(staff) {
-      var names = Object.keys(staffToRecordNames[staff]);
-      var matched = nurses.filter(function(n){ return n.staffNumber && n.staffNumber.toString() === staff; });
-      var currentName = matched.length > 0 ? matched[0].nameEn : '(غير موجود في Users)';
-      log('   رقم ' + staff + ' → الاسم الحالي في Users: "' + currentName + '"');
-      names.forEach(function(n) {
-        var match = (n === currentName);
-        log('      ' + (match ? '✅' : '❌') + ' في السجلات: "' + n + '" (' + staffToRecordNames[staff][n] + ' سجل)' + (!match ? ' ← مختلف!' : ''));
-      });
-    });
-  }
-  
-  // ===== 4. فحص مقارنة أنواع البيانات في updateUser =====
-  log('\n🔧 [4] فحص أنواع البيانات (ID comparison في updateUser)...');
-  for (var j = 1; j < usersData.length && j <= 5; j++) {
-    var idVal = usersData[j][0];
-    log('   صف ' + (j+1) + ': ID=' + JSON.stringify(idVal) + ' | نوعه=' + typeof idVal + 
-        ' | الاسم=' + usersData[j][2]);
-  }
-  log('   ⚠️ ملاحظة: updateUser يقارن بـ === لذلك إذا كان ID رقم في الجدول ونص في الطلب، لن يتطابقا!');
-  
-  // ===== 5. محاكاة validateUser لكل ممرضة =====
-  log('\n🔐 [5] محاكاة validateUser لكل ممرضة:');
-  nurses.forEach(function(nurse) {
-    var staffNum = nurse.staffNumber ? nurse.staffNumber.toString() : '';
-    if (staffNum) {
-      var result = validateUser(staffNum);
-      if (result.success) {
-        log('   ✅ رقم ' + staffNum + ' → nameAr="' + result.user.nameAr + '" nameEn="' + result.user.nameEn + '"');
-      } else {
-        log('   ❌ رقم ' + staffNum + ' → فشل: ' + result.error);
-      }
-    }
-  });
-  
-  // ===== 6. فحص getNurseData لكل ممرضة =====
-  log('\n📡 [6] محاكاة getNurseData userData لكل ممرضة:');
-  nurses.forEach(function(nurse) {
-    var staffNum = nurse.staffNumber ? nurse.staffNumber.toString() : '';
-    if (staffNum) {
-      try {
-        var params = { year: new Date().getFullYear().toString(), staffNumber: staffNum };
-        // نفحص فقط validateUser لأنها نفسها المستخدمة داخل getNurseData
-        var userResult = validateUser(staffNum);
-        if (userResult.success) {
-          log('   ✅ getNurseData userData لرقم ' + staffNum + ':');
-          log('      nameAr="' + userResult.user.nameAr + '" nameEn="' + userResult.user.nameEn + '"');
-          log('      type="' + userResult.user.type + '" id=' + JSON.stringify(userResult.user.id));
-        }
-      } catch(e) {
-        log('   ❌ خطأ: ' + e.toString());
-      }
-    }
-  });
-  
-  // ===== 7. فحص مشكلة مقارنة ID =====
-  log('\n⚠️ [7] فحص مشكلة المقارنة في updateUser:');
-  for (var k = 1; k < usersData.length; k++) {
-    var rawId = usersData[k][0];
-    var strId = rawId ? rawId.toString() : '';
-    var isMatch_strict = (rawId === strId);
-    var isMatch_loose = (rawId == strId);
-    if (usersData[k][1] === 'nurse') {
-      log('   صف ' + (k+1) + ': rawId=' + JSON.stringify(rawId) + ' typeof=' + typeof rawId +
-          ' | === "' + strId + '": ' + isMatch_strict +
-          ' | == "' + strId + '": ' + isMatch_loose +
-          ' | الاسم: ' + usersData[k][2]);
-      if (!isMatch_strict && isMatch_loose) {
-        log('   🚨 هذا هو السبب! updateUser يستخدم === لكن ID رقم والطلب يرسل نص!');
-      }
-    }
-  }
-  
-  log('\n========================================');
-  log('✅ انتهى التشخيص');
-  log('========================================');
-  
-  return LOG.join('\n');
+  return sheet;
 }
 
 /**
- * ========================================
- * إصلاح شامل لأسماء الممرضات والسائقين في السجلات القديمة
- * Backfill: fix names + add Nurse Staff Number to old records
- * ========================================
- * شغّل هذه الدالة من Apps Script: Run > backfillNurseStaffNumbers
- * النتائج تظهر في View > Execution log
+ * Generate a unique inspection row ID (INS001, INS002, …)
  */
-function backfillNurseStaffNumbers() {
-  var LOG = [];
-  function log(msg) { LOG.push(msg); Logger.log(msg); }
-  
-  log('========================================');
-  log('🔧 بدء إصلاح أسماء الممرضات والسائقين في السجلات');
-  log('========================================');
-  
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var usersSheet = ss.getSheetByName('Users');
-  if (!usersSheet) { log('❌ جدول Users غير موجود!'); return LOG.join('\n'); }
-  var usersData = usersSheet.getDataRange().getValues();
-  
-  // بناء قوائم الممرضات والسائقين من Users
-  var nurseLookup = [];
-  var driverLookup = [];
-  for (var u = 1; u < usersData.length; u++) {
-    var userInfo = {
-      nameEn: (usersData[u][3] || '').toString().trim(),
-      nameAr: (usersData[u][2] || '').toString().trim(),
-      staffNumber: (usersData[u][4] || '').toString().trim(),
-      civilId: (usersData[u][5] || '').toString().trim()
-    };
-    if (usersData[u][1] === 'nurse') nurseLookup.push(userInfo);
-    if (usersData[u][1] === 'driver') driverLookup.push(userInfo);
-  }
-  log('   عدد الممرضات: ' + nurseLookup.length + ' | عدد السائقين: ' + driverLookup.length);
-  
-  var recordsSheet = ss.getSheetByName(getRecordsSheetName());
-  if (!recordsSheet || recordsSheet.getLastRow() <= 1) {
-    log('⚠️ جدول Records فارغ'); return LOG.join('\n');
-  }
-  
-  var recHeaders = recordsSheet.getRange(1, 1, 1, recordsSheet.getLastColumn()).getValues()[0];
-  var nurseNameCol = recHeaders.indexOf('Nurse Name');
-  var nurseStaffCol = recHeaders.indexOf('Nurse Staff Number');
-  var driverNameCol = recHeaders.indexOf('Driver Name');
-  var driverStaffCol = recHeaders.indexOf('Staff Number');
-  
-  var lastRow = recordsSheet.getLastRow();
-  var recData = recordsSheet.getRange(2, 1, lastRow - 1, recHeaders.length).getValues();
-  var fixed = 0;
-  var nameFixed = 0;
-  
-  // دالة مطابقة شاملة
-  function findMatch(name, lookup) {
-    if (!name) return null;
-    var nameLower = name.toLowerCase();
-    // 1: اسم إنجليزي بالضبط
-    for (var a = 0; a < lookup.length; a++) {
-      if (lookup[a].nameEn.toLowerCase() === nameLower) return lookup[a];
-    }
-    // 2: اسم عربي بالضبط
-    for (var b = 0; b < lookup.length; b++) {
-      if (lookup[b].nameAr === name) return lookup[b];
-    }
-    // 3: الاسم رقم وظيفي
-    if (/^\d+$/.test(name)) {
-      for (var c = 0; c < lookup.length; c++) {
-        if (lookup[c].staffNumber === name || lookup[c].civilId === name) return lookup[c];
-      }
-    }
-    // 4: الاسم الأول مشترك
-    var firstWord = nameLower.split(/\s+/)[0];
-    if (firstWord.length >= 3) {
-      for (var d = 0; d < lookup.length; d++) {
-        var userFirst = lookup[d].nameEn.toLowerCase().split(/\s+/)[0];
-        if (userFirst === firstWord) return lookup[d];
-      }
-    }
+function generateInspectionId_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return 'INS001';
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    .flat()
+    .filter(function(id) { return String(id).indexOf('INS') === 0; })
+    .map(function(id) { return parseInt(String(id).slice(3)) || 0; });
+  var maxNum = ids.length > 0 ? Math.max.apply(null, ids) : 0;
+  return 'INS' + String(maxNum + 1).padStart(3, '0');
+}
+
+/**
+ * Submit a full week of inspection data.
+ * Payload: { weekStart, weekEnd, driverName, staffNumber, vehicleNumber, days:{0:{am:{time,items,itemNotes},pm:{...},notes}, …} }
+ */
+function uploadPhotoToDrive_(base64DataUrl, filename) {
+  try {
+    var parts = base64DataUrl.split(',');
+    if (parts.length < 2) return null;
+    var decoded = Utilities.base64Decode(parts[1]);
+    var blob = Utilities.newBlob(decoded, 'image/jpeg', filename);
+
+    var folderName = 'AmbulanceInspectionPhotos';
+    var folderIter = DriveApp.getFoldersByName(folderName);
+    var folder = folderIter.hasNext() ? folderIter.next() : DriveApp.createFolder(folderName);
+
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return 'https://drive.google.com/uc?export=view&id=' + file.getId();
+  } catch(e) {
+    Logger.log('uploadPhotoToDrive_ error: ' + e.toString());
     return null;
   }
-  
-  // === مرحلة 1: مطابقة مباشرة ===
-  log('\n📋 مرحلة 1: مطابقة مباشرة...');
-  var unmatchedRows = []; // {rowNum, nurseName} — السجلات التي لم تُطابق
-  var matchedStaffNums = {}; // الأرقام الوظيفية التي تم مطابقتها بالفعل
-  
-  for (var r = 0; r < recData.length; r++) {
-    var nurseName = nurseNameCol >= 0 ? (recData[r][nurseNameCol] || '').toString().trim() : '';
-    var nurseStaff = nurseStaffCol >= 0 ? (recData[r][nurseStaffCol] || '').toString().trim() : '';
-    var driverName = driverNameCol >= 0 ? (recData[r][driverNameCol] || '').toString().trim() : '';
-    var driverStaff = driverStaffCol >= 0 ? (recData[r][driverStaffCol] || '').toString().trim() : '';
-    var rowNum = r + 2;
-    
-    // إصلاح اسم الممرضة
-    if (nurseName && nurseNameCol >= 0) {
-      if (nurseStaff) {
-        // لديها رقم وظيفي — تحديث الاسم فقط
-        var matchByStaff = nurseLookup.filter(function(n) { return n.staffNumber === nurseStaff || n.civilId === nurseStaff; });
-        if (matchByStaff.length > 0) {
-          matchedStaffNums[matchByStaff[0].staffNumber] = true;
-          if (matchByStaff[0].nameEn && matchByStaff[0].nameEn !== nurseName) {
-            log('   📝 صف ' + rowNum + ': تحديث "' + nurseName + '" → "' + matchByStaff[0].nameEn + '"');
-            recordsSheet.getRange(rowNum, nurseNameCol + 1).setValue(matchByStaff[0].nameEn);
-            nameFixed++;
-          }
+}
+
+var ITEM_LABELS_AR = {
+  tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
+  no_oil_leak:'تسرب زيت أو ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
+  engine_start:'تشغيل السيارة', gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
+  ac_system:'نظام التكييف', cabin_electric:'أجهزة المقصورة',
+  oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
+  fuel_level:'مستوى الوقود', battery:'البطارية',
+  front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
+  brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
+};
+var STATUS_AR = { ok:'سليم', followup:'يحتاج متابعة', fault:'عطل' };
+
+function toArItems_(items) {
+  var out = {};
+  Object.keys(items).forEach(function(k) { out[ITEM_LABELS_AR[k] || k] = STATUS_AR[items[k]] || items[k]; });
+  return out;
+}
+
+function submitInspectionWeek(data) {
+  try {
+    const sheet      = setupInspectionSheet();
+    const tz         = CONFIG.TIME_ZONE;
+    const submittedAt= Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
+    const dayNames   = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+
+    var targetWeek = String(data.weekStart || '').trim();
+
+    // Remove any previous submission for this driver + week (re-submit replaces)
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const staffCol = 6; // Staff_Number column (1-indexed)
+      const weekCol  = 3; // Week_Start column
+      var existing   = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      for (var r = existing.length - 1; r >= 0; r--) {
+        var cellWeek = existing[r][weekCol-1];
+        if (cellWeek instanceof Date) {
+          cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
         }
-      } else {
-        // بدون رقم وظيفي — نحاول المطابقة
-        var matched = findMatch(nurseName, nurseLookup);
-        if (matched) {
-          var sn = matched.staffNumber || matched.civilId;
-          matchedStaffNums[matched.staffNumber] = true;
-          log('   ✅ صف ' + rowNum + ': "' + nurseName + '" → ' + sn);
-          if (nurseStaffCol >= 0) { recordsSheet.getRange(rowNum, nurseStaffCol + 1).setValue(sn); fixed++; }
-          if (matched.nameEn && matched.nameEn !== nurseName) {
-            recordsSheet.getRange(rowNum, nurseNameCol + 1).setValue(matched.nameEn);
-            nameFixed++;
-            log('      📝 → "' + matched.nameEn + '"');
-          }
-        } else {
-          unmatchedRows.push({rowNum: rowNum, nurseName: nurseName});
+        if (String(existing[r][staffCol-1]).trim() === String(data.staffNumber).trim() &&
+            String(cellWeek).trim() === targetWeek) {
+          sheet.deleteRow(r + 2);
         }
       }
     }
-    
-    // إصلاح اسم السائق
-    if (driverName && driverStaff && driverNameCol >= 0) {
-      var drvMatch = driverLookup.filter(function(d) { return d.staffNumber === driverStaff || d.civilId === driverStaff; });
-      if (drvMatch.length > 0 && drvMatch[0].nameEn && drvMatch[0].nameEn !== driverName) {
-        log('   🚗 صف ' + rowNum + ': سائق "' + driverName + '" → "' + drvMatch[0].nameEn + '"');
-        recordsSheet.getRange(rowNum, driverNameCol + 1).setValue(drvMatch[0].nameEn);
-        nameFixed++;
-      }
+
+    // Pre-generate sequential IDs for the batch
+    var baseId = generateInspectionId_(sheet);
+    var baseNum = parseInt(String(baseId).slice(3)) || 1;
+
+    var rows = [];
+    var days = data.days || {};
+    for (var d = 0; d < 7; d++) {
+      var dayData  = days[d]   || {};
+      var am       = dayData['am'] || {};
+      var pm       = dayData['pm'] || {};
+      var amItems  = am.items  || {};
+      var pmItems  = pm.items  || {};
+
+      var allVals = Object.keys(amItems).map(function(k){return amItems[k];})
+        .concat(Object.keys(pmItems).map(function(k){return pmItems[k];}));
+      var hasFault    = allVals.some(function(v){return v==='fault';});
+      var hasFollowup = allVals.some(function(v){return v==='followup';});
+
+      // Upload photos to Drive and collect URLs
+      var amPhotoUrls = {};
+      var pmPhotoUrls = {};
+      var amPhotosRaw = am.itemPhotos || {};
+      var pmPhotosRaw = pm.itemPhotos || {};
+
+      Object.keys(amPhotosRaw).forEach(function(itemId) {
+        var p = amPhotosRaw[itemId];
+        if (p && p.data && String(p.data).indexOf('data:') === 0) {
+          var fname = (data.staffNumber||'x') + '_' + (data.weekStart||'') + '_d' + d + '_am_' + itemId + '.jpg';
+          var url = uploadPhotoToDrive_(p.data, fname);
+          if (url) amPhotoUrls[itemId] = url;
+        } else if (p && p.url) {
+          amPhotoUrls[itemId] = p.url;
+        }
+      });
+
+      Object.keys(pmPhotosRaw).forEach(function(itemId) {
+        var p = pmPhotosRaw[itemId];
+        if (p && p.data && String(p.data).indexOf('data:') === 0) {
+          var fname = (data.staffNumber||'x') + '_' + (data.weekStart||'') + '_d' + d + '_pm_' + itemId + '.jpg';
+          var url = uploadPhotoToDrive_(p.data, fname);
+          if (url) pmPhotoUrls[itemId] = url;
+        } else if (p && p.url) {
+          pmPhotoUrls[itemId] = p.url;
+        }
+      });
+
+      var amObj = { items: amItems, itemsAr: toArItems_(amItems), notes: am.itemNotes || {}, photos: amPhotoUrls };
+      var pmObj = { items: pmItems, itemsAr: toArItems_(pmItems), notes: pm.itemNotes || {}, photos: pmPhotoUrls };
+
+      rows.push([
+        'INS' + String(baseNum + d).padStart(3, '0'),
+        submittedAt,
+        targetWeek,
+        String(data.weekEnd || '').trim(),
+        data.driverName    || '',
+        data.staffNumber   || '',
+        data.vehicleNumber || '',
+        d,
+        dayNames[d],
+        am.time || '',
+        JSON.stringify(amObj),
+        am.notes || '',
+        pm.time || '',
+        JSON.stringify(pmObj),
+        pm.notes || '',
+        dayData.notes || '',
+        hasFault    ? 'نعم' : 'لا',
+        hasFollowup ? 'نعم' : 'لا'
+      ]);
     }
-  }
-  
-  // === مرحلة 2: مطابقة بالاستبعاد — السجلات المتبقية ===
-  if (unmatchedRows.length > 0) {
-    log('\n📋 مرحلة 2: مطابقة بالاستبعاد (' + unmatchedRows.length + ' سجل غير مطابق)...');
-    // الممرضات اللي ما ظهرن في أي سجل
-    var unmatchedNurses = nurseLookup.filter(function(n) { return !matchedStaffNums[n.staffNumber]; });
-    log('   ممرضات بدون سجلات مطابقة: ' + unmatchedNurses.length);
-    
-    // إذا عدد السجلات غير المطابقة = عدد الممرضات غير المطابقة = 1 → ربط تلقائي
-    if (unmatchedRows.length === 1 && unmatchedNurses.length === 1) {
-      var ur = unmatchedRows[0];
-      var un = unmatchedNurses[0];
-      var sn2 = un.staffNumber || un.civilId;
-      log('   ⚡ مطابقة بالاستبعاد: "' + ur.nurseName + '" → ' + un.nameEn + ' (' + sn2 + ')');
-      if (nurseStaffCol >= 0) { recordsSheet.getRange(ur.rowNum, nurseStaffCol + 1).setValue(sn2); fixed++; }
-      if (un.nameEn && un.nameEn !== ur.nurseName) {
-        recordsSheet.getRange(ur.rowNum, nurseNameCol + 1).setValue(un.nameEn);
-        nameFixed++;
-        log('      📝 → "' + un.nameEn + '"');
-      }
-      unmatchedRows = [];
+
+    if (rows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
     }
-    
-    // عرض أي سجلات لا تزال غير مطابقة
-    unmatchedRows.forEach(function(ur) {
-      log('   ❓ صف ' + ur.rowNum + ': "' + ur.nurseName + '" — يحتاج ربط يدوي');
-    });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, message: 'تم إرسال الفحص الأسبوعي بنجاح', rows: rows.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  
-  log('\n========================================');
-  log('✅ انتهى! Nurse Staff Number: ' + fixed + ' سجل | تحديث أسماء: ' + nameFixed + ' سجل');
-  log('========================================');
-  
-  return LOG.join('\n');
 }
 
 /**
- * ربط اسم قديم في السجلات برقم وظيفي محدد
- * Generic: works for any old name → any staff number
- * 
- * استخدام: عدّل OLD_NAME و STAFF_NUMBER أدناه ثم شغّل: Run > linkRecordName
+ * Get all inspection weeks for a specific driver (for history display).
+ * Returns: { success, weeks: { "2026-03-15": [row, row, …], … } }
  */
-function linkRecordName() {
-  // ====== عدّل هنا ======
-  var OLD_NAME = 'ANU MAMOOTIL MATHAI';   // الاسم القديم في السجل
-  var STAFF_NUMBER = '88973';              // الرقم الوظيفي الصحيح
-  // =======================
-  
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // جلب الاسم الحالي من Users
-  var usersSheet = ss.getSheetByName('Users');
-  var usersData = usersSheet.getDataRange().getValues();
-  var currentNameEn = '';
-  for (var u = 1; u < usersData.length; u++) {
-    var sn = (usersData[u][4] || '').toString().trim();
-    var ci = (usersData[u][5] || '').toString().trim();
-    if (sn === STAFF_NUMBER || ci === STAFF_NUMBER) {
-      currentNameEn = (usersData[u][3] || '').toString().trim();
-      break;
+function getDriverInspections(params) {
+  try {
+    var staffNumber = params.staffNumber || '';
+    var sheet = setupInspectionSheet();
+    var lastRow = sheet.getLastRow();
+    var tz = CONFIG.TIME_ZONE;
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, weeks: {} }))
+        .setMimeType(ContentService.MimeType.JSON);
     }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var staffIdx = headers.indexOf('Staff_Number');
+    var weekIdx  = headers.indexOf('Week_Start');
+
+    var dateOnlyCols = { 'Week_Start':1, 'Week_End':1 };
+    var weeks = {};
+    allData.forEach(function(row) {
+      if (String(row[staffIdx]).trim() === String(staffNumber).trim()) {
+        var wsRaw = row[weekIdx];
+        var ws = (wsRaw instanceof Date) ? Utilities.formatDate(wsRaw, tz, 'yyyy-MM-dd') : String(wsRaw);
+        if (!weeks[ws]) weeks[ws] = [];
+        var obj = {};
+        headers.forEach(function(h, i) {
+          var v = row[i];
+          if (v instanceof Date) {
+            v = Utilities.formatDate(v, tz, dateOnlyCols[h] ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm:ss');
+          }
+          obj[h] = v;
+        });
+        weeks[ws].push(obj);
+      }
+    });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, weeks: weeks }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  
-  if (!currentNameEn) {
-    Logger.log('❌ لم يتم العثور على مستخدم بالرقم ' + STAFF_NUMBER);
-    return;
-  }
-  
-  // تحديث السجلات
-  var recSheet = ss.getSheetByName(getRecordsSheetName());
-  var recHeaders = recSheet.getRange(1, 1, 1, recSheet.getLastColumn()).getValues()[0];
-  var nurseNameCol = recHeaders.indexOf('Nurse Name');
-  var nurseStaffCol = recHeaders.indexOf('Nurse Staff Number');
-  var recData = recSheet.getRange(2, 1, recSheet.getLastRow() - 1, recHeaders.length).getValues();
-  var count = 0;
-  
-  for (var r = 0; r < recData.length; r++) {
-    var name = (recData[r][nurseNameCol] || '').toString().trim();
-    if (name.toLowerCase() === OLD_NAME.toLowerCase()) {
-      var rowNum = r + 2;
-      recSheet.getRange(rowNum, nurseNameCol + 1).setValue(currentNameEn);
-      if (nurseStaffCol >= 0) recSheet.getRange(rowNum, nurseStaffCol + 1).setValue(STAFF_NUMBER);
-      count++;
-      Logger.log('✅ صف ' + rowNum + ': "' + name + '" → "' + currentNameEn + '" (رقم ' + STAFF_NUMBER + ')');
-    }
-  }
-  
-  Logger.log('✅ تم تحديث ' + count + ' سجل');
 }
+
+/**
+ * Get all inspection records (for admin view).
+ * Optional params: weekStart, staffNumber
+ */
+function getWeeklyInspections(params) {
+  try {
+    var sheet   = setupInspectionSheet();
+    var lastRow = sheet.getLastRow();
+    var tz      = CONFIG.TIME_ZONE;
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, inspections: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var dateOnlyCols = { 'Week_Start':1, 'Week_End':1 };
+
+    var filterWeek  = params.weekStart   || '';
+    var filterStaff = params.staffNumber || '';
+
+    var allRows = [];
+    allData.forEach(function(row) {
+      var obj = {};
+      headers.forEach(function(h, i) {
+        var v = row[i];
+        if (v instanceof Date) {
+          v = Utilities.formatDate(v, tz, dateOnlyCols[h] ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm:ss');
+        }
+        obj[h] = v;
+      });
+      if (filterWeek  && String(obj.Week_Start).trim()  !== filterWeek)  return;
+      if (filterStaff && String(obj.Staff_Number).trim() !== filterStaff) return;
+      allRows.push(obj);
+    });
+
+    // Server-side dedup: keep only the latest row per (Staff_Number, Week_Start, Day_Index)
+    var dedup = {};
+    allRows.forEach(function(r) {
+      var key = String(r.Staff_Number||'').trim() + '|' + String(r.Week_Start||'').trim() + '|' + String(r.Day_Index);
+      var prev = dedup[key];
+      if (!prev || String(r.Submitted_At || '') >= String(prev.Submitted_At || '')) {
+        dedup[key] = r;
+      }
+    });
+    var inspections = Object.keys(dedup).map(function(k) { return dedup[k]; });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, inspections: inspections }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+

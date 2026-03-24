@@ -17,21 +17,34 @@
         var now = new Date();
         var year = now.getFullYear();
         var month = now.getMonth() + 1;
-        window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).catch(function() { return null; });
+        // Heavy fetch: stats + records + trips (slow, 10-20s)
+        window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.success) {
+                try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
+            }
+            return result;
+        }).catch(function() { return null; });
+        // Fast fetch: pending trips only (lightweight, 1-3s)
+        window.__earlyPendingTrips = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.success && Array.isArray(result.trips)) {
+                try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                return result.trips;
+            }
+            return null;
+        }).catch(function() { return null; });
     })();
     </script>
     
     <!-- Performance Optimization Scripts - Load First -->
-    <script src="request-optimizer.js"></script>
-    <script src="ui-optimizer.js"></script>
-    <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
     
     <script src="session-manager.js"></script>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
     <link rel="stylesheet" href="responsive-ui.css">
@@ -489,22 +502,22 @@
         }
 
         .btn-primary {
-            background: var(--primary-blue);
+            background: #374151;
             color: var(--white);
         }
 
         .btn-primary:hover {
-            background: var(--dark-blue);
-            transform: translateY(-1px);
+            background: #1f2937;
         }
 
         .btn-export {
-            background: var(--success);
-            color: var(--white);
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .btn-export:hover {
-            background: #059669;
+            background: #e5e7eb;
         }
 
         .table-container {
@@ -538,6 +551,11 @@
 
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
 
         .table-container.loading #recordsContainer {
@@ -600,43 +618,45 @@
         }
 
         .action-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
+            padding: 5px 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
             font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
             font-family: inherit;
+            background: #f9fafb;
+            color: #374151;
         }
 
         .action-btn.view {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.print {
-            background: #fef3c7;
-            color: #92400e;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.archive {
-            background: #e0e7ff;
-            color: #4338ca;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.edit {
-            background: #d1fae5;
-            color: #065f46;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .action-btn.delete {
-            background: #fee2e2;
-            color: #dc2626;
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .action-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .status-archived {
@@ -1216,14 +1236,14 @@
         }
 
         .pagination-btn:hover:not(:disabled) {
-            background: var(--lighter-blue);
-            border-color: var(--primary-blue);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .pagination-btn.active {
-            background: var(--primary-blue);
-            color: var(--white);
-            border-color: var(--primary-blue);
+            background: #374151;
+            color: #fff;
+            border-color: #374151;
         }
 
         .pagination-btn:disabled {
@@ -1859,12 +1879,12 @@
 
                 <!-- Trips Sections: Pending & Approved -->
                 <div id="pendingSection" class="trips-grid">
-                    <!-- Pending Trips (معلقة) -->
+                    <!-- Pending Trips - بانتظار عودة السائق -->
                     <div class="trip-section">
                         <div class="trip-section-header">
                             <div class="section-title">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                رحلات معلقة
+                                بانتظار عودة السائق
                             </div>
                             <span class="section-count count-warning" id="pendingCount">0</span>
                         </div>
@@ -1879,17 +1899,17 @@
                         </div>
                     </div>
 
-                    <!-- Approved/Submitted Trips (معتمدة) -->
+                    <!-- Approved Trips - بانتظار إكمال بيانات الممرضة -->
                     <div class="trip-section">
                         <div class="trip-section-header">
                             <div class="section-title">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                رحلات معتمدة
+                                بانتظار إكمال الممرضة
                             </div>
                             <span class="section-count count-success" id="approvedCount">0</span>
                         </div>
                         <div class="trip-search-box">
-                            <input type="text" id="approvedSearchInput" placeholder="بحث في الرحلات المعتمدة..." oninput="filterTrips('approved')">
+                            <input type="text" id="approvedSearchInput" placeholder="بحث في الرحلات بانتظار الإكمال..." oninput="filterTrips('approved')">
                         </div>
                         <div class="trip-section-body" id="approvedTripsContainer">
                             <div class="trip-section-empty">
@@ -1929,12 +1949,14 @@
                             <input type="text" id="searchInput" placeholder="البحث في السجلات...">
                             <button class="btn btn-export" onclick="openExportModal()">تصدير</button>
                             <button class="btn btn-export" id="btnDownloadPdf" onclick="downloadPdfForm()" title="تنزيل كشف حركة الإسعاف (PDF) معبأ من الرحلات المكتملة للفترة المحددة">تنزيل كشف PDF</button>
+                            <button class="btn btn-export" id="btnPrintPdf" onclick="printPdfForm()" title="طباعة كشف حركة الإسعاف مباشرة">طباعة كشف PDF</button>
                         </div>
                     </div>
 
                     <div class="table-container">
-                        <div class="loading-spinner" id="recordsLoadingSpinner">
-                            <div class="spinner"></div>
+                        <div id="recordsLoadingSpinner" style="display:none; text-align:center; padding:18px 0;">
+                            <div class="spinner" style="margin:0 auto 8px;"></div>
+                            <span style="font-size:12px; color:#6b7280;">Loading records...</span>
                         </div>
                         <div id="recordsContainer"></div>
                     </div>
@@ -1942,6 +1964,43 @@
                     <!-- Pagination -->
                     <div class="pagination" id="paginationContainer"></div>
                 </div>
+
+                <!-- ══════════════════════════════════════════ -->
+                <!-- Inspections Section | قسم فحوصات السيارات -->
+                <!-- ══════════════════════════════════════════ -->
+                <div id="inspectionsSection" style="margin-top: 24px;">
+                    <div class="controls" style="margin-bottom: 14px;">
+                        <h2>فحوصات السيارات الأسبوعية</h2>
+                        <div class="filter-controls" style="gap: 8px; flex-wrap: wrap;">
+                            <select id="inspWeekFilter" onchange="renderInspectionsTable(_allInspections)" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <option value="">جميع الأسابيع</option>
+                            </select>
+                            <select id="inspDriverFilter" onchange="renderInspectionsTable(_allInspections)" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <option value="">جميع السائقين</option>
+                            </select>
+                            <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
+                            <div style="display:flex;align-items:center;gap:6px;margin-right:auto;border-right:1.5px solid #e5e7eb;padding-right:10px;">
+                                <select id="inspMonthFilter" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                    <option value="">اختر الشهر</option>
+                                </select>
+                                <button onclick="printInspectionsMonth()" style="padding:8px 16px;background:linear-gradient(135deg,#1e40af,#2563eb);color:white;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">طباعة التقرير الشهري</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;"></span> سليم</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block;"></span> يحتاج متابعة</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span> يوجد عطل</span>
+                        <span style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;display:inline-block;"></span> لم يُرسل</span>
+                    </div>
+
+                    <div id="inspectionsContainer">
+                        <div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -2030,6 +2089,7 @@
             </div>
             <form id="editRecordForm" onsubmit="saveEditRecord(event)">
                 <input type="hidden" id="editRecordId">
+                <input type="hidden" id="editExtSupport">
                 <div class="detail-grid" style="gap:14px;">
                     <div class="detail-item" style="padding:12px;">
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">رقم السيارة</label>
@@ -2068,10 +2128,16 @@
                         <input type="text" id="editPatientName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
                     </div>
                     <div class="detail-item" style="padding:12px;">
-                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجل (الممرضة)</label>
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجّل</label>
+                        <div id="editNurseOriginal" style="font-size:11px;color:#6b7280;margin-bottom:4px;display:none;">المسجّل الأصلي: <span id="editNurseOriginalName"></span></div>
                         <select id="editNurseName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;background:var(--white);">
-                            <option value="">-- اختر الممرضة --</option>
+                            <option value="">-- اختر المسجّل --</option>
                         </select>
+                        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;user-select:none;font-size:12px;color:#6b7280;">
+                            <input type="checkbox" id="editNurseFreeText" onchange="toggleEditNurseFreeText()" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;">
+                            <span>إدخال يدوي (دعم خارجي أو اسم غير موجود)</span>
+                        </label>
+                        <input type="text" id="editNurseNameText" placeholder="أدخل اسم المسجل يدوياً" style="display:none;width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;margin-top:6px;">
                     </div>
                 </div>
                 <div style="margin-top:20px;display:flex;gap:12px;">
@@ -2087,13 +2153,16 @@
         // CONFIGURATION - UPDATE THIS URL
         // ============================================
         const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
-        /** مسار ملف PDF القالب (كشف حركة الإسعاف). ضع الملف في مجلد assets وسمّ الحقول كما في PDF-FIELD-NAMES.md */
-        const PDF_TEMPLATE_URL = 'assets/ambulance-form-template.pdf';
-        const PDF_CENTER_NAME = 'مركز حاسك الصحي';
+        const PDF_CENTER_NAME = 'حاسك الصحي';
+        const PDF_TEMPLATE_PATH = 'pdf-html-template.html';
 
         
-        // Start fetching data immediately (before DOM ready) for faster loading
-        DataCache.preload(WEB_APP_URL, 'admin');
+        // Attach early fetch to DataCache inflight map (prevents duplicate requests)
+        // preload() is NOT called — the early fetch in <head> already covers it
+        if (window.__earlyAdminFetch) {
+            var _earlyUrl = WEB_APP_URL + '?action=getAdminData&year=' + new Date().getFullYear() + '&month=' + (new Date().getMonth() + 1);
+            DataCache._inflight[_earlyUrl] = window.__earlyAdminFetch;
+        }
 
         let currentRecord = null;
         let allRecords = [];
@@ -2102,30 +2171,108 @@
         let viewMode = 'current'; // 'current', 'archive', 'all'
         let notificationData = [];
 
+        var _recentlyDeletedIds = new Set();
+        function markAsDeleted(id) {
+            var s = String(id).trim();
+            _recentlyDeletedIds.add(s);
+            setTimeout(function() { _recentlyDeletedIds.delete(s); }, 30000);
+        }
+        function filterDeleted(arr) {
+            if (!arr || !_recentlyDeletedIds.size) return arr;
+            return arr.filter(function(r) { return !_recentlyDeletedIds.has(String(r.ID || r.id).trim()); });
+        }
+
+        /**
+         * Smart cache invalidation: updates admin data cache in-place
+         * (preserving it for instant display on next load) and clears
+         * only month-specific records caches.
+         */
+        function invalidateAdminCaches(modifiedRecordId, isUpdate) {
+            var y = document.getElementById('yearFilter').value;
+            var m = document.getElementById('monthFilter').value;
+            
+            // 1. Update cache_admin_data in-place
+            try {
+                var cached = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 100);
+                if (cached && cached.data) {
+                    cached.data.records = allRecords;
+                    DataCache.set(DataCache.KEYS.ADMIN_DATA, cached.data);
+                    try { localStorage.setItem('admin_instant_data', JSON.stringify(cached.data)); } catch(e) {}
+                }
+            } catch(e) {}
+            
+            // 2. Save current view's records to its cache key (preserves instant display on month switch)
+            var currentKey = DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_';
+            DataCache.set(currentKey, allRecords);
+            
+            // 3. Surgically update "all" records cache when viewing a specific month
+            if (m !== 'all' && modifiedRecordId) {
+                var allKey = DataCache.KEYS.RECORDS + '_' + y + '_all_';
+                try {
+                    var allCached = DataCache.get(allKey, DataCache.EXPIRY.RECORDS * 100);
+                    if (allCached && allCached.data && Array.isArray(allCached.data)) {
+                        var strId = String(modifiedRecordId).trim();
+                        var updated = allCached.data.filter(function(r) {
+                            return String(r.ID || r.id).trim() !== strId;
+                        });
+                        if (isUpdate) {
+                            var updatedRec = allRecords.find(function(r) {
+                                return String(r.ID || r.id).trim() === strId;
+                            });
+                            if (updatedRec) updated.push(updatedRec);
+                        }
+                        DataCache.set(allKey, updated);
+                    }
+                } catch(e) {
+                    DataCache.invalidate(allKey);
+                }
+            }
+            
+            // 4. Invalidate pending trips
+            DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+        }
+
         // Nurse name lookup: maps staff number → Arabic name from Users sheet
         let nurseNameMap = {};
+        window._allUsersData = [];
         async function loadNurseNameMap() {
             try {
                 const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
                 const result = await resp.json();
                 if (result.success && (result.users || result.data)) {
+                    var users = result.users || result.data;
+                    window._allUsersData = users;
                     nurseNameMap = {};
-                    (result.users || result.data).forEach(u => {
+                    users.forEach(u => {
                         if (u.staffNumber) nurseNameMap[u.staffNumber.toString().trim()] = (u.nameAr || '').toString().trim();
                         if (u.civilId) nurseNameMap[u.civilId.toString().trim()] = (u.nameAr || '').toString().trim();
                     });
+                    // Also populate ambulance_drivers in localStorage for other pages
+                    var driversList = users.filter(u => u.type === 'driver').map(u => ({
+                        nameAr: u.nameAr || '', nameEn: u.nameEn || '',
+                        staffNumber: (u.staffNumber || u.civilId || '').toString(), type: u.employeeType || 'employee'
+                    }));
+                    if (driversList.length > 0) {
+                        localStorage.setItem('ambulance_drivers', JSON.stringify(driversList));
+                    }
                 }
             } catch(e) { console.log('Failed to load nurse name map:', e); }
         }
         loadNurseNameMap();
 
-        // Resolve nurse Arabic name: prefer Users sheet lookup by Nurse Staff Number, fallback to stored name
         function resolveNurseArabicName(record) {
-            const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            if (nurseStaff && nurseNameMap[nurseStaff]) {
-                return nurseNameMap[nurseStaff];
+            const nurseName = (record['Nurse Name'] || '').toString().trim();
+            const nurseStaffNum = (record['Nurse Staff Number'] || '').toString().trim();
+            const extSupportCol = (record['Ext Support'] || '').toString().trim();
+            const isExtSupport = !!extSupportCol || nurseName.startsWith('[External Support]') || nurseStaffNum === 'EXT_SUPPORT';
+            if (isExtSupport) {
+                // Backend resolves admin name into Nurse Name for ext support records
+                return nurseName || '-';
             }
-            return (record['Nurse Name'] || '').toString().trim() || '-';
+            if (nurseStaffNum && nurseNameMap[nurseStaffNum]) {
+                return nurseNameMap[nurseStaffNum];
+            }
+            return nurseName || '-';
         }
 
         // ============================================
@@ -2371,46 +2518,112 @@
             return `منذ ${Math.floor(diff / 86400)} يوم`;
         }
 
+        var _adminRecordsRequestId = 0;
+
+        // Client-side month filter: extract month from record's Departure Date
+        function _filterRecordsByMonth(records, month) {
+            if (!month || month === 'all') return records;
+            var m = parseInt(month);
+            return records.filter(function(r) {
+                try {
+                    var d = r['Departure Date'];
+                    if (!d) return false;
+                    // Handle Date objects, "yyyy-MM-dd", or "MM/dd/yyyy"
+                    var dateObj = (d instanceof Date) ? d : new Date(d);
+                    return (dateObj.getMonth() + 1) === m;
+                } catch(e) { return false; }
+            });
+        }
+
+        // Hash of currently displayed records — used to avoid flicker on bg refresh
+        var _displayedRecordsHash = null;
+
         async function loadRecords() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
+            const thisRequestId = ++_adminRecordsRequestId;
 
-            // Show loading spinner
-            const tableContainer = document.querySelector('.table-container');
             const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (tableContainer && loadingSpinner) {
-                tableContainer.classList.add('loading');
-                loadingSpinner.classList.add('active');
+            const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
+
+            // === INSTANT PATH: Try to display from cache without any network wait ===
+            var instantShown = false;
+
+            // Helper: display records and track hash of what's shown
+            function showRecords(data) {
+                allRecords = filterDeleted(data);
+                const tp = Math.ceil(allRecords.length / recordsPerPage);
+                if (currentPage > tp && tp > 0) currentPage = tp;
+                if (currentPage < 1) currentPage = 1;
+                _displayedRecordsHash = DataCache.hash(allRecords);
+                displayRecordsWithPagination();
             }
 
+            // 1. Exact cache hit for this year+month+search
+            var exactCache = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
+            if (exactCache && exactCache.data) {
+                showRecords(exactCache.data);
+                instantShown = true;
+            }
+
+            // 2. If no exact hit but we have "all year" data, filter client-side
+            if (!instantShown && !search && year !== 'all') {
+                var allYearKey = DataCache.KEYS.RECORDS + '_' + year + '_all_';
+                var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
+                if (allYearCache && allYearCache.data) {
+                    var filtered = _filterRecordsByMonth(allYearCache.data, month);
+                    showRecords(filtered);
+                    DataCache.set(cacheKey, filtered);
+                    instantShown = true;
+                }
+            }
+
+            // Only show spinner if we have nothing to show
+            if (!instantShown && loadingSpinner) {
+                loadingSpinner.style.display = 'block';
+            }
+
+            // === BACKGROUND: Fetch fresh data from server (non-blocking if instant shown) ===
             let url = `${WEB_APP_URL}?action=getAllRecords`;
             if (year !== 'all') url += `&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
             if (search) url += `&search=${encodeURIComponent(search)}`;
 
-            try {
-                // Use DataCache: show cached records instantly, fetch fresh in background
-                const cacheKey = DataCache.KEYS.RECORDS + '_' + year + '_' + month + '_' + search;
-                await DataCache.fetchWithCache(
-                    url,
-                    cacheKey,
-                    DataCache.EXPIRY.RECORDS,
-                    (records) => {
-                        allRecords = records || [];
-                        const totalPages = Math.ceil(allRecords.length / recordsPerPage);
-                        if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-                        if (currentPage < 1) currentPage = 1;
-                        displayRecordsWithPagination();
-                    },
-                    (result) => (result.success && result.data) ? result.data : null
-                );
-            } finally {
-                // Hide loading spinner
-                if (tableContainer && loadingSpinner) {
-                    tableContainer.classList.remove('loading');
-                    loadingSpinner.classList.remove('active');
+            const bgUpdate = async () => {
+                try {
+                    await DataCache.fetchWithCache(
+                        url,
+                        cacheKey,
+                        DataCache.EXPIRY.RECORDS,
+                        (records, meta) => {
+                            if (thisRequestId !== _adminRecordsRequestId) return;
+                            // Skip cache callback — we already displayed above
+                            if (meta && meta.fromCache) return;
+                            if (loadingSpinner) loadingSpinner.style.display = 'none';
+                            // Compare fresh data against what's currently displayed
+                            // Only re-render if actually different — prevents visual flicker
+                            var freshFiltered = filterDeleted(records || []);
+                            var freshHash = DataCache.hash(freshFiltered);
+                            if (instantShown && freshHash === _displayedRecordsHash) return;
+                            allRecords = freshFiltered;
+                            const totalPages = Math.ceil(allRecords.length / recordsPerPage);
+                            if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+                            if (currentPage < 1) currentPage = 1;
+                            _displayedRecordsHash = freshHash;
+                            displayRecordsWithPagination();
+                        },
+                        (result) => (result.success && result.data) ? result.data : null
+                    );
+                } finally {
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
                 }
+            };
+
+            if (instantShown) {
+                bgUpdate(); // non-blocking
+            } else {
+                await bgUpdate(); // must wait — no cached data to show
             }
         }
 
@@ -2489,7 +2702,7 @@
                             <th>العودة</th>
                             <th>الوجهة</th>
                             <th>المريض</th>
-                            <th>الممرضة</th>
+                            <th>المسجّل</th>
                             <th>الحالة</th>
                             <th>الإجراءات</th>
                         </tr>
@@ -2506,6 +2719,7 @@
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             const fullNurse = resolveNurseArabicName(record);
+                            const isExtSupport = !!(record['Ext Support'] || '').toString().trim() || (record['Nurse Name'] || '').toString().trim().startsWith('[External Support]') || (record['Nurse Staff Number'] || '').toString().trim() === 'EXT_SUPPORT';
                             
                             return `
                             <tr data-record-id="${recordId}">
@@ -2516,7 +2730,7 @@
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${mapDestinationToAr(record['Destination'])}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${fullNurse}" style="cursor:default;">${truncName(fullNurse)}</td>
+                                <td title="${fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;font-weight:600;' : ''}">${truncName(fullNurse)}</td>
                                 <td><span class="status-badge ${statusClass}" style="font-size:10px;padding:2px 6px;">${statusText}</span></td>
                                 <td>
                                     <div class="action-btns" style="gap:2px;">
@@ -2555,7 +2769,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">الرقم الوظيفي</div>
-                        <div class="detail-value">${currentRecord['Staff Number']}</div>
+                        <div class="detail-value">${resolveDriverStaffNumber(currentRecord)}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">تاريخ المغادرة</div>
@@ -2582,9 +2796,36 @@
                         <div class="detail-value">${patientName}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">المسجل (الممرضة)</div>
+                        <div class="detail-label">المسجّل</div>
                         <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
+                    ${(function() {
+                        const extCol = (currentRecord['Ext Support'] || '').toString().trim();
+                        const nn = (currentRecord['Nurse Name'] || '').toString().trim();
+                        const ns = (currentRecord['Nurse Staff Number'] || '').toString().trim();
+                        const isExt = !!extCol || nn.startsWith('[External Support]') || ns === 'EXT_SUPPORT';
+                        if (!isExt) return '';
+                        let org = '', extNurse = '';
+                        if (extCol && extCol !== 'External Support') {
+                            const di = extCol.indexOf(' - ');
+                            if (di !== -1) { org = extCol.substring(0, di).trim(); extNurse = extCol.substring(di + 3).trim(); }
+                            else { org = extCol; }
+                        } else if (nn.startsWith('[External Support]')) {
+                            const bi = nn.indexOf(']');
+                            const c = bi >= 0 ? nn.substring(bi + 1).trim() : '';
+                            if (c && c !== 'Unknown') {
+                                const di = c.indexOf(' - ');
+                                if (di !== -1) { org = c.substring(0, di).trim(); extNurse = c.substring(di + 3).trim(); }
+                                else { org = c; }
+                            }
+                        }
+                        let html = '<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:#7c3aed;">تفاصيل الدعم الخارجي</div><div class="detail-value" style="color:#7c3aed;font-weight:600;">';
+                        if (org) html += '<div>الجهة المدعومة: ' + org + '</div>';
+                        if (extNurse) html += '<div>الممرض/ة المرافق/ة: ' + extNurse + '</div>';
+                        if (!org && !extNurse) html += 'حالة دعم خارجي';
+                        html += '</div></div>';
+                        return html;
+                    })()}
                     <div class="detail-item">
                         <div class="detail-label">تاريخ التسجيل</div>
                         <div class="detail-value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div>
@@ -2631,17 +2872,17 @@
                         <div class="item"><div class="label">رقم الطلب</div><div class="value" style="font-weight:700;color:#1e40af;">${currentRecord['ID'] || '-'}</div></div>
                         <div class="item"><div class="label">رقم السيارة</div><div class="value">${currentRecord['Vehicle Number']}</div></div>
                         <div class="item"><div class="label">اسم السائق</div><div class="value">${currentRecord['Driver Name']}</div></div>
-                        <div class="item"><div class="label">الرقم الوظيفي</div><div class="value">${currentRecord['Staff Number']}</div></div>
+                        <div class="item"><div class="label">الرقم الوظيفي</div><div class="value">${resolveDriverStaffNumber(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ المغادرة</div><div class="value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Departure Date']) || '-'}</div></div>
                         <div class="item"><div class="label">ساعة المغادرة</div><div class="value">${DateTimeFormatter.formatTimeForDisplay(currentRecord['Departure Time']) || '-'}</div></div>
                         <div class="item"><div class="label">تاريخ العودة</div><div class="value">${DateTimeFormatter.formatDateForDisplay(currentRecord['Return Date']) || '-'}</div></div>
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${DateTimeFormatter.formatTimeForDisplay(currentRecord['Return Time']) || '-'}</div></div>
                         <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item"><div class="label">اسم المريض</div><div class="value">${(currentRecord['Patient Name'] || currentRecord['patientName'] || '').toString().trim() || '-'}</div></div>
-                        <div class="item"><div class="label">المسجل (الممرضة)</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
+                        <div class="item"><div class="label">المسجّل</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                     </div>
-                    <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #1e40af; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
+                    <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
                 </body>
                 </html>
             `);
@@ -2662,17 +2903,77 @@
             return value.toString().trim();
         }
 
-        /** ربط اسم السائق الإنجليزي بالعربي من بيانات الإعدادات المحلية */
+        /** ربط اسم السائق الإنجليزي بالعربي — يجمع من كل المصادر المتاحة */
         function getDriverNameArMap() {
             const map = {};
+            // 1. من بيانات المستخدمين (getAllUsers — الأكثر موثوقية)
+            try {
+                if (window._allUsersData && window._allUsersData.length) {
+                    window._allUsersData.forEach(function(u) {
+                        if (u.type === 'driver' && u.nameEn && u.nameAr) {
+                            map[u.nameEn.toUpperCase().trim()] = u.nameAr.trim();
+                            map[u.nameAr.trim()] = u.nameAr.trim();
+                        }
+                    });
+                }
+            } catch(e) {}
+            // 2. من localStorage (fallback)
             try {
                 const drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
                 drivers.forEach(function (d) {
-                    if (d.nameEn) map[d.nameEn.toUpperCase().trim()] = d.nameAr || d.nameEn;
-                    if (d.nameAr) map[d.nameAr.trim()] = d.nameAr;
+                    if (d.nameEn && !map[d.nameEn.toUpperCase().trim()]) {
+                        map[d.nameEn.toUpperCase().trim()] = d.nameAr || d.nameEn;
+                    }
+                    if (d.nameAr && !map[d.nameAr.trim()]) {
+                        map[d.nameAr.trim()] = d.nameAr;
+                    }
                 });
-            } catch (e) { /* لا توجد بيانات سائقين محلية */ }
+            } catch (e) {}
             return map;
+        }
+
+        /** ربط اسم السائق بالرقم الوظيفي/المدني — لملء الحقل الفارغ في السجلات القديمة */
+        function getDriverStaffMap() {
+            var map = {};
+            // 1. من بيانات المستخدمين (getAllUsers — الأكثر موثوقية)
+            try {
+                if (window._allUsersData && window._allUsersData.length) {
+                    window._allUsersData.forEach(function(u) {
+                        if (u.type === 'driver' && u.nameEn) {
+                            var num = (u.staffNumber || u.civilId || '').toString().trim();
+                            if (num) {
+                                map[u.nameEn.toUpperCase().trim()] = num;
+                                if (u.nameAr) map[u.nameAr.trim()] = num;
+                            }
+                        }
+                    });
+                }
+            } catch(e) {}
+            // 2. من localStorage (fallback)
+            try {
+                var drivers = JSON.parse(localStorage.getItem('ambulance_drivers')) || [];
+                drivers.forEach(function(d) {
+                    var num = (d.staffNumber || '').toString().trim();
+                    if (num && d.nameEn && !map[d.nameEn.toUpperCase().trim()]) {
+                        map[d.nameEn.toUpperCase().trim()] = num;
+                    }
+                    if (num && d.nameAr && !map[d.nameAr.trim()]) {
+                        map[d.nameAr.trim()] = num;
+                    }
+                });
+            } catch(e) {}
+            return map;
+        }
+
+        /** حل الرقم الوظيفي/المدني للسائق — يستخدم القيمة المحفوظة أو يبحث بالاسم */
+        var _driverStaffMapCache = null;
+        function resolveDriverStaffNumber(record) {
+            var staffNum = (record['Staff Number'] || '').toString().trim();
+            if (staffNum) return staffNum;
+            var driverEn = (record['Driver Name'] || '').toString().trim();
+            if (!driverEn) return '';
+            if (!_driverStaffMapCache) _driverStaffMapCache = getDriverStaffMap();
+            return _driverStaffMapCache[driverEn.toUpperCase()] || _driverStaffMapCache[driverEn] || '';
         }
 
         /** ربط الوجهة الإنجليزية بالعربية */
@@ -2688,122 +2989,119 @@
             return DESTINATION_MAP[v] || DESTINATION_MAP[v.toUpperCase()] || v;
         }
 
-        /**
-         * تنزيل كشف حركة الإسعاف PDF معبأ من الرحلات المكتملة للفترة المعروضة (حتى 10 رحلات).
-         * يتطلب وجود ملف قالب في المسار PDF_TEMPLATE_URL وأسماء حقول كما في PDF-FIELD-NAMES.md
-         *
-         * حقول اسم السائق (Driver_Name_1 … 10) يجب أن تكون قوائم منسدلة (Dropdown/ComboBox)
-         * في ملف القالب، تحتوي على أسماء السائقين بالعربي.
-         * حقلا center_hospital_name و Destination لا يُعبآن بالكود — يبقيان كما أُدخلا في القالب.
-         */
-        async function downloadPdfForm() {
-            const completed = (allRecords || []).filter(function (r) {
+        const ARABIC_NUMS = ['', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
+
+        var _pdfTemplateCache = null;
+        var _logoDataUriCache = null;
+
+        async function fetchLogoAsDataUri(url) {
+            var res = await fetch(url);
+            if (!res.ok) return '';
+            var blob = await res.blob();
+            return new Promise(function (resolve) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { resolve(''); };
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function buildPdfHtml() {
+            var completed = (allRecords || []).filter(function (r) {
                 return r['Return Date'] && r['Return Time'];
             });
             if (completed.length === 0) {
                 showToast('لا توجد رحلات مكتملة في الفترة المحددة لملء كشف PDF', 'warning');
-                return;
+                return null;
             }
-            const records = completed.slice(0, 10);
-            const btn = document.getElementById('btnDownloadPdf');
-            if (btn) { btn.disabled = true; btn.textContent = 'جاري التحميل...'; }
-            try {
-                const res = await fetch(PDF_TEMPLATE_URL);
-                if (!res.ok) {
-                    showToast('لم يتم العثور على ملف قالب PDF. ضع الملف في ' + PDF_TEMPLATE_URL, 'error');
-                    return;
-                }
-                const buf = await res.arrayBuffer();
-                const lib = window.PDFLib || window.pdfLib;
-                if (!lib || !lib.PDFDocument) {
-                    showToast('مكتبة PDF غير محملة. تحقق من الاتصال بالإنترنت.', 'error');
-                    return;
-                }
-                const pdfDoc = await lib.PDFDocument.load(buf);
-                const form = pdfDoc.getForm();
+            var records = completed.slice(0, 10);
 
-                // تعيين NeedAppearances حتى يعرض Acrobat النصوص بنفسه (يدعم العربي بشكل صحيح)
+            if (!_pdfTemplateCache) {
+                var tplRes = await fetch(PDF_TEMPLATE_PATH);
+                if (!tplRes.ok) throw new Error('تعذر تحميل قالب HTML');
+                _pdfTemplateCache = await tplRes.text();
+            }
+
+            if (!_logoDataUriCache) {
                 try {
-                    var acroForm = form.acroForm;
-                    acroForm.dict.set(lib.PDFName.of('NeedAppearances'), lib.PDFBool.True);
-                } catch (nae) { console.warn('NeedAppearances flag:', nae); }
+                    _logoDataUriCache = await fetchLogoAsDataUri('ambulancelogo.png');
+                    if (!_logoDataUriCache) {
+                        _logoDataUriCache = await fetchLogoAsDataUri(window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'ambulancelogo.png');
+                    }
+                } catch (le) { console.warn('Logo load skipped', le); }
+            }
 
-                /** تعيين نص عادي (إنجليزي/أرقام) في حقل نصي */
-                function setText(name, value) {
-                    try {
-                        var v = (value != null && value !== undefined) ? String(value).trim() : '';
-                        form.getTextField(name).setText(v);
-                    } catch (e) { /* حقل غير موجود في القالب */ }
+            var driverMap = getDriverNameArMap();
+            var destination = '';
+            for (var d = 0; d < records.length; d++) {
+                var dest = mapDestinationToAr(records[d]['Destination']);
+                if (dest) { destination = dest; break; }
+            }
+
+            var rowsHtml = '';
+            for (var i = 0; i < 10; i++) {
+                var r = records[i];
+                if (r) {
+                    var driverEn = (r['Driver Name'] || '').trim();
+                    var driverAr = driverMap[(driverEn).toUpperCase()] || '';
+                    var driverDisplay = driverAr || driverEn;
+                    rowsHtml += '<tr>' +
+                        '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
+                        '<td>' + (r['Vehicle Number'] || '') + '</td>' +
+                        '<td>' + driverDisplay + '</td>' +
+                        '<td>' + resolveDriverStaffNumber(r) + '</td>' +
+                        '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
+                        '<td>' + (r['Departure Time'] || '') + '</td>' +
+                        '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
+                        '<td>' + (r['Return Time'] || '') + '</td>' +
+                        '</tr>';
+                } else {
+                    rowsHtml += '<tr>' +
+                        '<td></td>' +
+                        '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
                 }
+            }
 
-                /**
-                 * اختيار اسم السائق من قائمة منسدلة (Dropdown) في PDF.
-                 * الحقل يجب أن يكون Dropdown في القالب يحتوي أسماء السائقين بالعربي.
-                 */
-                function selectDriver(name, driverNameEn) {
-                    try {
-                        var dropdown = form.getDropdown(name);
-                        var options = dropdown.getOptions();
-                        if (!options || options.length === 0) return;
+            return {
+                html: _pdfTemplateCache
+                    .replace('{{logo_src}}', _logoDataUriCache || 'ambulancelogo.png')
+                    .replace('{{hospital_name}}', PDF_CENTER_NAME)
+                    .replace('{{destination}}', destination)
+                    .replace('{{table_rows}}', rowsHtml),
+                count: records.length
+            };
+        }
 
-                        // ابحث عن الاسم العربي المقابل للاسم الإنجليزي
-                        var driverAr = driverMap[driverNameEn.toUpperCase()] || '';
+        async function downloadPdfForm() {
+            var btn = document.getElementById('btnDownloadPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
+            try {
+                var result = await buildPdfHtml();
+                if (!result) return;
 
-                        // إذا السائق غير موجود في النظام — اترك الحقل فارغاً للإدخال اليدوي لاحقاً
-                        if (!driverAr) return;
+                if (btn) { btn.textContent = 'جاري التنزيل...'; }
 
-                        // حاول مطابقة الاسم العربي مع خيارات القائمة
-                        for (var i = 0; i < options.length; i++) {
-                            var opt = options[i].trim();
-                            if (opt === driverAr) {
-                                dropdown.select(options[i]);
-                                return;
-                            }
-                        }
+                var apiRes = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'generatePdf', html: result.html })
+                });
+                var apiResult = await apiRes.json();
+                if (!apiResult.success) throw new Error(apiResult.error || 'فشل توليد PDF');
 
-                        // مطابقة جزئية
-                        for (var j = 0; j < options.length; j++) {
-                            var optTrim = options[j].trim();
-                            if (optTrim && (optTrim.indexOf(driverAr) !== -1 || driverAr.indexOf(optTrim) !== -1)) {
-                                dropdown.select(options[j]);
-                                return;
-                            }
-                        }
-                        // لم يُطابق — يبقى فارغاً للإدخال اليدوي
-                    } catch (e) { /* حقل غير موجود في القالب */ }
-                }
+                var byteStr = atob(apiResult.pdf);
+                var bytes = new Uint8Array(byteStr.length);
+                for (var b = 0; b < byteStr.length; b++) bytes[b] = byteStr.charCodeAt(b);
 
-                // خريطة أسماء السائقين EN→AR من الإعدادات المحلية
-                var driverMap = getDriverNameArMap();
+                var pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+                var blobUrl = URL.createObjectURL(pdfBlob);
+                var link = document.createElement('a');
+                link.href = blobUrl;
 
-                // ملء حقول كل رحلة (لا نملأ center_hospital_name ولا Destination — يبقيان كما في القالب)
-                for (let i = 0; i < records.length; i++) {
-                    const r = records[i];
-                    const n = i + 1;
-                    setText('Vehicle_Number_' + n, r['Vehicle Number']);
-
-                    // اسم السائق — اختيار من القائمة المنسدلة
-                    const driverEn = (r['Driver Name'] || '').trim();
-                    selectDriver('Driver_Name_' + n, driverEn);
-
-                    setText('Staff_Number_' + n, r['Staff Number']);
-                    setText('Departure_Time_' + n, r['Departure Time']);
-                    setText('Departure_Date_' + n, formatDateForPdf(r['Departure Date']));
-                    setText('Return_Time_' + n, r['Return Time']);
-                    setText('Return_Date_' + n, formatDateForPdf(r['Return Date']));
-                }
-
-                // حفظ بدون تحديث تلقائي للمظهر — Acrobat يعرض النص بنفسه عبر NeedAppearances
-                const pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-
-                // اسم الملف يتضمن الشهر والسنة من الفلتر
-                const month = document.getElementById('monthFilter').value;
-                const year = document.getElementById('yearFilter').value;
-                const monthNames = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-                let fileSuffix;
+                var month = document.getElementById('monthFilter').value;
+                var year = document.getElementById('yearFilter').value;
+                var monthNames = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+                var fileSuffix;
                 if (month !== 'all' && year !== 'all') fileSuffix = monthNames[parseInt(month)] + '_' + year;
                 else if (month !== 'all') fileSuffix = monthNames[parseInt(month)];
                 else if (year !== 'all') fileSuffix = year;
@@ -2811,13 +3109,42 @@
 
                 link.download = 'كشف-حركة-سيارات-الاسعاف_' + fileSuffix + '.pdf';
                 link.click();
-                URL.revokeObjectURL(link.href);
-                showToast('تم تنزيل كشف PDF بنجاح (' + records.length + ' رحلة)', 'success');
+                setTimeout(function () {
+                    URL.revokeObjectURL(blobUrl);
+                    showToast('تم تنزيل كشف PDF بنجاح (' + result.count + ' رحلة)', 'success');
+                }, 3000);
             } catch (err) {
                 console.error('downloadPdfForm error', err);
-                showToast('حدث خطأ أثناء إنشاء PDF. تأكد من وجود القالب وأسماء الحقول.', 'error');
+                showToast('حدث خطأ أثناء إنشاء PDF: ' + err.message, 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = 'تنزيل كشف PDF'; }
+            }
+        }
+
+        async function printPdfForm() {
+            var btn = document.getElementById('btnPrintPdf');
+            if (btn) { btn.disabled = true; btn.textContent = 'جاري التجهيز...'; }
+            try {
+                var result = await buildPdfHtml();
+                if (!result) return;
+
+                var printWindow = window.open('', '_blank', 'width=1100,height=750');
+                if (!printWindow) {
+                    showToast('يرجى السماح بالنوافذ المنبثقة للطباعة', 'warning');
+                    return;
+                }
+                printWindow.document.open();
+                printWindow.document.write(result.html);
+                printWindow.document.close();
+                printWindow.onload = function () {
+                    printWindow.focus();
+                    printWindow.print();
+                };
+            } catch (err) {
+                console.error('printPdfForm error', err);
+                showToast('حدث خطأ أثناء التجهيز للطباعة: ' + err.message, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'طباعة كشف PDF'; }
             }
         }
 
@@ -2869,12 +3196,12 @@
                 }
 
                 if (exportFormat === 'csv') {
-                    let csv = 'التاريخ,رقم السيارة,السائق,الرقم الوظيفي,ساعة المغادرة,تاريخ العودة,ساعة العودة,الوجهة,التشخيص,الممرضة\n';
+                    let csv = 'التاريخ,رقم السيارة,السائق,الرقم الوظيفي,ساعة المغادرة,تاريخ العودة,ساعة العودة,الوجهة,التشخيص,المسجّل\n';
                     
                     data.forEach(record => {
                         const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '';
                         const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '';
-                        csv += `${depDate},${record['Vehicle Number']},${record['Driver Name']},${record['Staff Number']},${record['Departure Time']},${retDate},${record['Return Time']},${record['Destination']},"${record['Patient Condition / Diagnosis']}",${record['Nurse Name']}\n`;
+                        csv += `${depDate},${record['Vehicle Number']},${record['Driver Name']},${resolveDriverStaffNumber(record)},${record['Departure Time']},${retDate},${record['Return Time']},${record['Destination']},"${record['Patient Condition / Diagnosis']}",${record['Nurse Name']}\n`;
                     });
 
                     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -2927,9 +3254,11 @@
             updateRecordsTitle();
             loadRecords();
         });
+        var _searchDebounceTimer = null;
         document.getElementById('searchInput').addEventListener('input', function() {
             currentPage = 1;
-            loadRecords();
+            clearTimeout(_searchDebounceTimer);
+            _searchDebounceTimer = setTimeout(loadRecords, 250);
         });
         
         // Export type change listener
@@ -2970,12 +3299,29 @@
         let pendingPage = 1;
         let approvedPage = 1;
         const TRIPS_PER_PAGE = 5;
+        
+        // Optimistic deletion: track recently deleted trip IDs so server
+        // responses don't resurrect them before the delete is processed.
+        const _recentlyDeletedTrips = new Map(); // tripId → timestamp
 
         function applyTrips(trips) {
-            updateNotificationBadges(trips);
-            if (trips && trips.length > 0) {
-                pendingTripsArr = trips.filter(t => t.status === 'pending');
-                approvedTripsArr = trips.filter(t => t.status === 'complete' || t.status === 'submitted');
+            // Filter out recently deleted trips (optimistic deletion protection)
+            let filtered = trips || [];
+            if (_recentlyDeletedTrips.size > 0) {
+                const now = Date.now();
+                // Clean up old entries (older than 30 seconds — server should have processed by then)
+                _recentlyDeletedTrips.forEach((ts, id) => {
+                    if (now - ts > 30000) _recentlyDeletedTrips.delete(id);
+                });
+                filtered = filtered.filter(t => !_recentlyDeletedTrips.has(t.tripId || t.id));
+            }
+            
+            updateNotificationBadges(filtered);
+            if (filtered.length > 0) {
+                pendingTripsArr = filtered.filter(t => t.status === 'pending');
+                // Only show trips waiting for nurse completion (driver returned but nurse hasn't submitted yet).
+                // 'submitted' trips are already in the Records table — no need to duplicate here.
+                approvedTripsArr = filtered.filter(t => t.status === 'complete');
             } else {
                 pendingTripsArr = [];
                 approvedTripsArr = [];
@@ -3017,7 +3363,12 @@
         }
 
         function applyRecords(records) {
-            allRecords = records || [];
+            var newRecords = filterDeleted(records || []);
+            var newHash = DataCache.hash(newRecords);
+            // Skip re-render if data is identical to what's already displayed
+            if (newHash === _displayedRecordsHash) return;
+            allRecords = newRecords;
+            _displayedRecordsHash = newHash;
             const totalPages = Math.ceil(allRecords.length / recordsPerPage);
             if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
@@ -3025,25 +3376,145 @@
         }
 
         // === INSTANT DISPLAY: Show cached data immediately on page load ===
-        const cachedAdminData = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 2);
-        if (cachedAdminData && cachedAdminData.data) {
-            // Show ALL cached data instantly (stats + records + trips)
-            const data = cachedAdminData.data;
-            if (data.stats) applyStats(data.stats);
-            if (data.records) applyRecords(data.records);
-            if (data.trips) applyTrips(data.trips);
+        // === INSTANT DISPLAY: show whatever we have cached, then replace with fresh data ===
+        var _instantData = null;
+        var _cachedAdmin = DataCache.get(DataCache.KEYS.ADMIN_DATA, DataCache.EXPIRY.ADMIN_DATA * 10);
+        if (_cachedAdmin && _cachedAdmin.data) {
+            _instantData = _cachedAdmin.data;
         } else {
-            // No cache available - show skeleton
+            try {
+                var _raw = localStorage.getItem('admin_instant_data');
+                if (_raw) _instantData = JSON.parse(_raw);
+            } catch(e) {}
+        }
+        
+        var _tripsDisplayed = false;
+        if (_instantData) {
+            if (_instantData.stats) applyStats(_instantData.stats);
+            if (_instantData.records) applyRecords(_instantData.records);
+            if (_instantData.trips) { applyTrips(_instantData.trips); _tripsDisplayed = true; }
+        }
+        
+        // Try separate pending trips cache (updated by login page or previous visit)
+        if (!_tripsDisplayed) {
+            try {
+                var _rawTrips = localStorage.getItem('cache_pending_trips');
+                if (_rawTrips) {
+                    var _parsed = JSON.parse(_rawTrips);
+                    var _tripsArr = _parsed.data || _parsed;
+                    if (Array.isArray(_tripsArr)) { applyTrips(_tripsArr); _tripsDisplayed = true; }
+                }
+            } catch(e) {}
+        }
+        if (!_tripsDisplayed) {
+            var _cachedTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 10);
+            if (_cachedTrips && _cachedTrips.data) {
+                applyTrips(_cachedTrips.data);
+                _tripsDisplayed = true;
+            }
+        }
+
+        // If still no trips: show skeleton, then wait for the FAST early fetch (1-2s)
+        if (!_tripsDisplayed) {
             showTripsSkeleton();
         }
         
+        // Always wait for the fast early fetch to replace stale cache with fresh data
+        (async function() {
+            if (window.__earlyPendingTrips) {
+                var freshTrips = await Promise.race([
+                    window.__earlyPendingTrips,
+                    new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
+                ]);
+                if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
+                    applyTrips(freshTrips);
+                    _tripsDisplayed = true;
+                }
+            }
+        })();
+        
+        // Invalidate data cache on code update to ensure fresh records with Ext Support column
+        (function() {
+            var codeVer = 'v36';
+            if (localStorage.getItem('_adminCodeVer') !== codeVer) {
+                localStorage.setItem('_adminCodeVer', codeVer);
+                try { DataCache.invalidateAll(); } catch(e) {}
+            }
+        })();
+
         // Fetch fresh data in background (will update UI if data changed)
         loadAdminData();
+        loadPendingTrips();
+
+        // Background pre-warming: aggressively prefetch ALL months' records
+        // Priority: adjacent months first, then "all", then the rest
+        // Uses batches of 2 with short delays to avoid network saturation
+        setTimeout(function() {
+            try {
+                const year = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
+                var prevYear = year - 1;
+
+                var monthsToWarm = [];
+                // "all" for current year (common admin view)
+                monthsToWarm.push({ y: year, m: 'all' });
+                // Adjacent months first
+                if (currentMonth > 1) monthsToWarm.push({ y: year, m: currentMonth - 1 });
+                if (currentMonth < 12) monthsToWarm.push({ y: year, m: currentMonth + 1 });
+                // Rest of current year
+                for (var m = currentMonth - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = currentMonth + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
+                // Previous year recent months
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
+                monthsToWarm.push({ y: prevYear, m: 'all' });
+
+                function fetchAdminRecords(item) {
+                    var key = DataCache.KEYS.RECORDS + '_' + item.y + '_' + item.m + '_';
+                    var existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data && !existing.isExpired) return Promise.resolve();
+                    var warmUrl = WEB_APP_URL + '?action=getAllRecords&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success && result.data) DataCache.set(key, result.data);
+                    }).catch(function() {});
+                }
+
+                var warmIdx = 0;
+                function warmAdminBatch() {
+                    if (warmIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && warmIdx < monthsToWarm.length) {
+                        batch.push(fetchAdminRecords(monthsToWarm[warmIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmAdminBatch, 500);
+                    });
+                }
+                warmAdminBatch();
+            } catch(e) {}
+        }, 2000);
+
+        // Initialize SyncManager for admin actions (delete, update)
+        SyncManager.init(WEB_APP_URL).then(() => {
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'deleteRecord' || detail.action === 'updateRecord' || detail.action === 'archiveRecord') {
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    loadAdminData();
+                }
+            });
+            SyncManager.cleanup();
+        }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
+
+        var _adminDataRequestId = 0;
 
         async function loadAdminData() {
             const search = document.getElementById('searchInput').value;
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
+            const thisRequestId = ++_adminDataRequestId;
+            // Capture filter state at request time to avoid race conditions
+            const reqYear = year;
+            const reqMonth = month;
             
             // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
             if (window.__earlyAdminFetch && !search) {
@@ -3060,17 +3531,44 @@
                 url,
                 DataCache.KEYS.ADMIN_DATA,
                 DataCache.EXPIRY.ADMIN_DATA,
-                (data) => {
+                (data, meta) => {
                     if (!data) return;
+                    if (thisRequestId !== _adminDataRequestId) return;
+                    if (meta && !meta.fromCache && meta.unchanged) return;
+                    if (typeof SyncManager !== 'undefined') {
+                        if (data.records) SyncManager.updateMaxIdFromRecords(data.records);
+                        if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
+                    }
                     applyStats(data.stats);
-                    applyRecords(data.records);
+                    // Only apply records if filter hasn't changed since request started
+                    var curYear = document.getElementById('yearFilter').value;
+                    var curMonth = document.getElementById('monthFilter').value;
+                    if (curYear === reqYear && curMonth === reqMonth) {
+                        applyRecords(data.records);
+                    }
                     applyTrips(data.trips);
+                    // Save to dedicated fallback for instant display on next load
+                    if (!meta || !meta.fromCache) {
+                        try { localStorage.setItem('admin_instant_data', JSON.stringify(data)); } catch(e) {}
+                    }
+                    // Save records cache using the request-time filter values (not current)
+                    if (data.records) {
+                        DataCache.set(DataCache.KEYS.RECORDS + '_' + reqYear + '_' + reqMonth + '_', data.records);
+                    }
                 },
                 (result) => result.success ? result : null
             );
         }
 
         async function loadPendingTrips() {
+            // Reuse early pending trips fetch if available
+            if (window.__earlyPendingTrips) {
+                const ptUrl = `${WEB_APP_URL}?action=getPendingTrips`;
+                DataCache._inflight[ptUrl] = window.__earlyPendingTrips.then(function(trips) {
+                    return { success: true, trips: trips || [] };
+                });
+                window.__earlyPendingTrips = null;
+            }
             await DataCache.fetchWithCache(
                 `${WEB_APP_URL}?action=getPendingTrips`,
                 DataCache.KEYS.PENDING_TRIPS,
@@ -3236,7 +3734,7 @@
             keysToRemove.forEach(key => localStorage.removeItem(key));
         }
 
-        // Delete pending trip
+        // Delete pending trip — optimistic instant deletion
         async function deletePendingTrip(tripId) {
             const confirmed = await sysConfirm({
                 title: 'حذف الرحلة',
@@ -3247,47 +3745,54 @@
             });
             if (!confirmed) return;
             
-            // Find and animate the card immediately
+            // === INSTANT UI (0ms) ===
+            
+            // Mark as recently deleted so background fetches don't resurrect it
+            _recentlyDeletedTrips.set(tripId, Date.now());
+            
+            // Animate the card out
             const tripCard = document.querySelector(`[data-trip-id="${tripId}"]`);
             if (tripCard) {
                 tripCard.classList.add('deleting');
             }
             
-            // Remove from local arrays immediately for instant feedback
+            // Remove from local arrays
             pendingTripsArr = pendingTripsArr.filter(t => (t.tripId || t.id) !== tripId);
             approvedTripsArr = approvedTripsArr.filter(t => (t.tripId || t.id) !== tripId);
             
-            // Update counts immediately
+            // Update counts and re-render after animation
             document.getElementById('pendingCount').textContent = pendingTripsArr.length;
             document.getElementById('approvedCount').textContent = approvedTripsArr.length;
             
-            showToast('جاري حذف الطلب...', 'info');
+            setTimeout(() => {
+                const pendingSection = document.getElementById('pendingTripsContainer').parentElement;
+                const approvedSection = document.getElementById('approvedTripsContainer').parentElement;
+                pendingSection.querySelector('.trip-section-pagination')?.remove();
+                approvedSection.querySelector('.trip-section-pagination')?.remove();
+                renderTripSection('pendingTripsContainer', getFilteredTrips('pending'), pendingPage, 'pending');
+                renderTripSection('approvedTripsContainer', getFilteredTrips('approved'), approvedPage, 'approved');
+            }, 350);
             
+            // Update local caches to reflect deletion
+            clearLocalPendingTripCaches();
+            
+            showToast(`تم حذف الطلب ${tripId}`, 'success');
+            
+            // === BACKGROUND SERVER SYNC (silent) ===
             try {
                 const response = await fetch(`${WEB_APP_URL}?action=deletePendingTrip&tripId=${encodeURIComponent(tripId)}`);
                 const result = await response.json();
-                
                 if (result.success) {
-                    showToast(`تم حذف الطلب ${tripId} بنجاح`, 'success');
-                    DataCache.invalidateAll();
-                    clearLocalPendingTripCaches();
-                    
-                    // Re-render after animation completes
-                    setTimeout(() => {
-                        const pendingSection = document.getElementById('pendingTripsContainer').parentElement;
-                        const approvedSection = document.getElementById('approvedTripsContainer').parentElement;
-                        pendingSection.querySelector('.trip-section-pagination')?.remove();
-                        approvedSection.querySelector('.trip-section-pagination')?.remove();
-                        renderTripSection('pendingTripsContainer', getFilteredTrips('pending'), pendingPage, 'pending');
-                        renderTripSection('approvedTripsContainer', getFilteredTrips('approved'), approvedPage, 'approved');
-                    }, 400);
+                    DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
                 } else {
-                    showToast(result.error || 'فشل في الحذف', 'error');
-                    // Reload to restore state on error
+                    showToast(result.error || 'فشل حذف الطلب من السيرفر', 'error');
+                    _recentlyDeletedTrips.delete(tripId);
                     loadPendingTrips();
                 }
             } catch (error) {
-                showToast('خطأ في الاتصال: ' + error.message, 'error');
+                showToast('خطأ في الاتصال - سيُعاد المحاولة', 'error');
+                _recentlyDeletedTrips.delete(tripId);
                 loadPendingTrips();
             }
         }
@@ -3303,7 +3808,7 @@
             pendingVehicleNumber = vehicleNumber;
             
             document.getElementById('actionModalTitle').textContent = 'تأكيد الأرشفة';
-            document.getElementById('actionModalMessage').textContent = `هل تريد أرشفة الطلب رقم: ${id}؟ سيتم إرسال إشعار للممرضات.`;
+            document.getElementById('actionModalMessage').textContent = `هل تريد أرشفة الطلب رقم: ${id}؟`;
             document.getElementById('confirmActionBtn').textContent = 'أرشفة';
             document.getElementById('confirmActionBtn').style.background = '#4338ca';
             document.getElementById('actionReason').value = '';
@@ -3332,7 +3837,8 @@
                 }, 300);
             }
             
-            // Remove from local array immediately
+            // Remove from local array immediately and prevent server resurrection
+            markAsDeleted(id);
             allRecords = allRecords.filter(r => r.id !== id && r.ID !== id);
             
             showToast('جاري حذف السجل...', 'info');
@@ -3343,23 +3849,33 @@
             }, 650);
             
             try {
-                const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, {
-                    method: 'GET',
-                    mode: 'cors'
+                // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+                await SyncManager.save('deleteRecord', {
+                    action: 'deleteRecord',
+                    id: id,
+                    vehicleNumber: vehicleNumber
                 });
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
-                    DataCache.invalidateAll();
-                    clearLocalPendingTripCaches();
-                } else {
-                    showToast(result.error || 'فشل في الحذف', 'error');
+                showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
+                invalidateAdminCaches(id, false);
+                clearLocalPendingTripCaches();
+            } catch (error) {
+                console.error('SyncManager direct delete error:', error);
+                // Fallback to original GET method
+                try {
+                    const response = await fetch(`${WEB_APP_URL}?action=deleteRecord&id=${encodeURIComponent(id)}`, { method: 'GET', mode: 'cors' });
+                    const result = await response.json();
+                    if (result.success) {
+                        showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
+                        invalidateAdminCaches(id, false);
+                        clearLocalPendingTripCaches();
+                    } else {
+                        showToast(result.error || 'فشل في الحذف', 'error');
+                        loadAdminData();
+                    }
+                } catch (fetchErr) {
+                    showToast('خطأ في الاتصال: ' + fetchErr.message, 'error');
                     loadAdminData();
                 }
-            } catch (error) {
-                showToast('خطأ في الاتصال: ' + error.message, 'error');
-                loadAdminData();
             }
         }
         
@@ -3369,7 +3885,7 @@
             pendingVehicleNumber = vehicleNumber;
             
             document.getElementById('actionModalTitle').textContent = 'تأكيد الحذف';
-            document.getElementById('actionModalMessage').textContent = `هل تريد حذف الطلب رقم: ${id}؟ سيتم إرسال إشعار للممرضات. هذا الإجراء لا يمكن التراجع عنه!`;
+            document.getElementById('actionModalMessage').textContent = `هل تريد حذف الطلب رقم: ${id}؟ هذا الإجراء لا يمكن التراجع عنه!`;
             document.getElementById('confirmActionBtn').textContent = 'حذف';
             document.getElementById('confirmActionBtn').style.background = '#dc2626';
             document.getElementById('actionReason').value = '';
@@ -3395,44 +3911,47 @@
             btn.disabled = true;
             btn.textContent = 'جاري التنفيذ...';
 
-            try {
-                const actionType = pendingAction === 'archive' ? 'archiveRecord' : 'deleteRecord';
-                
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'text/plain',
-                    },
-                    body: JSON.stringify({
-                        action: actionType,
-                        id: pendingRecordId,
-                        vehicleNumber: pendingVehicleNumber,
-                        reason: reason
-                    })
-                });
+            const actionType = pendingAction === 'archive' ? 'archiveRecord' : 'deleteRecord';
+            const actionLabel = pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح';
 
-                closeActionModal();
-                
-                showToast(pendingAction === 'archive' ? 'تم أرشفة السجل بنجاح' : 'تم حذف السجل بنجاح', 'success');
-                
-                // Invalidate all caches so driver/nurse pages get fresh data
-                DataCache.invalidateAll();
-                if (pendingAction === 'delete') {
-                    clearLocalPendingTripCaches();
-                }
-                
-                // Reload data
-                setTimeout(() => {
-                    loadAdminData();
-                }, 1000);
-                
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('حدث خطأ أثناء تنفيذ الإجراء', 'error');
-            } finally {
-                btn.disabled = false;
+            // === INSTANT UI — close modal & show toast without waiting ===
+            closeActionModal();
+            showToast(actionLabel, 'success');
+            btn.disabled = false;
+
+            var confirmedRecordId = pendingRecordId;
+            var confirmedVehicle = pendingVehicleNumber;
+            var confirmedAction = pendingAction;
+            markAsDeleted(confirmedRecordId);
+            allRecords = allRecords.filter(r => String(r.ID || r.id).trim() !== String(confirmedRecordId).trim());
+            _displayedRecordsHash = DataCache.hash(allRecords);
+            displayRecordsWithPagination();
+
+            invalidateAdminCaches(confirmedRecordId, false);
+            if (confirmedAction === 'delete') {
+                clearLocalPendingTripCaches();
             }
+
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save(actionType, {
+                action: actionType,
+                id: confirmedRecordId,
+                vehicleNumber: confirmedVehicle,
+                reason: reason
+            }).catch(err => {
+                console.error('SyncManager admin action error:', err);
+                ReliablePost.send(WEB_APP_URL, {
+                    action: actionType,
+                    id: confirmedRecordId,
+                    vehicleNumber: confirmedVehicle,
+                    reason: reason
+                }, { background: true, timeout: 30000 }).catch(() => {});
+            });
+
+            setTimeout(() => {
+                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                loadAdminData();
+            }, 3000);
         }
 
         // ============================================
@@ -3457,7 +3976,7 @@
 
         function populateNurseDropdown(selectedNameEn, selectedStaffNumber) {
             const select = document.getElementById('editNurseName');
-            select.innerHTML = '<option value="">-- اختر الممرضة --</option>';
+            select.innerHTML = '<option value="">-- اختر المسجّل --</option>';
             nursesList.forEach(n => {
                 const nameEn = (n.nameEn || '').toString().trim();
                 const nameAr = (n.nameAr || '').toString().trim();
@@ -3475,11 +3994,34 @@
             });
         }
 
+        // Toggle free text mode for nurse name in admin edit modal
+        function toggleEditNurseFreeText() {
+            const checked = document.getElementById('editNurseFreeText').checked;
+            const selectEl = document.getElementById('editNurseName');
+            const textEl = document.getElementById('editNurseNameText');
+            if (checked) {
+                selectEl.style.display = 'none';
+                textEl.style.display = '';
+                // Pre-fill with current dropdown selection text if any
+                if (selectEl.value) {
+                    try {
+                        const d = JSON.parse(selectEl.value);
+                        textEl.value = d.nameEn || d.nameAr || '';
+                    } catch(e) {}
+                }
+            } else {
+                selectEl.style.display = '';
+                textEl.style.display = 'none';
+                textEl.value = '';
+            }
+        }
+
         function openEditRecordModal(record) {
             document.getElementById('editRecordId').value = record.ID || '';
+            document.getElementById('editExtSupport').value = record['Ext Support'] || '';
             document.getElementById('editVehicleNumber').value = record['Vehicle Number'] || '';
             document.getElementById('editDriverName').value = record['Driver Name'] || '';
-            document.getElementById('editStaffNumber').value = record['Staff Number'] || '';
+            document.getElementById('editStaffNumber').value = resolveDriverStaffNumber(record);
             document.getElementById('editDepartureDate').value = DateTimeFormatter.formatDate(record['Departure Date']) || '';
             document.getElementById('editDepartureTime').value = record['Departure Time'] || '';
             document.getElementById('editReturnDate').value = DateTimeFormatter.formatDate(record['Return Date']) || '';
@@ -3487,10 +4029,45 @@
             document.getElementById('editDestination').value = record['Destination'] || '';
             document.getElementById('editPatientName').value = record['Patient Name'] || record['patientName'] || '';
 
-            // Populate nurse dropdown with active nurses
+            // Reset free text mode
+            document.getElementById('editNurseFreeText').checked = false;
+            document.getElementById('editNurseName').style.display = '';
+            document.getElementById('editNurseNameText').style.display = 'none';
+            document.getElementById('editNurseNameText').value = '';
+
+            // Show original registerer name
             const nurseNameEn = (record['Nurse Name'] || '').toString().trim();
             const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            populateNurseDropdown(nurseNameEn, nurseStaff);
+            const origEl = document.getElementById('editNurseOriginal');
+            const origNameEl = document.getElementById('editNurseOriginalName');
+            const editExtSupportCol = (record['Ext Support'] || '').toString().trim();
+            const isEditExtSupport = !!editExtSupportCol || nurseNameEn.startsWith('[External Support]') || nurseStaff === 'EXT_SUPPORT';
+            if (nurseNameEn) {
+                origNameEl.textContent = isEditExtSupport ? resolveNurseArabicName(record) : nurseNameEn;
+                origEl.style.display = '';
+            } else {
+                origEl.style.display = 'none';
+            }
+
+            if (isEditExtSupport) {
+                document.getElementById('editNurseFreeText').checked = true;
+                document.getElementById('editNurseName').style.display = 'none';
+                document.getElementById('editNurseNameText').style.display = '';
+                document.getElementById('editNurseNameText').value = nurseNameEn;
+                // Still populate dropdown in background for easy switching
+                populateNurseDropdown('', '');
+            } else {
+                // Populate nurse dropdown with active nurses
+                populateNurseDropdown(nurseNameEn, nurseStaff);
+                // If no nurse was matched in dropdown, auto-enable free text with the original name
+                const select = document.getElementById('editNurseName');
+                if (nurseNameEn && !select.value) {
+                    document.getElementById('editNurseFreeText').checked = true;
+                    document.getElementById('editNurseName').style.display = 'none';
+                    document.getElementById('editNurseNameText').style.display = '';
+                    document.getElementById('editNurseNameText').value = nurseNameEn;
+                }
+            }
 
             document.getElementById('editRecordModal').classList.add('active');
         }
@@ -3506,15 +4083,20 @@
             btn.textContent = 'جاري الحفظ...';
 
             const recordId = document.getElementById('editRecordId').value;
-            const nurseSelectValue = document.getElementById('editNurseName').value;
+            const isFreeText = document.getElementById('editNurseFreeText').checked;
             let nurseName = '';
             let nurseStaffNumber = '';
-            if (nurseSelectValue) {
-                try {
-                    const nurseData = JSON.parse(nurseSelectValue);
-                    nurseName = nurseData.nameEn || nurseData.nameAr || '';
-                    nurseStaffNumber = nurseData.staffNumber || '';
-                } catch (e) {}
+            if (isFreeText) {
+                nurseName = (document.getElementById('editNurseNameText').value || '').trim();
+            } else {
+                const nurseSelectValue = document.getElementById('editNurseName').value;
+                if (nurseSelectValue) {
+                    try {
+                        const nurseData = JSON.parse(nurseSelectValue);
+                        nurseName = nurseData.nameEn || nurseData.nameAr || '';
+                        nurseStaffNumber = nurseData.staffNumber || '';
+                    } catch (e) {}
+                }
             }
 
             const payload = {
@@ -3530,34 +4112,55 @@
                 destination: document.getElementById('editDestination').value.trim(),
                 patientName: document.getElementById('editPatientName').value.trim(),
                 nurseName: nurseName,
-                nurseStaffNumber: nurseStaffNumber
+                nurseStaffNumber: nurseStaffNumber,
+                extSupport: document.getElementById('editExtSupport').value || undefined
             };
 
-            try {
-                const response = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
+            // === OPTIMISTIC LOCAL UPDATE — update records in memory instantly ===
+            if (Array.isArray(allRecords)) {
+                allRecords = allRecords.map(r => {
+                    if (String(r.ID || r.id).trim() === String(recordId).trim()) {
+                        var updatedFields = {
+                            'Vehicle Number': payload.vehicleNumber,
+                            'Driver Name': payload.driverName,
+                            'Staff Number': payload.staffNumber,
+                            'Departure Date': payload.departureDate,
+                            'Departure Time': payload.departureTime,
+                            'Return Date': payload.returnDate,
+                            'Return Time': payload.returnTime,
+                            'Destination': payload.destination,
+                            'Patient Name': payload.patientName,
+                            'Nurse Name': payload.nurseName || r['Nurse Name'],
+                            'Nurse Staff Number': payload.nurseStaffNumber || r['Nurse Staff Number'],
+                            'Ext Support': payload.extSupport || r['Ext Support'] || ''
+                        };
+                        return { ...r, ...updatedFields };
+                    }
+                    return r;
                 });
-                const result = await response.json();
-
-                if (result.success) {
-                    showToast('تم تحديث بيانات الرحلة بنجاح', 'success');
-                    closeEditRecordModal();
-                    // Invalidate caches and reload fresh data
-                    DataCache.invalidateAll();
-                    await loadAdminData();
-                    loadNurseNameMap();
-                } else {
-                    showToast('خطأ في التحديث: ' + (result.error || ''), 'error');
-                }
-            } catch (error) {
-                showToast('خطأ في الاتصال بالسيرفر', 'error');
-                console.error('Edit record error:', error);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'حفظ التعديلات';
+                _displayedRecordsHash = DataCache.hash(allRecords);
+                displayRecordsWithPagination();
             }
+
+            // === INSTANT UI — close modal & show toast without waiting ===
+            closeEditRecordModal();
+            showToast('تم تحديث بيانات الرحلة بنجاح', 'success');
+            btn.disabled = false;
+            btn.textContent = 'حفظ التعديلات';
+
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('updateRecord', payload).catch(err => {
+                console.error('SyncManager admin edit error:', err);
+                // Fallback to direct ReliablePost
+                ReliablePost.send(WEB_APP_URL, payload, { background: true, timeout: 30000 }).catch(() => {});
+            });
+
+            invalidateAdminCaches(recordId, true);
+            setTimeout(() => {
+                DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                loadAdminData();
+                loadNurseNameMap();
+            }, 5000);
         }
 
         // Admin logout confirmation
@@ -3591,11 +4194,701 @@
             }
         }, 15000);
 
-        // Register Service Worker for PWA with auto-update
+        // Instant refresh when admin returns to the tab
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                // Fast: refresh pending trips immediately via lightweight endpoint
+                fetch(WEB_APP_URL + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                        applyTrips(result.trips);
+                    }
+                }).catch(function() {});
+                // Heavy: full data refresh in background
+                if (!isAdminRefreshing) {
+                    isAdminRefreshing = true;
+                    DataCache.invalidate(DataCache.KEYS.ADMIN_DATA);
+                    loadAdminData().finally(function() { isAdminRefreshing = false; });
+                }
+            }
+        });
+
+        // ── Inspections Module ──────────────────────────────────────────
+        const WEB_APP_URL_INSP = WEB_APP_URL; // same endpoint
+
+        let _allInspections = [];
+
+        async function loadInspections() {
+            const el = document.getElementById('inspectionsContainer');
+            el.innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>';
+
+            try {
+                const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections&_t=' + Date.now());
+                const data = await res.json();
+                if (!data.success || !data.inspections || data.inspections.length === 0) {
+                    el.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">لا توجد فحوصات مرسلة حتى الآن</div>';
+                    console.log('[Inspections] No data or error:', data);
+                    return;
+                }
+                _allInspections = data.inspections;
+                console.log('[Inspections] Loaded', _allInspections.length, 'rows');
+                populateInspectionFilters(_allInspections);
+                renderInspectionsTable(_allInspections);
+            } catch(e) {
+                console.error('[Inspections] Load error:', e);
+                el.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444;font-size:13px;">تعذّر تحميل الفحوصات</div>';
+            }
+        }
+
+        function parseDateSafe(val) {
+            if (!val) return null;
+            var s = String(val).trim();
+            if (!s) return null;
+            var d = s.includes('T') ? new Date(s) : new Date(s + 'T00:00:00');
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function getWeekMonth(weekStartISO) {
+            var d = parseDateSafe(weekStartISO);
+            if (!d) return null;
+            d.setDate(d.getDate() + 3);
+            return { month: d.getMonth() + 1, year: d.getFullYear() };
+        }
+
+        function fmtDateAr(isoStr, opts) {
+            var d = parseDateSafe(isoStr);
+            if (!d) return '—';
+            return d.toLocaleDateString('ar-OM', opts || { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        function populateInspectionFilters(rows) {
+            const weeks   = [...new Set(rows.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort().reverse();
+            const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
+
+            const wSel = document.getElementById('inspWeekFilter');
+            const curW = wSel.value;
+            wSel.innerHTML = '<option value="">جميع الأسابيع</option>';
+            weeks.forEach(w => {
+                const lbl = fmtDateAr(w, { day:'numeric', month:'long', year:'numeric' });
+                const opt = document.createElement('option');
+                opt.value = w; opt.textContent = 'أسبوع ' + lbl;
+                if (w === curW) opt.selected = true;
+                wSel.appendChild(opt);
+            });
+
+            const dSel = document.getElementById('inspDriverFilter');
+            const curD = dSel.value;
+            dSel.innerHTML = '<option value="">جميع السائقين</option>';
+            drivers.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                if (d === curD) opt.selected = true;
+                dSel.appendChild(opt);
+            });
+
+            // Populate month filter using Wednesday Rule
+            const mSel = document.getElementById('inspMonthFilter');
+            const curM = mSel.value;
+            const monthSet = new Map(); // key: "YYYY-MM" → {year, month, label}
+            weeks.forEach(w => {
+                const wm = getWeekMonth(w);
+                if (!wm) return; // skip invalid week dates
+                const { month, year } = wm;
+                if (isNaN(month) || isNaN(year)) return;
+                const key = year + '-' + String(month).padStart(2,'0');
+                if (!monthSet.has(key)) {
+                    const label = new Date(year, month - 1, 1).toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
+                    monthSet.set(key, { key, label });
+                }
+            });
+            mSel.innerHTML = '<option value="">اختر الشهر</option>';
+            [...monthSet.entries()].sort((a,b) => b[0].localeCompare(a[0])).forEach(([key, {label}]) => {
+                const opt = document.createElement('option');
+                opt.value = key; opt.textContent = label;
+                if (key === curM) opt.selected = true;
+                mSel.appendChild(opt);
+            });
+            if (!mSel.value && monthSet.size > 0) {
+                const sortedKeys = [...monthSet.keys()].sort().reverse();
+                const now = new Date();
+                const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+                const target = sortedKeys.includes(curKey) ? curKey : sortedKeys[0];
+                for (const opt of mSel.options) { if (opt.value === target) { opt.selected = true; break; } }
+            }
+        }
+
+        function renderInspectionsTable(rows) {
+            const filterWeek   = document.getElementById('inspWeekFilter').value;
+            const filterDriver = document.getElementById('inspDriverFilter').value;
+
+            const filtered = rows.filter(r =>
+                (!filterWeek   || String(r.Week_Start||'').trim() === filterWeek)   &&
+                (!filterDriver || r.Driver_Name  === filterDriver)
+            );
+
+            if (filtered.length === 0) {
+                document.getElementById('inspectionsContainer').innerHTML =
+                    '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">لا توجد نتائج</div>';
+                return;
+            }
+
+            // Group by driver + week
+            const groups = {};
+            filtered.forEach(r => {
+                const ws  = String(r.Week_Start || '').trim().substring(0, 10);
+                const key = (r.Staff_Number || '') + '|' + ws;
+                if (!groups[key]) groups[key] = { dayMap: {}, driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: ws, weekEnd: String(r.Week_End||'').trim().substring(0,10) };
+                const di = String(r.Day_Index);
+                const prev = groups[key].dayMap[di];
+                if (!prev || String(r.Submitted_At || '') >= String(prev.Submitted_At || '')) {
+                    groups[key].dayMap[di] = r;
+                }
+            });
+            Object.values(groups).forEach(g => { g.rows = Object.values(g.dayMap); });
+
+            const DAY_SHORT = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const INSP_TOTAL = 20; // total inspection items per session
+
+            function _inspItemCount(jsonStr) {
+                try { return Object.values((JSON.parse(jsonStr||'{}').items)||{}).filter(Boolean).length; }
+                catch(e) { return 0; }
+            }
+
+            let html = '';
+            Object.values(groups).sort((a,b) => b.weekStart.localeCompare(a.weekStart)).forEach(g => {
+                // Count only days that have actual data
+                const activeDays   = g.rows.filter(r => _inspItemCount(r.AM_Items) > 0 || _inspItemCount(r.PM_Items) > 0);
+                const faultDays    = activeDays.filter(r => r.Has_Fault    === 'نعم').length;
+                const followupDays = activeDays.filter(r => r.Has_Followup === 'نعم').length;
+                const weekStartFmt = fmtDateAr(g.weekStart, { day:'numeric', month:'long' });
+                const weekEndFmt   = fmtDateAr(g.weekEnd,   { day:'numeric', month:'long', year:'numeric' });
+
+                html += `<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:14px;font-weight:700;color:#1f2937;">${g.driver}</div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:2px;">رقم السيارة: ${g.vehicle || '—'} &nbsp;|&nbsp; الرقم الوظيفي: ${g.staff || '—'}</div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${weekStartFmt} — ${weekEndFmt}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#d1fae5;color:#065f46;">${activeDays.length} يوم مرسل</span>
+                            ${faultDays    ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fee2e2;color:#991b1b;">${faultDays} يوم فيه عطل</span>` : ''}
+                            ${followupDays ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fef3c7;color:#78350f;">${followupDays} يوم متابعة</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;">`;
+
+                // 7 day dots (Sun→Sat)
+                for (let d = 0; d < 7; d++) {
+                    const dayRow  = g.dayMap[String(d)];
+                    const amCount = dayRow ? _inspItemCount(dayRow.AM_Items) : 0;
+                    const pmCount = dayRow ? _inspItemCount(dayRow.PM_Items) : 0;
+                    const hasData = amCount > 0 || pmCount > 0;
+                    const isComplete = amCount >= INSP_TOTAL && pmCount >= INSP_TOTAL;
+                    const isPartial  = hasData && !isComplete;
+
+                    let dotColor, dotSymbol, title;
+                    if (!hasData) {
+                        dotColor = '#e5e7eb'; dotSymbol = ''; title = DAY_SHORT[d] + ' — لم يُفحص';
+                    } else if (dayRow.Has_Fault === 'نعم') {
+                        dotColor = '#ef4444'; dotSymbol = '✗'; title = DAY_SHORT[d] + ' — يوجد عطل';
+                    } else if (dayRow.Has_Followup === 'نعم') {
+                        dotColor = '#f59e0b'; dotSymbol = '⚠'; title = DAY_SHORT[d] + ' — يحتاج متابعة';
+                    } else if (isComplete) {
+                        dotColor = '#10b981'; dotSymbol = '✓'; title = DAY_SHORT[d] + ' — مكتمل وسليم';
+                    } else {
+                        dotColor = '#6b7280'; dotSymbol = '…'; title = DAY_SHORT[d] + ' — غير مكتمل (' + (amCount+pmCount) + '/' + (INSP_TOTAL*2) + ')';
+                    }
+
+                    html += `<div style="text-align:center;min-width:38px;cursor:pointer;" onclick="showInspDayDetail('${g.staff}','${g.weekStart}',${d})" title="${title}">
+                        <div style="width:28px;height:28px;border-radius:50%;background:${dotColor};margin:0 auto;display:flex;align-items:center;justify-content:center;">
+                            ${dotSymbol ? `<span style="color:white;font-size:11px;font-weight:700;">${dotSymbol}</span>` : ''}
+                        </div>
+                        <div style="font-size:10px;color:#6b7280;margin-top:3px;">${DAY_SHORT[d]}</div>
+                    </div>`;
+                }
+
+                html += `</div></div>`;
+            });
+
+            document.getElementById('inspectionsContainer').innerHTML = html;
+        }
+
+        function showInspDayDetail(staffNumber, weekStart, dayIdx) {
+            const matches = _allInspections.filter(r =>
+                String(r.Staff_Number).trim() === String(staffNumber).trim() &&
+                String(r.Week_Start).trim()   === String(weekStart).trim() &&
+                parseInt(r.Day_Index)         === parseInt(dayIdx)
+            );
+            const dayRow = matches.sort((a,b) => String(b.Submitted_At||'').localeCompare(String(a.Submitted_At||'')))[0];
+            if (!dayRow) { alert('لا توجد بيانات لهذا اليوم'); return; }
+
+            const DAY_NAMES_AR = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const ITEM_LABELS  = {
+                tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
+                no_oil_leak:'تسرب زيت أو ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
+                engine_start:'تشغيل السيارة', gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
+                ac_system:'نظام التكييف', cabin_electric:'أجهزة المقصورة',
+                oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
+                fuel_level:'مستوى الوقود', battery:'البطارية',
+                front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
+                brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
+            };
+            const STATUS_LABEL = { ok:'سليم', followup:'يحتاج متابعة', fault:'عطل', '':'' };
+
+            function renderSessionItems(jsonStr) {
+                if (!jsonStr) return '<span style="color:#9ca3af;font-size:12px;">لم يُفحص</span>';
+                try {
+                    const obj = JSON.parse(jsonStr);
+                    const items = obj.items || {};
+                    const notes = obj.notes || {};
+                    const photos = obj.photos || {};
+                    if (Object.keys(items).length === 0) return '<span style="color:#9ca3af;font-size:12px;">لم يُفحص</span>';
+                    let rows = '';
+                    Object.keys(items).forEach(k => {
+                        const s = items[k];
+                        const color = s==='fault'?'#991b1b':s==='followup'?'#78350f':'#065f46';
+                        const bg    = s==='fault'?'#fee2e2':s==='followup'?'#fef3c7':'#d1fae5';
+                        rows += `<div style="display:flex;justify-content:space-between;padding:3px 6px;border-bottom:1px solid #f3f4f6;font-size:12px;">
+                            <span style="color:#374151;">${ITEM_LABELS[k]||k}</span>
+                            <span style="background:${bg};color:${color};padding:1px 8px;border-radius:8px;font-size:11px;font-weight:600;">${STATUS_LABEL[s]||s}</span>
+                        </div>
+                        ${notes[k] ? `<div style="font-size:11px;color:#6b7280;padding:2px 6px 4px;font-style:italic;">— ${notes[k]}</div>` : ''}
+                        ${photos[k] ? `<div style="padding:3px 6px 6px;">
+                            <a href="${photos[k]}" target="_blank" title="عرض الصورة كاملة">
+                                <img src="${photos[k]}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1.5px solid #e5e7eb;cursor:pointer;display:block;" alt="صورة المشكلة">
+                            </a>
+                        </div>` : ''}`;
+                    });
+                    return rows;
+                } catch(e) { return '<span style="color:#9ca3af;font-size:12px;">—</span>'; }
+            }
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:15px;font-weight:700;color:#1f2937;">${dayRow.Driver_Name}</div>
+                    <div style="font-size:12px;color:#6b7280;">${DAY_NAMES_AR[dayIdx]} — ${dayRow.Week_Start} | رقم السيارة: ${dayRow.Vehicle_Number||'—'}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px;">صباح — ${dayRow.AM_Time||'—'}</div>
+                        ${renderSessionItems(dayRow.AM_Items)}
+                    </div>
+                    <div>
+                        <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px;">مساء — ${dayRow.PM_Time||'—'}</div>
+                        ${renderSessionItems(dayRow.PM_Items)}
+                    </div>
+                </div>
+                ${dayRow.Day_Notes ? `<div style="margin-top:10px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">ملاحظات: ${dayRow.Day_Notes}</div>` : ''}`;
+            modal.classList.add('active');
+        }
+
+        // ============================================================
+        // MONTHLY INSPECTION PRINT REPORT
+        // ============================================================
+
+        async function printInspectionsMonth() {
+            const mSel = document.getElementById('inspMonthFilter');
+            const mVal = mSel.value; // "YYYY-MM"
+            if (!mVal) { alert('يرجى اختيار الشهر أولاً'); return; }
+            if (!_allInspections || _allInspections.length === 0) { alert('لا توجد بيانات فحوصات محملة'); return; }
+
+            const [yearStr, monthStr] = mVal.split('-');
+            const targetYear  = parseInt(yearStr);
+            const targetMonth = parseInt(monthStr);
+
+            // Collect weeks that belong to this month (Wednesday Rule)
+            const allWeeks = [...new Set(_allInspections.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort();
+            const monthWeeks = allWeeks.filter(w => {
+                const wm = getWeekMonth(w);
+                return wm && wm.year === targetYear && wm.month === targetMonth;
+            });
+
+            if (monthWeeks.length === 0) {
+                alert('لا توجد أسابيع تنتمي لهذا الشهر في البيانات المتاحة');
+                return;
+            }
+
+            // Take up to 4 weeks (sorted ascending)
+            const weeksForReport = monthWeeks.slice(0, 4);
+
+            // Collect all drivers who appear in these weeks
+            const driverMap = new Map(); // staffNumber → {name, staff, vehicle}
+            _allInspections.forEach(r => {
+                var rws = String(r.Week_Start||'').trim().substring(0,10);
+                if (weeksForReport.includes(rws) && r.Staff_Number) {
+                    if (!driverMap.has(r.Staff_Number)) {
+                        driverMap.set(r.Staff_Number, {
+                            name: r.Driver_Name || '—',
+                            staff: r.Staff_Number,
+                            vehicle: r.Vehicle_Number || '—'
+                        });
+                    }
+                }
+            });
+            const drivers = [...driverMap.values()].sort((a,b) => a.name.localeCompare(b.name, 'ar'));
+
+            if (drivers.length === 0) { alert('لا توجد بيانات سائقين لهذا الشهر'); return; }
+
+            // Load logo as base64
+            let logoSrc = 'moh-logo.png';
+            try {
+                const fetched = await fetchLogoAsDataUri('moh-logo.png');
+                if (fetched) logoSrc = fetched;
+            } catch(e) {}
+
+            const monthLabel = new Date(targetYear, targetMonth - 1, 1)
+                .toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
+
+            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc);
+
+            const pw = window.open('', '_blank', 'width=1200,height=850');
+            if (!pw) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
+            pw.document.open();
+            pw.document.write(html);
+            pw.document.close();
+            pw.onload = function() { pw.focus(); pw.print(); };
+        }
+
+        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc) {
+            const DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            const SECTIONS = [
+                { title: 'أولاً: الهيكل الخارجي والإطارات', items: [
+                    { id: 'tires_front',   label: 'الإطارات الأمامية'   },
+                    { id: 'tires_rear',    label: 'الإطارات الخلفية'    },
+                    { id: 'no_oil_leak',   label: 'تسرب زيت أو ماء'     },
+                    { id: 'side_mirrors',  label: 'المرايا الجانبية'     },
+                    { id: 'doors',         label: 'الأبواب'              }
+                ]},
+                { title: 'ثانياً: النظام الكهربائي الأساسي', items: [
+                    { id: 'engine_start',  label: 'تشغيل السيارة'       },
+                    { id: 'gauges',        label: 'لوحة العدادات'        },
+                    { id: 'no_warnings',   label: 'مصابيح التحذير'       },
+                    { id: 'ac_system',     label: 'نظام التكييف'         },
+                    { id: 'cabin_electric',label: 'أجهزة المقصورة'       }
+                ]},
+                { title: 'ثالثاً: المحرك والسوائل', items: [
+                    { id: 'oil_level',     label: 'مستوى الزيت'          },
+                    { id: 'radiator_water',label: 'ماء الراديتر'          },
+                    { id: 'front_wipers',  label: 'المساحات الأمامية'    },
+                    { id: 'fuel_level',    label: 'مستوى الوقود'          },
+                    { id: 'battery',       label: 'البطارية'              }
+                ]},
+                { title: 'رابعاً: الأنوار والإشارات', items: [
+                    { id: 'front_lights',  label: 'الأنوار الأمامية'     },
+                    { id: 'rear_lights',   label: 'الأنوار الخلفية'      },
+                    { id: 'brake_lights',  label: 'أنوار الفرامل'        },
+                    { id: 'turn_signals',  label: 'إشارات الانعطاف'      },
+                    { id: 'hazard_lights', label: 'أنوار الطوارئ'        }
+                ]}
+            ];
+
+            function parseSession(jsonStr) {
+                try { return JSON.parse(jsonStr || '{}'); } catch(e) { return {}; }
+            }
+
+            function statusCell(status) {
+                if (status === 'ok')       return '<td class="cell-ok">✓</td><td class="cell-ok">✓</td>';
+                if (status === 'fault')    return '<td class="cell-fault">✗</td><td class="cell-fault">✗</td>';
+                if (status === 'followup') return '<td class="cell-fup">⚠</td><td class="cell-fup">⚠</td>';
+                return '<td class="cell-empty">—</td><td class="cell-empty">—</td>';
+            }
+
+            function statusSingle(status) {
+                if (status === 'ok')       return '<td class="cell-ok">✓</td>';
+                if (status === 'fault')    return '<td class="cell-fault">✗</td>';
+                if (status === 'followup') return '<td class="cell-fup">⚠</td>';
+                return '<td class="cell-empty">—</td>';
+            }
+
+            // Build issues summary for a week/driver
+            function buildIssues(weekRows) {
+                const issues = [];
+                weekRows.forEach(row => {
+                    const dayName = DAY_NAMES[parseInt(row.Day_Index)] || '';
+                    ['am', 'pm'].forEach(sess => {
+                        const jsonStr = sess === 'am' ? row.AM_Items : row.PM_Items;
+                        const obj = parseSession(jsonStr);
+                        const items = obj.items || {};
+                        const notes = obj.notes || {};
+                        Object.keys(items).forEach(itemId => {
+                            const s = items[itemId];
+                            if (s === 'fault' || s === 'followup') {
+                                const secObj = SECTIONS.flatMap(sc => sc.items).find(i => i.id === itemId);
+                                const label = secObj ? secObj.label : itemId;
+                                const sLabel = s === 'fault' ? 'عطل' : 'يحتاج متابعة';
+                                const note = notes[itemId] ? ` — ${notes[itemId]}` : '';
+                                issues.push(`${dayName} (${sess === 'am' ? 'صباح' : 'مساء'}): ${label} [${sLabel}]${note}`);
+                            }
+                        });
+                    });
+                });
+                return issues;
+            }
+
+            let pages = '';
+            let totalPages = 0;
+            drivers.forEach(driver => {
+                weeks.forEach((weekStart, wIdx) => {
+                    const weekEnd = (() => {
+                        const r = _allInspections.find(r => r.Week_Start === weekStart);
+                        return r ? r.Week_End : '';
+                    })();
+                    const weekLabel = fmtDateAr(weekStart, { day:'numeric', month:'long', year:'numeric' })
+                                   + ' — '
+                                   + fmtDateAr(weekEnd, { day:'numeric', month:'long', year:'numeric' });
+                    const weekRows = _allInspections.filter(r =>
+                        r.Week_Start === weekStart && r.Staff_Number === driver.staff
+                    );
+
+                    // Build table rows
+                    let tableRows = '';
+                    SECTIONS.forEach((sec, sIdx) => {
+                        // Section header row
+                        tableRows += `<tr class="sec-header"><td colspan="${2 + 14}">${sec.title}</td></tr>`;
+                        sec.items.forEach(item => {
+                            tableRows += `<tr class="item-row"><td class="item-label">${item.label}</td>`;
+                            for (let d = 0; d < 7; d++) {
+                                const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
+                                if (!dayRow) {
+                                    tableRows += '<td class="cell-empty">—</td><td class="cell-empty">—</td>';
+                                } else {
+                                    const amObj = parseSession(dayRow.AM_Items);
+                                    const pmObj = parseSession(dayRow.PM_Items);
+                                    const amStatus = (amObj.items || {})[item.id] || '';
+                                    const pmStatus = (pmObj.items || {})[item.id] || '';
+                                    tableRows += statusSingle(amStatus) + statusSingle(pmStatus);
+                                }
+                            }
+                            tableRows += '</tr>';
+                        });
+                    });
+
+                    // Notes row per day
+                    let notesRow = '<tr class="notes-row"><td class="item-label" style="font-weight:600;">ملاحظات اليوم</td>';
+                    for (let d = 0; d < 7; d++) {
+                        const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
+                        const note = dayRow ? (dayRow.Day_Notes || '') : '';
+                        notesRow += `<td colspan="2" style="font-size:7pt;padding:2px 3px;">${note}</td>`;
+                    }
+                    notesRow += '</tr>';
+
+                    // Issues list
+                    const issues = buildIssues(weekRows);
+                    const issuesHtml = issues.length
+                        ? `<div class="issues-section"><div class="issues-title">البنود التي تحتاج انتباهاً في هذا الأسبوع:</div><ul class="issues-list">${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`
+                        : `<div class="issues-section" style="color:#166534;">جميع البنود سليمة في هذا الأسبوع.</div>`;
+
+                    totalPages++;
+                    pages += `
+<div class="report-page">
+  <div class="page-header">
+    <div class="header-logo-wrap">
+      <img src="${logoSrc}" class="header-logo" alt="شعار">
+    </div>
+    <div class="header-center">
+      <div class="header-main">المديرية العامة للخدمات الصحية بمحافظة ظفار</div>
+      <div class="header-sub">مركز حاسك الصحي</div>
+      <div class="header-title">تقرير الفحص اليومي للمركبة الإسعافية</div>
+    </div>
+    <div class="header-meta">
+      <div class="meta-line">الشهر: <strong>${monthLabel}</strong></div>
+      <div class="meta-line">الأسبوع: <strong>${wIdx + 1} / ${weeks.length}</strong></div>
+      <div class="meta-line">${weekLabel}</div>
+    </div>
+  </div>
+  <div class="driver-bar">
+    <span>السائق: <strong>${driver.name}</strong></span>
+    <span>الرقم الوظيفي: <strong>${driver.staff}</strong></span>
+    <span>رقم السيارة: <strong>${driver.vehicle}</strong></span>
+  </div>
+  <table class="insp-table">
+    <thead>
+      <tr class="thead-day">
+        <th class="th-item" rowspan="2">بند الفحص</th>
+        ${DAY_NAMES.map(d => `<th colspan="2" class="th-day">${d}</th>`).join('')}
+      </tr>
+      <tr class="thead-sess">
+        ${DAY_NAMES.map(() => '<th class="th-sess">ص</th><th class="th-sess">م</th>').join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+      ${notesRow}
+    </tbody>
+  </table>
+  ${issuesHtml}
+  <div class="page-footer">
+    <div class="footer-cell">
+      <div class="footer-label">أعدّه</div>
+      <div class="footer-line"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">التاريخ</div>
+      <div class="footer-line"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">التوقيع</div>
+      <div class="footer-sig"></div>
+    </div>
+    <div class="footer-cell">
+      <div class="footer-label">الختم الرسمي</div>
+      <div class="footer-sig"></div>
+    </div>
+  </div>
+</div>`;
+                });
+            });
+
+            const printDate = new Date().toLocaleDateString('ar-OM', { day:'numeric', month:'long', year:'numeric' });
+
+            return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تقرير الفحص الشهري — ${monthLabel}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 9pt; color: #111; background: #fff; }
+  .report-page {
+    width: 277mm; min-height: 190mm;
+    padding: 8mm 8mm 6mm;
+    page-break-after: always;
+    display: flex; flex-direction: column; gap: 4mm;
+  }
+  .report-page:last-child { page-break-after: avoid; }
+
+  /* ── HEADER ── */
+  .page-header {
+    display: flex; align-items: center; gap: 6mm;
+    border-bottom: 2px solid #1e3a8a; padding-bottom: 4mm;
+  }
+  .header-logo { width: 20mm; height: 20mm; object-fit: contain; }
+  .header-logo-wrap { flex-shrink: 0; }
+  .header-center { flex: 1; text-align: center; }
+  .header-main { font-size: 11pt; font-weight: 700; color: #1e3a8a; }
+  .header-sub  { font-size: 9.5pt; font-weight: 600; color: #374151; margin-top: 1mm; }
+  .header-title { font-size: 10pt; font-weight: 700; color: #111; margin-top: 2mm;
+    border: 1.5px solid #1e3a8a; display: inline-block; padding: 1mm 5mm; border-radius: 3px; }
+  .header-meta { text-align: left; font-size: 8pt; line-height: 1.6; white-space: nowrap; color: #374151; }
+  .meta-line strong { color: #1e3a8a; }
+
+  /* ── DRIVER BAR ── */
+  .driver-bar {
+    display: flex; gap: 10mm; background: #eff6ff;
+    border: 1px solid #bfdbfe; border-radius: 4px;
+    padding: 2mm 4mm; font-size: 9pt;
+  }
+  .driver-bar strong { color: #1e3a8a; }
+
+  /* ── TABLE ── */
+  .insp-table {
+    width: 100%; border-collapse: collapse; font-size: 7.5pt;
+    flex: 1;
+  }
+  .insp-table th, .insp-table td {
+    border: 0.5pt solid #9ca3af; text-align: center; padding: 1.5pt 2pt;
+  }
+  .th-item { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 8pt;
+    width: 30mm; text-align: right; padding: 2pt 4pt; }
+  .th-day  { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 7.5pt; }
+  .th-sess { background: #1e40af; color: #fff; font-size: 7pt; }
+  .thead-day th, .thead-sess th { border-color: #1e3a8a; }
+
+  .sec-header td {
+    background: #dbeafe; color: #1e3a8a; font-weight: 700;
+    text-align: right; padding: 2pt 4pt; font-size: 8pt;
+    border-top: 1pt solid #1e3a8a;
+  }
+  .item-label {
+    text-align: right; padding: 2pt 4pt; background: #f9fafb;
+    font-size: 7.5pt; color: #374151;
+  }
+  .item-row:nth-child(even) .item-label { background: #f3f4f6; }
+
+  .cell-ok    { color: #065f46; font-weight: 700; background: #f0fdf4; }
+  .cell-fault { color: #991b1b; font-weight: 700; background: #fef2f2; }
+  .cell-fup   { color: #78350f; font-weight: 700; background: #fffbeb; }
+  .cell-empty { color: #9ca3af; font-size: 7pt; }
+
+  .notes-row td { background: #f8fafc; font-size: 6.5pt; color: #374151; vertical-align: top; }
+
+  /* ── ISSUES ── */
+  .issues-section {
+    border: 1pt solid #fbbf24; border-radius: 3px;
+    padding: 2mm 4mm; background: #fffbeb; font-size: 7.5pt;
+  }
+  .issues-title { font-weight: 700; color: #92400e; margin-bottom: 1mm; }
+  .issues-list  { padding-right: 5mm; color: #374151; line-height: 1.6; }
+  .issues-list li { margin-bottom: 0.5mm; }
+
+  /* ── FOOTER ── */
+  .page-footer {
+    display: flex; gap: 6mm; justify-content: space-between;
+    border-top: 1pt solid #1e3a8a; padding-top: 3mm; margin-top: auto;
+  }
+  .footer-cell { flex: 1; text-align: center; }
+  .footer-label { font-size: 8pt; font-weight: 700; color: #1e3a8a; margin-bottom: 1mm; }
+  .footer-line  { border-bottom: 1pt solid #6b7280; height: 8mm; }
+  .footer-sig   { border: 1pt solid #9ca3af; height: 14mm; border-radius: 3px; }
+
+  /* ── PRINT ── */
+  @media print {
+    html, body { margin: 0; padding: 0; }
+    .report-page { width: 100%; padding: 6mm; }
+    .no-print { display: none !important; }
+    @page { size: A4 landscape; margin: 8mm; }
+  }
+
+  /* ── SCREEN TOOLBAR ── */
+  .print-toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+    background: #1e3a8a; color: white; padding: 8px 16px;
+    display: flex; align-items: center; gap: 12px;
+    font-family: Arial, sans-serif; font-size: 13px;
+  }
+  .print-toolbar button {
+    padding: 6px 18px; background: white; color: #1e3a8a;
+    border: none; border-radius: 6px; font-weight: 700;
+    font-size: 13px; cursor: pointer;
+  }
+  .print-spacer { height: 44px; }
+  body { margin-top: 0; }
+  @media screen {
+    body { background: #e5e7eb; }
+    .report-page {
+      background: white; margin: 8mm auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+    }
+  }
+</style>
+</head>
+<body>
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">طباعة</button>
+  <span>تقرير الفحص الشهري — ${monthLabel} &nbsp;|&nbsp; ${totalPages} صفحة</span>
+  <span style="font-size:11px;opacity:.8;">طُبع بتاريخ: ${printDate}</span>
+  <button onclick="window.close()" style="margin-right:auto;background:#ef4444;color:white;">إغلاق</button>
+</div>
+<div class="print-spacer no-print"></div>
+${pages}
+</body>
+</html>`;
+        }
+
+        // Auto-load inspections on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadInspections, 800);
+        });
+
+        // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
+                    reg.update().catch(() => {});
                     setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
@@ -3609,10 +4902,14 @@
                     });
                 })
                 .catch(err => console.error('[App] SW registration failed:', err));
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }

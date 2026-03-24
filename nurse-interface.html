@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Language" content="en-US">
-    <title>Ambulance Activity Log - Hasik Health Center</title>
+    <title>Ambulance Activity Record - Hasik Health Center</title>
     
     <!-- DNS/TLS pre-warm for API — saves ~200ms on first request -->
     <link rel="preconnect" href="https://script.google.com" crossorigin>
@@ -18,17 +18,46 @@
         var s = null; try { s = JSON.parse(localStorage.getItem('userSession') || '{}'); } catch(e) {}
         var staffNum = (s && s.staffNumber) ? s.staffNumber : '';
         var year = new Date().getFullYear();
-        var reqUrl = url + '?action=getNurseData&year=' + year;
+        var month = new Date().getMonth() + 1;
+        var reqUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
         if (staffNum) reqUrl += '&staffNumber=' + encodeURIComponent(staffNum);
-        window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).catch(function() { return null; });
+        // Heavy fetch: full nurse data (records + trips + stats) — slow, 5-15s
+        window.__earlyNurseFetch = fetch(reqUrl).then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.trips) {
+                try {
+                    var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                } catch(e) {}
+            }
+            if (result && result.success) {
+                try {
+                    var ck = 'cache_nurse_data_' + year + '_' + month;
+                    localStorage.setItem(ck, JSON.stringify({ data: result, timestamp: Date.now() }));
+                } catch(e) {}
+            }
+            window.__earlyNurseFetchDone = true;
+            return result;
+        }).catch(function() { return null; });
+        window.__earlyNurseMonth = month;
+        
+        // Fast fetch: pending trips ONLY — lightweight, 1-2s
+        window.__earlyNursePendingTrips = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            if (result && result.success && Array.isArray(result.trips)) {
+                try {
+                    var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                } catch(e) {}
+                return nt;
+            }
+            return null;
+        }).catch(function() { return null; });
     })();
     </script>
     
     <!-- Performance Optimization Scripts - Load First -->
-    <script src="request-optimizer.js"></script>
-    <script src="ui-optimizer.js"></script>
-    <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Date and Time Formatter - English Locale Enforcer -->
     <script src="date-time-formatter.js"></script>
@@ -36,6 +65,7 @@
     <!-- Flatpickr - Date picker with yyyy/mm/dd format (native type=date cannot customize display) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     
     <script src="session-manager.js"></script>
     
@@ -207,26 +237,101 @@
 
         /* Pending Trips Alert */
         .pending-trips-alert {
-            background: var(--warning-light);
-            border: 2px solid var(--warning);
-            border-radius: 16px;
-            padding: 20px;
+            background: #fef8f8;
+            border: 2px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px 16px;
             margin-bottom: 24px;
-            animation: pulse 2s infinite;
+            transition: border-color 0.4s, box-shadow 0.4s, background 0.4s;
         }
 
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+        .pending-trips-alert.has-trips {
+            border-color: #f87171;
+            background: #fef2f2;
+            animation: driverPulse 2.5s ease-in-out infinite;
+        }
+
+        @keyframes driverPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.3); }
+            50% { box-shadow: 0 0 0 8px rgba(248, 113, 113, 0); }
+        }
+
+        @keyframes saving-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .record-just-saved {
+            animation: justSavedGlow 1.5s ease-in-out 2;
+        }
+
+        @keyframes justSavedGlow {
+            0%, 100% { background: transparent; }
+            50% { background: #dbeafe; }
         }
 
         .pending-trips-alert h3 {
-            color: #92400e;
-            font-size: 16px;
+            color: #374151;
+            font-size: 15px;
+            font-weight: 700;
             margin-bottom: 12px;
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+
+        .driver-trips-badge {
+            display: none;
+            background: #dc2626;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            flex-shrink: 0;
+            animation: badgeBounce 1s ease-in-out infinite;
+        }
+
+        .pending-trips-alert.has-trips .driver-trips-badge {
+            display: inline-flex;
+        }
+
+        @keyframes badgeBounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .btn-refresh-trips {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+
+        .btn-refresh-trips:hover {
+            background: #e5e7eb;
+            border-color: #9ca3af;
+        }
+
+        .btn-refresh-trips:active {
+            transform: scale(0.96);
+        }
+
+        .btn-refresh-trips.refreshing svg {
+            animation: spin 0.8s linear infinite;
         }
 
         .pending-trip-card {
@@ -261,19 +366,141 @@
         }
 
         .btn-use-trip {
-            padding: 10px 20px;
-            background: var(--primary-blue);
-            color: var(--white);
+            padding: 9px 20px;
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            color: #fff;
             border: none;
             border-radius: 8px;
             font-weight: 600;
+            font-size: 13px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
         }
 
         .btn-use-trip:hover {
-            background: var(--dark-blue);
-            transform: translateY(-2px);
+            background: linear-gradient(135deg, #b45309, #d97706);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.4);
+        }
+
+        .btn-use-trip:active {
+            transform: translateY(0);
+        }
+
+        .btn-use-trip.departure-only-pulse {
+            animation: completePulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes completePulse {
+            0%, 100% { box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3); }
+            50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.2), 0 2px 6px rgba(217, 119, 6, 0.4); }
+        }
+
+        .pending-trip-card.active-editing {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .pending-trip-card.dimmed {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .pending-trip-card.slide-out {
+            animation: slideOutCard 0.4s ease-out forwards;
+        }
+
+        @keyframes slideOutCard {
+            0% { opacity: 1; transform: translateX(0) scaleY(1); max-height: 300px; margin-bottom: 10px; }
+            60% { opacity: 0; transform: translateX(40px) scaleY(0.8); }
+            100% { opacity: 0; transform: translateX(40px) scaleY(0); max-height: 0; margin-bottom: 0; padding: 0; overflow: hidden; }
+        }
+
+        /* Toast notification */
+        .nurse-toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #065f46;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .nurse-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Trip link bar above form */
+        .trip-link-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: #fffbeb;
+            border: 1.5px solid #fcd34d;
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #92400e;
+            flex-wrap: wrap;
+        }
+
+        .trip-link-bar.visible {
+            display: flex;
+        }
+
+        .trip-link-bar .cancel-link {
+            margin-right: auto;
+            color: #9ca3af;
+            font-weight: 500;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: underline;
+            border: none;
+            background: none;
+            font-family: inherit;
+        }
+
+        .trip-link-bar .cancel-link:hover { color: #374151; }
+
+        /* Submit button validation color */
+        #submitBtn.form-complete {
+            background: linear-gradient(135deg, #059669, #10b981) !important;
+        }
+
+        /* Refresh timestamp */
+        .refresh-timestamp {
+            font-size: 11px;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        /* All trips done empty state */
+        .all-done-card {
+            background: #f0fdf4;
+            border: 1.5px solid #86efac;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            color: #166534;
+            font-weight: 600;
+            font-size: 14px;
         }
 
         /* Form Card */
@@ -436,18 +663,27 @@
             50% { border-color: #dc2626; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
         }
         
+        @keyframes pulse-error {
+            0% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); background: #fef2f2; }
+            25% { border-color: #dc2626; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18); background: #fee2e2; }
+            50% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); background: #fef2f2; }
+            75% { border-color: #dc2626; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18); background: #fee2e2; }
+            100% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); background: #fef2f2; }
+        }
+
         .field-error,
         .time-select.field-error,
         select.field-error,
         input.field-error,
         textarea.field-error {
-            animation: shake 0.5s ease-in-out, pulse-border 1s ease-in-out 2 !important;
+            animation: shake 0.5s ease-in-out, pulse-error 1.2s ease-in-out 3 !important;
             border-color: #ef4444 !important;
             background: #fef2f2 !important;
         }
-        
+
         .field-error-label {
             color: #ef4444 !important;
+            animation: shake 0.5s ease-in-out;
         }
         
         /* Gentle pulse for fields awaiting completion (destination, patient name) */
@@ -463,7 +699,6 @@
         /* Ensure validation message is visible */
         .validation-message.show {
             display: flex !important;
-            animation: shake 0.3s ease-in-out;
         }
 
         .date-input {
@@ -559,14 +794,12 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
+            background: #374151;
             color: var(--white);
-            box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+            background: #1f2937;
         }
 
         .btn-primary:disabled {
@@ -576,12 +809,13 @@
         }
 
         .btn-secondary {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .btn-secondary:hover {
-            background: var(--bg-blue);
+            background: #e5e7eb;
         }
 
         .form-actions {
@@ -592,21 +826,32 @@
         }
 
         /* Validation Message */
+        @keyframes validation-appear {
+            0% { opacity: 0; transform: translateY(-8px) scale(0.97); }
+            50% { opacity: 1; transform: translateY(2px) scale(1.01); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes validation-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+            50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.0); }
+        }
         .validation-message {
             display: none;
-            background: var(--error-light);
-            border: 1px solid var(--error);
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border: 2px solid #ef4444;
             color: #991b1b;
-            padding: 12px 16px;
-            border-radius: 10px;
+            padding: 14px 18px;
+            border-radius: 12px;
             margin-bottom: 20px;
-            font-size: 14px;
+            font-size: 15px;
+            font-weight: 600;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .validation-message.show {
             display: flex;
+            animation: validation-appear 0.4s ease-out, validation-pulse 1.5s ease-in-out 3;
         }
 
         /* Modal */
@@ -793,33 +1038,56 @@
             gap: 8px;
         }
 
-        .action-btn {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 8px;
+        .toolbar-btn {
+            padding: 7px 14px;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .toolbar-btn:hover {
+            background: #e5e7eb;
+            border-color: #9ca3af;
+        }
+        .toolbar-btn svg { flex-shrink: 0; }
+
+        .action-btn {
+            padding: 5px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: #f9fafb;
+            color: #374151;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .action-btn.view {
-            background: var(--lighter-blue);
-            color: var(--primary-blue);
+            background: #f3f4f6;
+            color: #374151;
+            border-color: #d1d5db;
         }
 
         .action-btn.edit {
-            background: #10b981;
-            color: white;
-        }
-
-        .action-btn.edit:hover {
-            background: #059669;
+            background: #f3f4f6;
+            color: #374151;
+            border-color: #d1d5db;
         }
 
         .action-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
+            background: #e5e7eb;
+            border-color: #9ca3af;
         }
 
         .empty-state {
@@ -892,13 +1160,14 @@
         }
 
         .report-actions .btn-print {
-            background: #1e40af;
+            background: #374151;
             color: white;
         }
 
         .report-actions .btn-close {
-            background: #e5e7eb;
+            background: #f3f4f6;
             color: #374151;
+            border: 1px solid #d1d5db;
         }
 
         .report-content {
@@ -1084,7 +1353,7 @@
             <div class="header-brand">
                 <img src="moh-logo.png" alt="MOH Logo" class="header-logo">
                 <div class="header-title">
-                    <h1 data-en="Ambulance Activity Log" data-ar="سجل نشاط الإسعاف">Ambulance Activity Log</h1>
+                    <h1 data-en="Ambulance Activity Record" data-ar="سجل نشاط الإسعاف">Ambulance Activity Record</h1>
                     <p data-en="Directorate General of Health Services - Dhofar" data-ar="المديرية العامة للخدمات الصحية - ظفار">Directorate General of Health Services - Dhofar</p>
                     <p data-en="Sadah Wilayat - Hasik Health Center" data-ar="ولاية سدح - مركز حاسك الصحي">Sadah Wilayat - Hasik Health Center</p>
                 </div>
@@ -1100,27 +1369,45 @@
 
         <!-- Pending Trips from Drivers -->
         <div class="pending-trips-alert" id="pendingTripsAlert">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 data-en="🚗 Driver Trips" data-ar="🚗 رحلات السائقين" style="margin: 0;">🚗 Driver Trips</h3>
-                <button onclick="loadPendingTrips(true, true)" style="background: #92400e; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px;" data-en="🔄 Refresh" data-ar="🔄 تحديث">🔄 Refresh</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin: 0;">
+                    <span data-en="Driver Trips" data-ar="رحلات السائقين">Driver Trips</span>
+                    <span class="driver-trips-badge" id="driverTripsBadge">!</span>
+                </h3>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="refresh-timestamp" id="refreshTimestamp"></span>
+                    <button class="btn-refresh-trips" id="btnRefreshTrips" onclick="refreshDriverTrips(this)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.4-4.3L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.3L2.5 16"/></svg>
+                        <span data-en="Refresh" data-ar="تحديث">Refresh</span>
+                    </button>
+                </div>
             </div>
             <div id="pendingTripsContainer">
-                <div style="background: white; padding: 16px; border-radius: 10px; text-align: center; color: #6b7280;">
+                <div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;">
                     <span data-en="No pending trips from drivers" data-ar="لا توجد رحلات قيد الانتظار">No pending trips from drivers</span>
                 </div>
             </div>
         </div>
 
+        <!-- Toast notification -->
+        <div class="nurse-toast" id="nurseToast"></div>
+
         <!-- Registration Form -->
         <div class="form-card">
+            <!-- Trip link bar: shown when completing a pending trip -->
+            <div class="trip-link-bar" id="tripLinkBar">
+                <span>&#9654;</span>
+                <span id="tripLinkText"></span>
+                <button class="cancel-link" onclick="cancelPendingTripLink()" data-en="Cancel / New record" data-ar="إلغاء / سجل جديد">Cancel / New record</button>
+            </div>
             <div class="form-header">
-                <div class="form-header-icon">🚑</div>
+                <div class="form-header-icon" style="display:flex;align-items:center;justify-content:center;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
                 <h2 data-en="Register New Ambulance Case" data-ar="تسجيل حالة إسعاف جديدة">Register New Ambulance Case</h2>
             </div>
 
             <!-- Validation Message -->
             <div class="validation-message" id="validationMessage">
-                <span>⚠️</span>
+                <span style="font-weight:700;color:#92400e;">!</span>
                 <span id="validationText"></span>
             </div>
 
@@ -1214,14 +1501,29 @@
                         <label>Patient Name</label>
                         <input type="text" id="patientName" required placeholder="Enter patient name" lang="en">
                     </div>
-                    <div class="form-group">
-                        <label data-en="Registered By (Nurse Name)" data-ar="المسجل (اسم الممرضة)">Registered By (Nurse Name)</label>
+                    <!-- External Support toggle — visible only for admin users -->
+                    <div class="form-group" id="externalSupportGroup" style="display:none;">
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
+                            <input type="checkbox" id="externalSupportCheck" onchange="toggleExternalSupport()" style="width:18px;height:18px;accent-color:#2563eb;cursor:pointer;">
+                            <span data-en="External Support (supporting another entity)" data-ar="دعم خارجي (دعم جهة أخرى)">External Support</span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="externalOrgGroup" style="display:none;">
+                        <label data-en="Supported Entity Name" data-ar="اسم الجهة المدعومة">Supported Entity Name</label>
+                        <input type="text" id="externalOrgName" placeholder="Enter entity name" lang="en" style="border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;font-family:inherit;font-size:15px;">
+                    </div>
+                    <div class="form-group" id="externalNurseGroup" style="display:none;">
+                        <label data-en="Accompanying Nurse/Paramedic (External)" data-ar="الممرض/ة أو المسعف/ة المرافق/ة (خارجي)">Accompanying Nurse (External)</label>
+                        <input type="text" id="externalNurseName" placeholder="Enter name or leave empty if unknown" lang="en" style="border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;font-family:inherit;font-size:15px;">
+                    </div>
+                    <div class="form-group" id="nurseNameGroup">
+                        <label data-en="Registered By" data-ar="المسجّل">Registered By</label>
                         <input type="text" id="nurseName" required>
                     </div>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary" id="submitBtn" data-en="Submit Record" data-ar="إرسال السجل">Submit Record</button>
-                    <button type="button" class="btn btn-secondary" onclick="resetForm()" data-en="Clear Form" data-ar="مسح النموذج">Clear Form</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn" data-en="Submit Record" data-ar="إرسال السجل" style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Submit Record</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetForm()" data-en="Clear Form" data-ar="مسح النموذج" style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.4-4.3L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.3L2.5 16"/></svg>Clear Form</button>
                 </div>
             </form>
         </div>
@@ -1229,7 +1531,7 @@
         <!-- Records Section -->
         <div class="records-section">
             <div class="records-header">
-                <h2 data-en="📋 Previous Records" data-ar="📋 السجلات السابقة">📋 Previous Records</h2>
+                <h2 data-en="Previous Records" data-ar="السجلات السابقة" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Previous Records</h2>
                 <div class="filter-group">
                     <select id="yearFilter">
                         <!-- Populated by initializeYearFilter() -->
@@ -1261,15 +1563,23 @@
                         </div>
                         <span style="font-size:12px;color:#6b7280;font-weight:500;">cases</span>
                     </div>
-                    <button onclick="viewAllRecords()" style="padding: 8px 16px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
+                    <button onclick="viewAllRecords()" class="toolbar-btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                         View Report
+                    </button>
+                    <button onclick="exportToExcel()" class="toolbar-btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Export Excel
                     </button>
                 </div>
             </div>
-            <div class="loading-spinner" id="recordsLoadingSpinner">
-                <div class="spinner"></div>
+            <div id="recordsWrapper" style="position: relative; min-height: 60px;">
+                <div id="recordsLoadingOverlay" style="display:none; position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.85); z-index:5; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; min-height:80px;">
+                    <div class="spinner" style="margin:0 auto 8px;"></div>
+                    <span style="font-size:12px; color:#6b7280;">Loading records...</span>
+                </div>
+                <div id="recordsContainer"></div>
             </div>
-            <div id="recordsContainer"></div>
         </div>
     </div>
 
@@ -1283,14 +1593,27 @@
         </div>
     </div>
 
+    <!-- Warning Modal — Incomplete Trips -->
+    <div id="warningModal" class="modal">
+        <div class="modal-content" style="padding: 22px 26px; max-width: 380px; border-radius: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <span style="font-size: 16px; font-weight: 700; color: #d97706;">!</span>
+                <h3 id="warningModalTitle" style="color: #1f2937; font-size: 15px; font-weight: 600; margin: 0;">Cannot Submit New Record</h3>
+            </div>
+            <p id="warningModalMessage" style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0 0 12px;">There are incomplete trips pending. Please complete them first using the "Complete Data" button above.</p>
+            <div id="warningTripIds" style="background: #f9fafb; border: 1px solid #e5e7eb; color: #374151; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 14px; direction: ltr; text-align: center;"></div>
+            <button class="btn btn-primary" style="background: #4b5563; font-size: 13px; padding: 8px 28px; border-radius: 8px; min-width: 0;" onclick="closeWarningAndScroll()">OK</button>
+        </div>
+    </div>
+
     <!-- Print Report Modal -->
     <div id="reportModal" class="report-modal" onclick="closeReportModal(event)">
         <div class="report-container" onclick="event.stopPropagation()">
             <div class="report-header">
                 <span style="font-weight: 600; color: #374151;">Ambulance Activity Report</span>
                 <div class="report-actions">
-                    <button class="btn-print" onclick="printReport()">Print</button>
-                    <button class="btn-close" onclick="closeReportModal()">Close</button>
+                    <button class="btn-print" onclick="printReport()" style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print</button>
+                    <button class="btn-close" onclick="closeReportModal()" style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Close</button>
                 </div>
             </div>
             <div class="report-content" id="reportContent">
@@ -1616,14 +1939,13 @@
             addDiagMessage('info', `   Sending: ${JSON.stringify(returnData)}`);
             
             try {
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(returnData)
-                });
-                addDiagMessage('success', `   ✅ Request sent successfully`);
-                addDiagMessage('info', `   Now click "Raw Data" to verify the update in Google Sheets`);
+                const result = await ReliablePost.send(WEB_APP_URL, returnData, { timeout: 30000 });
+                if (result.success) {
+                    addDiagMessage('success', `   ✅ Request sent successfully` + (result.offline ? ' (queued offline)' : ''));
+                    addDiagMessage('info', `   Now click "Raw Data" to verify the update in Google Sheets`);
+                } else {
+                    addDiagMessage('error', `   ❌ Server returned error: ${result.error || 'unknown'}`);
+                }
             } catch (error) {
                 addDiagMessage('error', `   ❌ Error: ${error.message}`);
             }
@@ -1796,23 +2118,51 @@
             const retDate = document.getElementById('returnDate').value;
 
             if (depDate && retDate && retDate < depDate) {
-                showValidation(currentLang === 'en' 
-                    ? 'Return date cannot be before departure date!' 
-                    : 'تاريخ العودة لا يمكن أن يكون قبل تاريخ المغادرة!');
-                document.getElementById('returnDate').classList.add('error');
+                showValidation(
+                    currentLang === 'en' 
+                        ? 'Return date cannot be before departure date!' 
+                        : 'تاريخ العودة لا يمكن أن يكون قبل تاريخ المغادرة!',
+                    ['returnDate', 'departureDate']
+                );
                 return false;
             }
 
-            document.getElementById('returnDate').classList.remove('error');
+            document.getElementById('returnDate').classList.remove('error', 'field-error');
             hideValidation();
             return true;
         }
 
         function validateTimes() {
             updateTimeInputs();
-            // Note: Time validation removed because drivers record current time automatically
-            // It's not possible for return time to be before departure time in normal usage
-            // The system automatically captures the current time when driver clicks return
+            
+            const depDate = document.getElementById('departureDate').value;
+            const retDate = document.getElementById('returnDate').value;
+            
+            if (depDate && retDate && depDate === retDate) {
+                const depHour = document.getElementById('departureTimeHour').value;
+                const depMin = document.getElementById('departureTimeMinute').value;
+                const depAmPm = document.getElementById('departureTimeAmPm').value;
+                const retHour = document.getElementById('returnTimeHour').value;
+                const retMin = document.getElementById('returnTimeMinute').value;
+                const retAmPm = document.getElementById('returnTimeAmPm').value;
+                
+                if (depHour && depMin && retHour && retMin) {
+                    const depMinutes = convertTo24Hour(depHour, depMin, depAmPm);
+                    const retMinutes = convertTo24Hour(retHour, retMin, retAmPm);
+                    
+                    if (retMinutes <= depMinutes) {
+                        showValidation(
+                            currentLang === 'en'
+                                ? 'Return time must be after departure time when on the same day!'
+                                : 'وقت العودة يجب أن يكون بعد وقت المغادرة عندما يكون في نفس اليوم!',
+                            ['returnTimeHour', 'returnTimeMinute', 'returnTimeAmPm', 'departureTimeHour', 'departureTimeMinute', 'departureTimeAmPm']
+                        );
+                        return false;
+                    }
+                }
+            }
+            
+            hideValidation();
             return true;
         }
 
@@ -1832,15 +2182,64 @@
             }
         }
 
-        function showValidation(message) {
+        /**
+         * Show validation message with scroll-to-top, and optionally pulse specific fields.
+         * @param {string} message - The error message to display
+         * @param {string[]} [fieldIds] - IDs of fields to highlight with pulse effect
+         */
+        function showValidation(message, fieldIds) {
             const msgDiv = document.getElementById('validationMessage');
             document.getElementById('validationText').textContent = message;
+            
+            // Reset animation by removing and re-adding class
+            msgDiv.classList.remove('show');
+            void msgDiv.offsetWidth; // force reflow
             msgDiv.classList.add('show');
-            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            // Scroll to validation message at top of form
+            smoothScrollToElement(msgDiv, 500);
+            
+            // Pulse the specific error fields
+            if (fieldIds && fieldIds.length > 0) {
+                fieldIds.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (!el) return;
+                    el.classList.remove('field-error');
+                    void el.offsetWidth;
+                    el.classList.add('field-error');
+                    // Also highlight label
+                    var fg = el.closest('.form-group') || (el.closest('.time-picker-container') && el.closest('.time-picker-container').closest('.form-group'));
+                    if (fg) {
+                        var label = fg.querySelector('label');
+                        if (label) {
+                            label.classList.remove('field-error-label');
+                            void label.offsetWidth;
+                            label.classList.add('field-error-label');
+                        }
+                    }
+                });
+                // Auto-clear pulse after animation completes
+                setTimeout(function() {
+                    fieldIds.forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) el.classList.remove('field-error');
+                    });
+                    document.querySelectorAll('.field-error-label').forEach(function(el) {
+                        el.classList.remove('field-error-label');
+                    });
+                }, 5000);
+            }
         }
 
         function hideValidation() {
             document.getElementById('validationMessage').classList.remove('show');
+            // Also clear any field-error highlights
+            document.querySelectorAll('.field-error').forEach(function(el) {
+                el.classList.remove('field-error');
+            });
+            document.querySelectorAll('.field-error-label').forEach(function(el) {
+                el.classList.remove('field-error-label');
+            });
         }
         
         // Scroll to field with error and focus it
@@ -1855,21 +2254,23 @@
         /** Smooth sliding scroll - feels like movement rather than jump */
         function smoothScrollToElement(element, duration = 700) {
             if (!element) return;
-            const offset = 24;
-            const targetPos = element.getBoundingClientRect().top + window.pageYOffset - offset;
-            const startPos = window.pageYOffset;
-            const distance = targetPos - startPos;
-            const startTime = performance.now();
-            
+            var offset = 80;
+            var scrollY = window.scrollY || window.pageYOffset || 0;
+            var targetPos = element.getBoundingClientRect().top + scrollY - offset;
+            var startPos = scrollY;
+            var distance = targetPos - startPos;
+            if (Math.abs(distance) < 5) { element.focus(); return; }
+            var startTime = performance.now();
+
             function easeInOutCubic(t) {
                 return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
             }
-            
+
             function scrollStep() {
-                const elapsed = performance.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easeProgress = easeInOutCubic(progress);
-                window.scrollTo({ top: startPos + distance * easeProgress, behavior: 'auto' });
+                var elapsed = performance.now() - startTime;
+                var progress = Math.min(elapsed / duration, 1);
+                var easeProgress = easeInOutCubic(progress);
+                window.scrollTo(0, startPos + distance * easeProgress);
                 if (progress < 1) {
                     requestAnimationFrame(scrollStep);
                 } else {
@@ -1879,58 +2280,30 @@
             requestAnimationFrame(scrollStep);
         }
         
-        // Show ALL field errors at once with shake animation
+        // Show ALL field errors at once with pulse animation + scroll to top
         function showAllFieldErrors(emptyFields) {
-            // Remove previous error classes
-            document.querySelectorAll('.field-error').forEach(el => {
-                el.classList.remove('field-error');
-            });
-            document.querySelectorAll('.field-error-label').forEach(el => {
-                el.classList.remove('field-error-label');
-            });
+            // Collect field IDs and names
+            var fieldIds = [];
+            var fieldNames = [];
+            var uniqueNames = new Set();
             
-            // Collect field names for message
-            const fieldNames = [];
-            const uniqueNames = new Set();
-            
-            // Add error class to ALL empty elements
-            emptyFields.forEach(({ element, name }) => {
-                element.classList.add('field-error');
-                
-                // Find and highlight the label
-                let formGroup = element.closest('.form-group');
-                if (!formGroup) {
-                    formGroup = element.closest('.time-picker-container')?.closest('.form-group');
+            emptyFields.forEach(function(item) {
+                if (item.element && item.element.id) {
+                    fieldIds.push(item.element.id);
                 }
-                
-                if (formGroup) {
-                    const label = formGroup.querySelector('label');
-                    if (label) label.classList.add('field-error-label');
-                }
-                
-                // Add unique field names
-                if (!uniqueNames.has(name)) {
-                    uniqueNames.add(name);
-                    fieldNames.push(name);
+                if (!uniqueNames.has(item.name)) {
+                    uniqueNames.add(item.name);
+                    fieldNames.push(item.name);
                 }
             });
             
-            const patientNameMissing = fieldNames.some(name => name === 'Patient Name');
-            const message = patientNameMissing 
-                ? 'Patient name is required' 
-                : `Please fill in: ${fieldNames.join(', ')}`;
-            showValidation(message);
+            var patientNameMissing = fieldNames.some(function(name) { return name === 'Patient Name'; });
+            var message = patientNameMissing 
+                ? (currentLang === 'en' ? 'Patient name is required' : 'اسم المريض مطلوب')
+                : (currentLang === 'en' ? 'Please fill in: ' : 'يرجى ملء: ') + fieldNames.join(', ');
             
-            // Remove error classes after animation
-            setTimeout(() => {
-                document.querySelectorAll('.field-error').forEach(el => {
-                    el.classList.remove('field-error');
-                });
-                document.querySelectorAll('.field-error-label').forEach(el => {
-                    el.classList.remove('field-error-label');
-                });
-                hideValidation();
-            }, 4000);
+            // showValidation handles scroll + pulse + auto-clear
+            showValidation(message, fieldIds);
         }
 
         // ============================================
@@ -1939,6 +2312,8 @@
         // Cache and loading state for pending trips
         let cachedPendingTrips = null;
         let isLoadingPendingTrips = false;
+        // Track trip IDs that were just submitted by this nurse (prevents stale cache from re-showing them)
+        let _recentlySubmittedTripIds = new Set();
         
         async function loadPendingTrips(showLoading = true, forceRefresh = false) {
             if (forceRefresh) {
@@ -1947,8 +2322,65 @@
                 const month = document.getElementById('monthFilter').value;
                 DataCache.invalidate('cache_nurse_data_' + year + '_' + month);
             }
-            // Route through the combined endpoint — avoids separate request
             await loadAllNurseData();
+        }
+
+        async function refreshDriverTrips(btn) {
+            if (btn) btn.classList.add('refreshing');
+            try {
+                await loadPendingTrips(true, true);
+                updateRefreshTimestamp();
+            } finally {
+                if (btn) setTimeout(() => btn.classList.remove('refreshing'), 600);
+            }
+        }
+
+        let _lastRefreshTime = null;
+        function updateRefreshTimestamp() {
+            _lastRefreshTime = Date.now();
+            const el = document.getElementById('refreshTimestamp');
+            if (!el) return;
+            el.textContent = currentLang === 'en' ? 'Updated just now' : '\u062a\u062d\u062f\u064a\u062b: \u0627\u0644\u0622\u0646';
+            // Update to relative time after 1 min
+            setTimeout(function tick() {
+                if (!_lastRefreshTime) return;
+                const mins = Math.round((Date.now() - _lastRefreshTime) / 60000);
+                const elNow = document.getElementById('refreshTimestamp');
+                if (!elNow) return;
+                if (mins < 1) { elNow.textContent = currentLang === 'en' ? 'Updated just now' : '\u062a\u062d\u062f\u064a\u062b: \u0627\u0644\u0622\u0646'; setTimeout(tick, 30000); }
+                else { elNow.textContent = currentLang === 'en' ? `Updated ${mins}m ago` : `\u062a\u062d\u062f\u064a\u062b: \u0645\u0646\u0630 ${mins} \u062f\u0642`; if (mins < 60) setTimeout(tick, 60000); }
+            }, 60000);
+        }
+
+        function showNurseToast(message, duration) {
+            const toast = document.getElementById('nurseToast');
+            if (!toast) return;
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration || 2800);
+        }
+
+        function cancelPendingTripLink() {
+            const linkBar = document.getElementById('tripLinkBar');
+            if (linkBar) linkBar.classList.remove('visible');
+            document.querySelectorAll('.pending-trip-card').forEach(c => {
+                c.classList.remove('active-editing', 'dimmed');
+            });
+            selectedTripIndex = null;
+            selectedTripId = null;
+            document.getElementById('ambulanceForm').reset();
+            clearDatePickers();
+            hideValidation();
+            // Re-enable all trip buttons
+            document.querySelectorAll('.btn-use-trip').forEach(b => {
+                if (b.disabled) {
+                    b.disabled = false;
+                    b.innerHTML = '&#9998; ' + (currentLang === 'en' ? 'Complete Data' : '\u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a');
+                    b.style.background = '';
+                    b.style.cursor = '';
+                    b.style.opacity = '';
+                }
+            });
         }
 
         // Store trips globally for usePendingTrip function
@@ -1957,17 +2389,33 @@
         const NURSE_PENDING_PER_PAGE = 5;
 
         function displayPendingTrips(pendingTrips) {
-            // Store trips for later use
-            currentPendingTrips = pendingTrips || [];
+            // Filter out trips that were recently submitted by this nurse (stale cache protection)
+            let filtered = pendingTrips || [];
+            if (_recentlySubmittedTripIds.size > 0) {
+                filtered = filtered.filter(t => !_recentlySubmittedTripIds.has(t.tripId));
+            }
+            currentPendingTrips = filtered;
             localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+            // Update last-refresh timestamp whenever trips data arrives
+            if (typeof updateRefreshTimestamp === 'function') updateRefreshTimestamp();
 
-            if (!pendingTrips || pendingTrips.length === 0) {
+            const alertEl = document.getElementById('pendingTripsAlert');
+            const badge = document.getElementById('driverTripsBadge');
+            const hasTrips = currentPendingTrips && currentPendingTrips.length > 0;
+
+            if (alertEl) {
+                alertEl.classList.toggle('has-trips', hasTrips);
+            }
+            if (badge) {
+                badge.textContent = hasTrips ? currentPendingTrips.length : '!';
+            }
+
+            if (!hasTrips) {
                 const container = document.getElementById('pendingTripsContainer');
-                container.innerHTML = `
-                    <div style="background: white; padding: 16px; border-radius: 10px; text-align: center; color: #6b7280;">
-                        <span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span>
-                    </div>
-                `;
+                const wasFilledBefore = container.querySelector('.pending-trip-card');
+                container.innerHTML = wasFilledBefore
+                    ? `<div class="all-done-card">&#10003; ${currentLang === 'en' ? 'All trips completed' : 'تم إكمال جميع الرحلات'}</div>`
+                    : `<div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;"><span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span></div>`;
                 return;
             }
 
@@ -1994,14 +2442,15 @@
                 return `
                 <div class="pending-trip-card" id="trip-card-${index}" data-trip-id="${trip.tripId}" style="border-right: 4px solid ${hasReturn ? '#10b981' : '#f59e0b'}; transition: all 0.4s ease-out;">
                     <div class="pending-trip-info">
-                        <div style="grid-column: span 2; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="background: #e0e7ff; color: #1e40af; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 700;">
-                                ${tripIdDisplay}
-                            </span>
+                        <div style="grid-column: span 4; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="background: #e0e7ff; color: #1e40af; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 700;">${tripIdDisplay}</span>
+                                ${trip.vehicleNumber ? `<span style="background:#f3f4f6;color:#374151;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">&#128661; ${trip.vehicleNumber}</span>` : ''}
+                            </div>
                             <span style="background: ${hasReturn ? '#d1fae5' : '#fef3c7'}; color: ${hasReturn ? '#065f46' : '#92400e'}; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                                ${hasReturn ? 
-                                    (currentLang === 'en' ? '✓ Departure & Return Recorded' : '✓ تم تسجيل الذهاب والعودة') : 
-                                    (currentLang === 'en' ? '⏳ Departure Only - Waiting Return' : '⏳ ذهاب فقط - العودة لم تُسجل بعد')}
+                                ${hasReturn ?
+                                    (currentLang === 'en' ? '&#10003; Departure &amp; Return Recorded' : '&#10003; تم تسجيل الذهاب والعودة') :
+                                    (currentLang === 'en' ? '&#9651; Departure Only' : '&#9651; ذهاب فقط - بانتظار العودة')}
                             </span>
                         </div>
                         <div>
@@ -2023,8 +2472,8 @@
                                 `<span style="color: #f59e0b; font-weight: 600;">${currentLang === 'en' ? 'Not recorded yet' : 'لم تُسجل بعد'}</span>`}
                         </div>
                     </div>
-                    <button class="btn-use-trip" onclick="usePendingTrip(${index})" style="align-self: stretch; margin-top: 8px;">
-                        ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
+                    <button class="btn-use-trip${!hasReturn ? ' departure-only-pulse' : ''}" onclick="usePendingTrip(${index})" style="align-self: stretch; margin-top: 8px;">
+                        &#9998; ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
                     </button>
                 </div>`;
             }).join('');
@@ -2033,9 +2482,9 @@
             if (totalPages > 1) {
                 html += `
                     <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:12px;padding:8px;">
-                        <button onclick="changeNursePendingPage(-1)" ${nursePendingPage <= 1 ? 'disabled' : ''} style="padding:6px 14px;border:1px solid #d1d5db;border-radius:8px;background:${nursePendingPage <= 1 ? '#f3f4f6' : '#fff'};color:${nursePendingPage <= 1 ? '#9ca3af' : '#1e40af'};cursor:${nursePendingPage <= 1 ? 'default' : 'pointer'};font-size:13px;font-weight:600;">${currentLang === 'en' ? 'Previous' : 'السابق'}</button>
-                        <span style="font-size:13px;color:#6b7280;">${currentLang === 'en' ? `Page ${nursePendingPage} of ${totalPages}` : `صفحة ${nursePendingPage} من ${totalPages}`}</span>
-                        <button onclick="changeNursePendingPage(1)" ${nursePendingPage >= totalPages ? 'disabled' : ''} style="padding:6px 14px;border:1px solid #d1d5db;border-radius:8px;background:${nursePendingPage >= totalPages ? '#f3f4f6' : '#fff'};color:${nursePendingPage >= totalPages ? '#9ca3af' : '#1e40af'};cursor:${nursePendingPage >= totalPages ? 'default' : 'pointer'};font-size:13px;font-weight:600;">${currentLang === 'en' ? 'Next' : 'التالي'}</button>
+                        <button onclick="changeNursePendingPage(-1)" ${nursePendingPage <= 1 ? 'disabled' : ''} style="padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:${nursePendingPage <= 1 ? '#f3f4f6' : '#fff'};color:${nursePendingPage <= 1 ? '#9ca3af' : '#374151'};cursor:${nursePendingPage <= 1 ? 'default' : 'pointer'};font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>${currentLang === 'en' ? 'Previous' : 'السابق'}</button>
+                        <span style="font-size:12px;color:#6b7280;">${currentLang === 'en' ? `${nursePendingPage} / ${totalPages}` : `${nursePendingPage} / ${totalPages}`}</span>
+                        <button onclick="changeNursePendingPage(1)" ${nursePendingPage >= totalPages ? 'disabled' : ''} style="padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:${nursePendingPage >= totalPages ? '#f3f4f6' : '#fff'};color:${nursePendingPage >= totalPages ? '#9ca3af' : '#374151'};cursor:${nursePendingPage >= totalPages ? 'default' : 'pointer'};font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:4px;">${currentLang === 'en' ? 'Next' : 'التالي'}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
                     </div>
                 `;
             }
@@ -2138,28 +2587,54 @@
             const clickedBtn = document.getElementById(`trip-card-${index}`)?.querySelector('.btn-use-trip');
             if (clickedBtn) {
                 clickedBtn.disabled = true;
-                clickedBtn.textContent = currentLang === 'en' ? '✓ Editing...' : '✓ جاري التعديل...';
-                clickedBtn.style.background = '#9ca3af';
+                clickedBtn.innerHTML = currentLang === 'en' ? '&#10003; Editing...' : '&#10003; جاري التعديل...';
+                clickedBtn.style.background = '#6b7280';
                 clickedBtn.style.cursor = 'not-allowed';
-                clickedBtn.style.opacity = '0.7';
+                clickedBtn.style.opacity = '0.75';
+                clickedBtn.classList.remove('departure-only-pulse');
             }
 
-            // Scroll immediately to the destination field (no delay)
-            const destinationField = document.getElementById('destination');
-            if (destinationField) {
-                smoothScrollToElement(destinationField, 400);
-                setTimeout(() => destinationField.focus(), 450);
-            }
-            
-            // Gentle pulse on fields to complete (destination, patient name)
-            const destGroup = document.getElementById('destination')?.closest('.form-group');
-            const patientGroup = document.getElementById('patientName')?.closest('.form-group');
-            [destGroup, patientGroup].forEach(g => {
-                if (g) g.classList.add('field-attention');
+            // Highlight active card + dim all others
+            document.querySelectorAll('.pending-trip-card').forEach(card => {
+                const cardId = card.id;
+                if (cardId === `trip-card-${index}`) {
+                    card.classList.add('active-editing');
+                    card.classList.remove('dimmed');
+                } else {
+                    card.classList.add('dimmed');
+                    card.classList.remove('active-editing');
+                }
             });
-            setTimeout(() => {
-                [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
-            }, 6000);
+
+            // Show trip link bar above the form
+            const linkBar = document.getElementById('tripLinkBar');
+            const linkText = document.getElementById('tripLinkText');
+            if (linkBar && linkText) {
+                const driverLabel = trip.driverName || trip.driverNameAr || '';
+                linkText.textContent = currentLang === 'en'
+                    ? `Trip ${trip.tripId} — ${driverLabel}`
+                    : `رحلة ${trip.tripId} — ${driverLabel}`;
+                linkBar.classList.add('visible');
+            }
+
+            // Wait for layout to settle after form filling, then scroll
+            requestAnimationFrame(() => {
+                const destinationField = document.getElementById('destination');
+                if (destinationField) {
+                    destinationField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => destinationField.focus(), 350);
+                }
+
+                // Gentle pulse on fields to complete
+                const destGroup = document.getElementById('destination')?.closest('.form-group');
+                const patientGroup = document.getElementById('patientName')?.closest('.form-group');
+                [destGroup, patientGroup].forEach(g => {
+                    if (g) g.classList.add('field-attention');
+                });
+                setTimeout(() => {
+                    [destGroup, patientGroup].forEach(g => g?.classList.remove('field-attention'));
+                }, 6000);
+            });
         }
 
         function clearDatePickers() {
@@ -2300,12 +2775,53 @@
             // Vehicles are loaded via the combined getNurseData endpoint
             // Just ensure default vehicle is selected from cached data
             const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
-            if (defaultVehicle) {
-                const vehicleSelect = document.getElementById('vehicleNumber');
-                if (vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
-                    vehicleSelect.value = defaultVehicle.number;
-                }
+            const vehicleSelect = document.getElementById('vehicleNumber');
+            if (defaultVehicle && vehicleSelect && vehicleSelect.value !== defaultVehicle.number) {
+                vehicleSelect.value = defaultVehicle.number;
+            } else if (!defaultVehicle && VEHICLES_DATA.length === 1 && vehicleSelect) {
+                // Auto-select if only one vehicle exists (no need for dropdown)
+                vehicleSelect.value = VEHICLES_DATA[0].number;
             }
+
+            // Submit button turns green when all required fields are filled
+            initSubmitBtnColorWatch();
+        }
+
+        function getFormRequiredFields() {
+            return [
+                document.getElementById('vehicleNumber'),
+                document.getElementById('driverName'),
+                document.getElementById('departureDate'),
+                document.getElementById('departureTimeHour'),
+                document.getElementById('departureTimeMinute'),
+                document.getElementById('destination'),
+                document.getElementById('patientName')
+            ];
+        }
+
+        function checkFormComplete() {
+            const fields = getFormRequiredFields();
+            return fields.every(f => f && f.value && f.value.trim() !== '');
+        }
+
+        function updateSubmitBtnColor() {
+            const btn = document.getElementById('submitBtn');
+            if (!btn || btn.disabled) return;
+            if (checkFormComplete()) {
+                btn.classList.add('form-complete');
+            } else {
+                btn.classList.remove('form-complete');
+            }
+        }
+
+        let _submitWatchInit = false;
+        function initSubmitBtnColorWatch() {
+            if (_submitWatchInit) return;
+            _submitWatchInit = true;
+            const form = document.getElementById('ambulanceForm');
+            if (!form) return;
+            form.addEventListener('input', updateSubmitBtnColor);
+            form.addEventListener('change', updateSubmitBtnColor);
         }
 
         function updateStaffNumber() {
@@ -2355,24 +2871,18 @@
                     .map(t => t.tripId)
                     .join(', ');
                 if (incompleteTripIds) {
-                    alert(`⚠️ Cannot submit a new record!\n\nThere are incomplete trips waiting: ${incompleteTripIds}\n\nPlease complete the pending trip(s) first by clicking "Complete Data" on the trip card above.`);
-                    // Scroll to pending trips section
-                    const pendingSection = document.getElementById('pendingTripsAlert');
-                    if (pendingSection) {
-                        pendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
+                    document.getElementById('warningTripIds').textContent = incompleteTripIds;
+                    document.getElementById('warningModal').classList.add('active');
                     return;
                 }
             }
 
-            // Validate before submit and scroll to first error field
+            // Validate before submit — showValidation handles scroll + field pulse
             if (!validateDates()) {
-                scrollToField('returnDate');
                 return;
             }
             
             if (!validateTimes()) {
-                scrollToField('returnTimeHour');
                 return;
             }
 
@@ -2447,17 +2957,37 @@
                 const otherInput = document.getElementById('destinationOther');
                 destinationValue = otherInput.value.trim();
                 if (!destinationValue) {
-                    showValidation(currentLang === 'en' 
-                        ? 'Please enter the other destination!' 
-                        : 'يرجى إدخال الوجهة الأخرى!');
-                    otherInput.classList.add('error');
-                    otherInput.focus();
-                    scrollToField('destinationOther');
+                    showValidation(
+                        currentLang === 'en' 
+                            ? 'Please enter the other destination!' 
+                            : 'يرجى إدخال الوجهة الأخرى!',
+                        ['destinationOther']
+                    );
                     return;
                 }
             }
 
             const isEditing = !!editingRecordId;
+            const isExternal = document.getElementById('externalSupportCheck').checked;
+
+            let finalNurseName = '';
+            let finalNurseStaffNumber = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
+            let extSupportValue = '';
+            if (isExternal) {
+                const extNurse = (document.getElementById('externalNurseName').value || '').trim();
+                const extOrg = (document.getElementById('externalOrgName').value || '').trim();
+                let detailParts = [];
+                if (extOrg) detailParts.push(extOrg);
+                if (extNurse) detailParts.push(extNurse);
+                extSupportValue = detailParts.length > 0 ? detailParts.join(' - ') : 'External Support';
+                // Store admin's real name as Nurse Name (who registered the trip)
+                const adminSession = JSON.parse(localStorage.getItem('userSession') || '{}');
+                finalNurseName = getValidDisplayName(adminSession) || adminSession.nameEn || adminSession.nameAr || 'Admin';
+                finalNurseStaffNumber = 'EXT_SUPPORT';
+            } else {
+                finalNurseName = document.getElementById('nurseName').value;
+            }
+
             const formData = {
                 action: isEditing ? 'updateRecord' : 'submitCase',
                 id: isEditing ? String(editingRecordId).trim() : undefined,
@@ -2473,12 +3003,13 @@
                 returnTime: document.getElementById('returnTime').value,
                 destination: destinationValue,
                 patientName: document.getElementById('patientName').value,
-                nurseName: document.getElementById('nurseName').value,
-                nurseStaffNumber: (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim()
+                nurseName: finalNurseName,
+                nurseStaffNumber: finalNurseStaffNumber,
+                extSupport: extSupportValue || undefined
             };
 
-            // Safety: ensure nurseName is a real name, not empty or an employee number
-            if (!formData.nurseName || !formData.nurseName.trim() || looksLikeEmployeeNumber(formData.nurseName)) {
+            // Safety: ensure nurseName is a real name, not empty or an employee number (skip for external support)
+            if (!isExternal && (!formData.nurseName || !formData.nurseName.trim() || looksLikeEmployeeNumber(formData.nurseName))) {
                 try {
                     const session = JSON.parse(localStorage.getItem('userSession') || '{}');
                     const validName = getValidDisplayName(session);
@@ -2486,163 +3017,183 @@
                 } catch(e) {}
             }
 
-            // Optimistic UI: slide out and remove card immediately (in sync with save)
+            // Optimistic UI: remove card INSTANTLY (no animation delay)
             if (selectedTripId) {
+                // Track this trip as submitted so stale cache won't re-show it
+                _recentlySubmittedTripIds.add(selectedTripId);
                 const tripIndex = currentPendingTrips.findIndex(t => t.tripId === selectedTripId);
                 if (tripIndex !== -1) {
-                    const card = document.getElementById(`trip-card-${tripIndex}`);
-                    if (card) {
-                        card.style.transition = 'all 0.2s ease-out';
-                        card.style.transform = 'translateX(-100%)';
-                        card.style.opacity = '0';
-                        card.style.maxHeight = card.offsetHeight + 'px';
-                        card.style.marginBottom = '0';
-                        card.style.pointerEvents = 'none';
-                        setTimeout(() => {
-                            card.style.maxHeight = '0';
-                            card.style.padding = '0';
-                            card.style.margin = '0';
-                            card.style.overflow = 'hidden';
-                            card.style.border = 'none';
-                            // Remove from list and re-render immediately
-                            currentPendingTrips.splice(tripIndex, 1);
-                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
-                            // Adjust page if current page becomes empty
-                            const totalPages = Math.ceil(currentPendingTrips.length / NURSE_PENDING_PER_PAGE);
-                            if (nursePendingPage > totalPages && totalPages > 0) nursePendingPage = totalPages;
-                            renderNursePendingPage();
-                        }, 180);
-                    } else {
-                        currentPendingTrips.splice(tripIndex, 1);
-                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
-                        renderNursePendingPage();
-                    }
+                    // Remove from array and re-render synchronously — zero delay
+                    currentPendingTrips.splice(tripIndex, 1);
+                    localStorage.setItem('pending_trips_for_nurse', JSON.stringify(currentPendingTrips));
+                    const totalPages = Math.ceil(currentPendingTrips.length / NURSE_PENDING_PER_PAGE);
+                    if (nursePendingPage > totalPages && totalPages > 0) nursePendingPage = totalPages;
+                    renderNursePendingPage();
                 }
                 selectedTripId = null;
                 selectedTripIndex = null;
             }
 
-            try {
-                // === OPTIMISTIC LOCAL UPDATE FOR EDITS ===
-                if (isEditing) {
-                    const editId = String(editingRecordId).trim();
-                    const editFields = {
-                        'Vehicle Number': formData.vehicleNumber,
-                        'Driver Name': formData.driverName,
-                        'Staff Number': formData.staffNumber,
-                        'Departure Date': formData.departureDate,
-                        'Departure Time': formData.departureTime,
-                        'Return Date': formData.returnDate,
-                        'Return Time': formData.returnTime,
-                        'Destination': formData.destination,
-                        'Patient Name': formData.patientName,
-                        'Nurse Name': formData.nurseName,
-                        'Nurse Staff Number': formData.nurseStaffNumber
-                    };
-                    
-                    // Store in pendingEdits so server refreshes won't revert
-                    pendingEdits = {}; // Clear old pending edits first
-                    pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
-                    
-                    // Apply to local arrays — only update the EXACT matching record
-                    let matchCount = 0;
-                    allRecords = allRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            matchCount++;
-                            if (matchCount > 1) {
-                                console.warn('⚠️ Multiple records matched ID:', editId);
-                                return r; // Don't update duplicates
-                            }
-                            return { ...r, ...editFields };
-                        }
-                        return r;
-                    });
-                    matchCount = 0;
-                    allYearRecords = allYearRecords.map(r => {
-                        if (String(r.ID).trim() === editId) {
-                            matchCount++;
-                            if (matchCount > 1) return r;
-                            return { ...r, ...editFields };
-                        }
-                        return r;
-                    });
-                    displayRecords(allRecords);
-                    console.log('✅ Local record updated for ID:', editId);
-                }
-
-                // Send to server (no-cors = opaque response, can't read result)
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(formData)
-                });
+            // === OPTIMISTIC LOCAL UPDATE (instant — no server wait) ===
+            if (isEditing) {
+                const editId = String(editingRecordId).trim();
+                const editFields = {
+                    'Vehicle Number': formData.vehicleNumber,
+                    'Driver Name': formData.driverName,
+                    'Staff Number': formData.staffNumber,
+                    'Departure Date': formData.departureDate,
+                    'Departure Time': formData.departureTime,
+                    'Return Date': formData.returnDate,
+                    'Return Time': formData.returnTime,
+                    'Destination': formData.destination,
+                    'Patient Name': formData.patientName,
+                    'Nurse Name': formData.nurseName,
+                    'Nurse Staff Number': formData.nurseStaffNumber,
+                    'Ext Support': formData.extSupport || ''
+                };
                 
-                // Show success message
-                if (isEditing) {
-                    // Update modal content for edit success
-                    document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
-                    document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
-                    document.getElementById('successModal').classList.add('active');
-                    
-                    editingRecordId = null;
-                    // Reset form header
-                    const formHeader = document.querySelector('.form-header h2');
-                    formHeader.textContent = 'Register New Ambulance Case';
-                    formHeader.style.color = '';
-                    // Reset submit button
-                    const submitBtn = document.getElementById('submitBtn');
-                    submitBtn.textContent = 'Submit Record';
-                    submitBtn.style.background = '';
+                // Store in pendingEdits so server refreshes won't revert
+                pendingEdits = {}; // Clear old pending edits first
+                pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
+                
+                // Apply to local arrays — only update the EXACT matching record
+                let matchCount = 0;
+                allRecords = allRecords.map(r => {
+                    if (String(r.ID).trim() === editId) {
+                        matchCount++;
+                        if (matchCount > 1) {
+                            console.warn('⚠️ Multiple records matched ID:', editId);
+                            return r; // Don't update duplicates
+                        }
+                        return { ...r, ...editFields };
+                    }
+                    return r;
+                });
+                matchCount = 0;
+                allYearRecords = allYearRecords.map(r => {
+                    if (String(r.ID).trim() === editId) {
+                        matchCount++;
+                        if (matchCount > 1) return r;
+                        return { ...r, ...editFields };
+                    }
+                    return r;
+                });
+                _nurseDisplayedHash = DataCache.hash(allRecords);
+                displayRecords(allRecords);
+                console.log('✅ Local record updated for ID:', editId);
+            } else {
+                // === NEW RECORD or COMPLETING PENDING TRIP ===
+                // If completing a pending trip, use its existing ID (don't predict a new one)
+                // If truly new record, predict the next ID locally for instant display
+                let displayId;
+                if (formData.tripId) {
+                    // Completing a pending trip — keep its original ID
+                    displayId = formData.tripId;
+                    console.log('✅ Completing pending trip with existing ID:', displayId);
                 } else {
-                    // Update modal content for new record
+                    // Truly new record — predict next ID
+                    displayId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
+                        ? SyncManager.predictNextId()
+                        : 'pending_' + Date.now();
+                    // Inject predicted ID into formData so server uses it
+                    if (displayId && !displayId.startsWith('pending_')) {
+                        formData.tripId = displayId;
+                    }
+                    console.log('✅ New record with predicted ID:', displayId);
+                }
+                const optimisticRecord = {
+                    'ID': displayId,
+                    'Timestamp': new Date().toISOString(),
+                    'Vehicle Number': formData.vehicleNumber,
+                    'Driver Name': formData.driverName,
+                    'Staff Number': formData.staffNumber,
+                    'Departure Date': formData.departureDate,
+                    'Departure Time': formData.departureTime,
+                    'Return Date': formData.returnDate,
+                    'Return Time': formData.returnTime,
+                    'Destination': formData.destination,
+                    'Patient Name': formData.patientName,
+                    'Nurse Name': formData.nurseName,
+                    'Nurse Staff Number': formData.nurseStaffNumber,
+                    'Ext Support': formData.extSupport || ''
+                };
+                allRecords.unshift(optimisticRecord);
+                allYearRecords.unshift(optimisticRecord);
+                nurseRecordsPage = 1;
+                _nurseDisplayedHash = DataCache.hash(allRecords);
+                displayRecords(allRecords);
+                // Update yearly total instantly (don't wait for server)
+                document.getElementById('yearlyTotalCount').textContent = allYearRecords.length;
+                _nurseSubmitAt = Date.now();
+                _pendingOptimisticRecord = optimisticRecord;
+            }
+
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            const syncAction = isEditing ? 'updateRecord' : 'submitCase';
+            SyncManager.save(syncAction, formData).catch(err => {
+                console.error('SyncManager save error:', err);
+                // Fallback to direct ReliablePost if SyncManager fails
+                ReliablePost.send(WEB_APP_URL, formData, { background: true, timeout: 30000 })
+                    .catch(e => console.error('Fallback POST also failed:', e));
+            });
+            
+            // === INSTANT SUCCESS — no waiting ===
+            if (isEditing) {
+                document.getElementById('successModalTitle').textContent = 'Record Updated Successfully';
+                document.getElementById('successModalMessage').textContent = 'The ambulance case has been updated successfully.';
+                document.getElementById('successModal').classList.add('active');
+                
+                editingRecordId = null;
+                const formHeader = document.querySelector('.form-header h2');
+                formHeader.textContent = 'Register New Ambulance Case';
+                formHeader.style.color = '';
+                submitBtn.textContent = 'Submit Record';
+                submitBtn.style.background = '';
+            } else {
+                // Show toast instead of modal for pending trip completion
+                if (selectedTripId) {
+                    showNurseToast(currentLang === 'en' ? '\u2713 Trip recorded successfully' : '\u2713 \u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0631\u062d\u0644\u0629 \u0628\u0646\u062c\u0627\u062d');
+                } else {
                     document.getElementById('successModalTitle').textContent = 'Record Submitted Successfully';
                     document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
                     document.getElementById('successModal').classList.add('active');
                 }
-                
-                resetForm();
-                
-                // Invalidate ALL records cache keys (base + year/month variants)
-                DataCache.invalidateAll();
-                
-                if (isEditing) {
-                    // For edits: optimistic update already applied, just scroll to records
-                    setTimeout(() => {
-                        document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 300);
-                    // Single silent server refresh to confirm update (no spinner)
-                    setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
-                    }, 10000);
-                } else {
-                    // For new records: refresh all data via combined endpoint
-                    setTimeout(() => {
-                        DataCache.invalidateAll();
-                        loadAllNurseData();
-                        
-                        // Scroll to pending trips if there are more, otherwise to records
-                        setTimeout(() => {
-                            if (currentPendingTrips.length > 0) {
-                                document.getElementById('pendingTripsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            } else {
-                                document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }
-                        }, 300);
-                    }, 1000);
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                alert(currentLang === 'en' ? 'Error submitting. Check connection.' : 'خطأ في الإرسال. تحقق من الاتصال.');
-                // Only restore original text on error (resetForm already handles success case)
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
-                return;
             }
-            // Re-enable button after success (text already reset by resetForm)
+            
+            resetForm();
+            
+            // Invalidate ONLY current month + "all" cache (not every month!)
+            // This preserves pre-warmed data for other months
+            var _invYear = document.getElementById('yearFilter').value;
+            var _invMonth = document.getElementById('monthFilter').value;
+            DataCache.invalidate(
+                'cache_nurse_data_' + _invYear + '_' + _invMonth,
+                'cache_nurse_data_' + _invYear + '_all'
+            );
+            
+            // Scroll to records to show the entry
+            setTimeout(() => {
+                document.getElementById('recordsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+            
+            // Safety fallback: if SyncManager event didn't fire within 10s, force refresh
+            if (!isEditing) {
+                setTimeout(() => {
+                    if (_pendingOptimisticRecord) {
+                        var fy = document.getElementById('yearFilter').value;
+                        var fm = document.getElementById('monthFilter').value;
+                        DataCache.invalidate(
+                            'cache_nurse_data_' + fy + '_' + fm,
+                            'cache_nurse_data_' + fy + '_all'
+                        );
+                        loadAllNurseData();
+                    }
+                }, 10000);
+            }
+
+            // Re-enable button immediately
             submitBtn.disabled = false;
+            updateSubmitBtnColor();
         });
 
         function resetForm() {
@@ -2651,6 +3202,26 @@
             document.getElementById('staffNumber').style.background = '#f3f4f6';
             hideValidation();
             editingRecordId = null;
+            // Remove submit btn completion color
+            const sb = document.getElementById('submitBtn');
+            if (sb) sb.classList.remove('form-complete');
+            // Hide trip link bar and undim all cards
+            const linkBar = document.getElementById('tripLinkBar');
+            if (linkBar) linkBar.classList.remove('visible');
+            document.querySelectorAll('.pending-trip-card').forEach(c => {
+                c.classList.remove('active-editing', 'dimmed');
+            });
+
+            // Reset external support fields via toggle
+            var extCheck = document.getElementById('externalSupportCheck');
+            if (extCheck) {
+                extCheck.checked = false;
+                extCheck.removeAttribute('checked');
+            }
+            toggleExternalSupport();
+            document.getElementById('externalOrgName').value = '';
+            document.getElementById('externalNurseName').value = '';
+            document.getElementById('nurseName').readOnly = false;
             
             // Hide "Other" destination input
             const destinationOtherInput = document.getElementById('destinationOther');
@@ -2697,6 +3268,28 @@
 
         function closeModal() {
             document.getElementById('successModal').classList.remove('active');
+        }
+
+        function closeWarningAndScroll() {
+            document.getElementById('warningModal').classList.remove('active');
+            // Scroll to pending trips section and highlight "Complete Data" button
+            const pendingSection = document.getElementById('pendingTripsAlert');
+            if (pendingSection) {
+                pendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Flash the Complete Data button(s) to draw attention
+                setTimeout(() => {
+                    const completeButtons = pendingSection.querySelectorAll('.btn-use-trip, [onclick*="usePendingTrip"]');
+                    completeButtons.forEach(btn => {
+                        btn.style.transition = 'all 0.3s';
+                        btn.style.transform = 'scale(1.15)';
+                        btn.style.boxShadow = '0 0 16px rgba(217, 119, 6, 0.5)';
+                        setTimeout(() => {
+                            btn.style.transform = '';
+                            btn.style.boxShadow = '';
+                        }, 1200);
+                    });
+                }, 600);
+            }
         }
 
         // ============================================
@@ -2755,16 +3348,78 @@
             });
         }
 
+        // Hash of currently displayed nurse records — prevents flicker on bg refresh
+        var _nurseDisplayedHash = null;
+
+        // Client-side month filter for nurse records
+        function _nurseFilterByMonth(records, month) {
+            if (!month || month === 'all') return records;
+            var m = parseInt(month);
+            return records.filter(function(r) {
+                try {
+                    var d = r['Departure Date'];
+                    if (!d) return false;
+                    var dateObj = (d instanceof Date) ? d : new Date(d);
+                    return (dateObj.getMonth() + 1) === m;
+                } catch(e) { return false; }
+            });
+        }
+
         async function loadRecords(silent = false) {
-            const recordsSection = document.querySelector('.records-section');
-            const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-            if (!silent && recordsSection && loadingSpinner) {
-                recordsSection.classList.add('loading');
-                loadingSpinner.classList.add('active');
+            const overlay = document.getElementById('recordsLoadingOverlay');
+            const section = document.querySelector('.records-section');
+            const year = document.getElementById('yearFilter').value;
+            const month = document.getElementById('monthFilter').value;
+            const cacheKey = 'cache_nurse_data_' + year + '_' + month;
+            const cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS * 10);
+
+            var instantShown = false;
+
+            // Helper: display and track hash
+            function showNurseRecords(records, yearlyTotal) {
+                let merged = applyPendingEdits(records);
+                allRecords = merged;
+                nurseRecordsPage = 1;
+                _nurseDisplayedHash = DataCache.hash(allRecords);
+                displayRecords(allRecords);
+                if (yearlyTotal !== undefined) {
+                    document.getElementById('yearlyTotalCount').textContent = yearlyTotal;
+                    updateYearlyTotalLabel();
+                }
             }
 
-            // Use the combined endpoint — it returns records + yearly total + pending trips all at once
-            await loadAllNurseData();
+            // 1. Exact cache hit for this year+month
+            if (cached && cached.data && cached.data.records) {
+                showNurseRecords(cached.data.records, cached.data.yearlyTotal);
+                instantShown = true;
+            }
+
+            // 2. If no exact hit, try "all year" cache and filter client-side
+            if (!instantShown) {
+                var allYearKey = 'cache_nurse_data_' + year + '_all';
+                var allYearCache = DataCache.get(allYearKey, DataCache.EXPIRY.RECORDS * 10);
+                if (allYearCache && allYearCache.data && allYearCache.data.records) {
+                    var filtered = _nurseFilterByMonth(allYearCache.data.records, month);
+                    showNurseRecords(filtered, allYearCache.data.yearlyTotal);
+                    instantShown = true;
+                }
+            }
+
+            // Only show loading if nothing to display
+            if (!silent && !instantShown) {
+                if (section) section.classList.add('loading');
+                if (overlay) overlay.style.display = 'flex';
+            }
+
+            // Background: fetch fresh data (non-blocking if instant shown)
+            if (instantShown) {
+                loadAllNurseData(); // non-blocking — don't await
+            } else {
+                await loadAllNurseData();
+            }
+
+            if (section) section.classList.remove('loading');
+            if (overlay) overlay.style.display = 'none';
         }
 
         function displayRecords(records) {
@@ -2774,7 +3429,7 @@
             if (records.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-icon" style="display:flex;justify-content:center;"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
                         <p>${currentLang === 'en' ? 'No records found' : 'لا توجد سجلات'}</p>
                     </div>
                 `;
@@ -2801,46 +3456,55 @@
                             <th>Return</th>
                             <th>Dest.</th>
                             <th>Patient</th>
-                            <th>Nurse</th>
+                            <th data-en="Registered By" data-ar="المسجّل">Registered By</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${pageRecords.map(record => {
-                            const recordId = record.ID || '-';
+                            const isPending = String(record.ID || '').startsWith('pending_');
+                            const isJustSaved = _pendingOptimisticRecord && _nurseSubmitAt &&
+                                (Date.now() - _nurseSubmitAt < 8000) &&
+                                String(record.ID || '') === String(_pendingOptimisticRecord.ID || '');
+                            const recordId = isPending ? (currentLang === 'en' ? 'Saving...' : 'جاري الحفظ...') : (record.ID || '-');
                             const depDate = DateTimeFormatter.formatDateForDisplay(record['Departure Date']) || '-';
                             const depTime = DateTimeFormatter.formatTimeForDisplay(record['Departure Time']) || '';
                             const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
                             const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                             const fullPatient = (record['Patient Name'] || record['patientName'] || '').toString().trim() || '-';
                             let fullNurse = (record['Nurse Name'] || '').toString().trim() || '-';
-                            // Resolve nurse name: use current name from session if this is the logged-in nurse's record
-                            // Handles: (1) employee number stored as name, (2) admin changed nurse name after record was saved
-                            if (fullNurse !== '-') {
-                                const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+                            const nurseStaffForDisplay = (record['Nurse Staff Number'] || '').toString().trim();
+                            const extSupportVal = (record['Ext Support'] || '').toString().trim();
+                            const isExtSupport = !!extSupportVal || fullNurse.startsWith('[External Support]') || nurseStaffForDisplay === 'EXT_SUPPORT';
+                            if (isExtSupport) {
+                                // Backend resolves admin name into Nurse Name for ext support records
+                                // Just use it directly — no client-side fallback needed
+                            } else if (fullNurse !== '-') {
                                 const loggedUser = window.loggedInUser || {};
                                 const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
-                                if (loggedStaff && (nurseStaff === loggedStaff || (looksLikeEmployeeNumber(fullNurse) && fullNurse === loggedStaff))) {
+                                if (loggedStaff && (nurseStaffForDisplay === loggedStaff || (looksLikeEmployeeNumber(fullNurse) && fullNurse === loggedStaff))) {
                                     const resolved = getValidDisplayName(loggedUser);
                                     if (resolved) fullNurse = resolved;
                                 }
                             }
                             return `
-                            <tr>
-                                <td><span style="background:#e0e7ff;color:#1e40af;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;">${recordId}</span></td>
+                            <tr class="${isJustSaved ? 'record-just-saved' : ''}">
+                                <td><span style="background:${isPending ? '#fef3c7' : '#e0e7ff'};color:${isPending ? '#92400e' : '#1e40af'};padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;${isPending ? 'animation:saving-pulse 1.5s ease-in-out infinite;' : ''}">${recordId}</span></td>
                                 <td><strong>${record['Vehicle Number'] || ''}</strong></td>
                                 <td>${record['Driver Name'] || ''}</td>
                                 <td style="font-size:11px;white-space:nowrap;">${depDate}<br><small>${depTime}</small></td>
                                 <td style="font-size:11px;white-space:nowrap;">${retDate}<br><small>${retTime}</small></td>
                                 <td>${record['Destination'] || ''}</td>
                                 <td title="${fullPatient}" style="cursor:default;">${truncName(fullPatient)}</td>
-                                <td title="${fullNurse}" style="cursor:default;">${truncName(fullNurse)}</td>
+                                <td title="${isExtSupport ? fullNurse + (extSupportVal ? ' [' + extSupportVal + ']' : '') : fullNurse}" style="cursor:default;${isExtSupport ? 'color:#7c3aed;' : ''}">${truncName(fullNurse)}${isExtSupport ? '<br><small style="color:#7c3aed;font-size:10px;">' + (currentLang === 'en' ? 'External Support' : 'دعم خارجي') + '</small>' : ''}</td>
                                 <td>
                                     <div class="action-btns">
                                         <button class="action-btn view" onclick='viewRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})'>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                             ${currentLang === 'en' ? 'View' : 'عرض'}
                                         </button>
-                                        <button class="action-btn edit" onclick='editRecord(${JSON.stringify(record).replace(/'/g, "&apos;")})' style="background: #10b981; margin-left: 8px;">
+                                        <button class="action-btn edit" ${isExtSupport && !isAdminUser() ? 'disabled title="' + (currentLang === 'en' ? 'External Support — admin only' : 'دعم خارجي — للإدارة فقط') + '" style="opacity:0.4;cursor:not-allowed;pointer-events:auto;"' : ''} onclick='${isExtSupport && !isAdminUser() ? 'return false' : 'editRecord(' + JSON.stringify(record).replace(/'/g, "&apos;") + ')'}'>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                             ${currentLang === 'en' ? 'Edit' : 'تعديل'}
                                         </button>
                                     </div>
@@ -2855,9 +3519,9 @@
             if (totalPages > 1) {
                 tableHTML += `
                     <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:12px;padding:8px;">
-                        <button onclick="changeNurseRecordsPage(-1)" ${nurseRecordsPage <= 1 ? 'disabled' : ''} style="padding:6px 14px;border:1px solid #d1d5db;border-radius:8px;background:${nurseRecordsPage <= 1 ? '#f3f4f6' : '#fff'};color:${nurseRecordsPage <= 1 ? '#9ca3af' : '#1e40af'};cursor:${nurseRecordsPage <= 1 ? 'default' : 'pointer'};font-size:13px;font-weight:600;">${currentLang === 'en' ? 'Previous' : 'السابق'}</button>
-                        <span style="font-size:13px;color:#6b7280;">${currentLang === 'en' ? `Page ${nurseRecordsPage} of ${totalPages} (${records.length} records)` : `صفحة ${nurseRecordsPage} من ${totalPages} (${records.length} سجل)`}</span>
-                        <button onclick="changeNurseRecordsPage(1)" ${nurseRecordsPage >= totalPages ? 'disabled' : ''} style="padding:6px 14px;border:1px solid #d1d5db;border-radius:8px;background:${nurseRecordsPage >= totalPages ? '#f3f4f6' : '#fff'};color:${nurseRecordsPage >= totalPages ? '#9ca3af' : '#1e40af'};cursor:${nurseRecordsPage >= totalPages ? 'default' : 'pointer'};font-size:13px;font-weight:600;">${currentLang === 'en' ? 'Next' : 'التالي'}</button>
+                        <button onclick="changeNurseRecordsPage(-1)" ${nurseRecordsPage <= 1 ? 'disabled' : ''} style="padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:${nurseRecordsPage <= 1 ? '#f3f4f6' : '#fff'};color:${nurseRecordsPage <= 1 ? '#9ca3af' : '#374151'};cursor:${nurseRecordsPage <= 1 ? 'default' : 'pointer'};font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>${currentLang === 'en' ? 'Previous' : 'السابق'}</button>
+                        <span style="font-size:12px;color:#6b7280;">${currentLang === 'en' ? `${nurseRecordsPage} / ${totalPages}` : `${nurseRecordsPage} / ${totalPages}`}</span>
+                        <button onclick="changeNurseRecordsPage(1)" ${nurseRecordsPage >= totalPages ? 'disabled' : ''} style="padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:${nurseRecordsPage >= totalPages ? '#f3f4f6' : '#fff'};color:${nurseRecordsPage >= totalPages ? '#9ca3af' : '#374151'};cursor:${nurseRecordsPage >= totalPages ? 'default' : 'pointer'};font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:4px;">${currentLang === 'en' ? 'Next' : 'التالي'}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
                     </div>
                 `;
             }
@@ -2883,12 +3547,21 @@
 
         let editingRecordId = null; // Track which record is being edited
         let pendingEdits = {}; // Track edits not yet confirmed by server { id: { fields, timestamp } }
+        let _nurseSubmitAt = 0; // Guard: timestamp of last new record submission
+        let _pendingOptimisticRecord = null; // The optimistic record waiting for server confirmation
 
         function viewRecord(record) {
             // Show single record in printable format with edit button
             reportRecords = [record];
             currentReportPage = 1;
             generateReportContent();
+            
+            // Detect External Support record
+            const viewExtCol = (record['Ext Support'] || '').toString().trim();
+            const viewNurseName = (record['Nurse Name'] || '').toString().trim();
+            const viewNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            const isViewExtSupport = !!viewExtCol || viewNurseName.startsWith('[External Support]') || viewNurseStaff === 'EXT_SUPPORT';
+            const canEdit = !isViewExtSupport || isAdminUser();
             
             // Add edit button to report header
             const reportHeader = document.querySelector('.report-header');
@@ -2897,13 +3570,42 @@
                 const editBtn = document.createElement('button');
                 editBtn.id = 'editRecordBtn';
                 editBtn.className = 'btn-print';
-                editBtn.style.background = '#10b981';
                 editBtn.style.marginRight = '10px';
-                editBtn.textContent = 'Edit Record';
-                editBtn.onclick = () => editRecord(record);
+                if (canEdit) {
+                    editBtn.style.background = '#374151';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.style.opacity = '1';
+                    editBtn.textContent = currentLang === 'en' ? 'Edit Record' : 'تعديل';
+                    editBtn.onclick = () => editRecord(record);
+                    editBtn.disabled = false;
+                } else {
+                    editBtn.style.background = '#9ca3af';
+                    editBtn.style.cursor = 'not-allowed';
+                    editBtn.style.opacity = '0.5';
+                    editBtn.textContent = currentLang === 'en' ? 'Admin Only' : 'للإدارة فقط';
+                    editBtn.title = currentLang === 'en' ? 'External Support records can only be edited by admin' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة';
+                    editBtn.onclick = null;
+                    editBtn.disabled = true;
+                }
                 reportHeader.querySelector('.report-actions').insertBefore(editBtn, reportHeader.querySelector('.btn-print'));
             } else {
-                existingEditBtn.onclick = () => editRecord(record);
+                if (canEdit) {
+                    existingEditBtn.style.background = '#374151';
+                    existingEditBtn.style.cursor = 'pointer';
+                    existingEditBtn.style.opacity = '1';
+                    existingEditBtn.textContent = currentLang === 'en' ? 'Edit Record' : 'تعديل';
+                    existingEditBtn.onclick = () => editRecord(record);
+                    existingEditBtn.disabled = false;
+                    existingEditBtn.title = '';
+                } else {
+                    existingEditBtn.style.background = '#9ca3af';
+                    existingEditBtn.style.cursor = 'not-allowed';
+                    existingEditBtn.style.opacity = '0.5';
+                    existingEditBtn.textContent = currentLang === 'en' ? 'Admin Only' : 'للإدارة فقط';
+                    existingEditBtn.title = currentLang === 'en' ? 'External Support records can only be edited by admin' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة';
+                    existingEditBtn.onclick = null;
+                    existingEditBtn.disabled = true;
+                }
             }
             
             document.getElementById('reportModal').classList.add('show');
@@ -2923,13 +3625,21 @@
                 return;
             }
             
+            // Non-admin users cannot edit External Support records
+            const recNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            const recNurseName = (record['Nurse Name'] || '').toString().trim();
+            if (!isAdminUser() && (recNurseStaff === 'EXT_SUPPORT' || recNurseName.startsWith('[External Support]') || record['Ext Support'])) {
+                alert(currentLang === 'en' ? 'External Support records can only be edited by admin.' : 'سجلات الدعم الخارجي يمكن تعديلها فقط بواسطة الإدارة.');
+                return;
+            }
+            
             // Clear any previous pending edits to avoid cross-contamination
             pendingEdits = {};
             
             // Set editing mode with exact ID
             editingRecordId = String(record.ID).trim();
             console.log('📝 Editing record ID:', editingRecordId);
-            
+
             // Load record data into form
             loadRecordIntoForm(record);
             
@@ -2946,7 +3656,84 @@
             // Update form header to show edit mode
             const formHeader = document.querySelector('.form-header h2');
             formHeader.textContent = 'Edit Ambulance Case';
-            formHeader.style.color = '#10b981';
+            formHeader.style.color = '#374151';
+
+            // ============================================
+            // STEP 1: Detect & restore External Support mode FIRST
+            // This must run before anything else to ensure fields are shown
+            // ============================================
+            const recordNurseName = (record['Nurse Name'] || '').toString().trim();
+            const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+            const isAdmin = isAdminUser();
+            const nurseField = document.getElementById('nurseName');
+
+            const extSupportCol = (record['Ext Support'] || '').toString().trim();
+            const hasExtPrefix = recordNurseName.indexOf('[External Support]') >= 0;
+            const hasExtMarker = recordNurseStaff === 'EXT_SUPPORT';
+            const isExternalSupportRecord = !!extSupportCol || hasExtPrefix || hasExtMarker;
+
+            console.log('📝 Edit record - ExtSupport col:', JSON.stringify(extSupportCol), '| Nurse:', JSON.stringify(recordNurseName), '| isAdmin:', isAdmin, '| isExtSupport:', isExternalSupportRecord);
+
+            // Reset ext support state first
+            document.getElementById('externalSupportCheck').checked = false;
+            toggleExternalSupport();
+
+            // Parse ext support data for restoration
+            let parsedOrg = '';
+            let parsedNurse = '';
+            if (isExternalSupportRecord) {
+                if (extSupportCol) {
+                    const dashIdx = extSupportCol.indexOf(' - ');
+                    if (dashIdx !== -1) {
+                        parsedOrg = extSupportCol.substring(0, dashIdx).trim();
+                        parsedNurse = extSupportCol.substring(dashIdx + 3).trim();
+                    } else if (extSupportCol !== 'External Support') {
+                        parsedOrg = extSupportCol;
+                    }
+                } else if (hasExtPrefix) {
+                    let extContent = recordNurseName;
+                    const bracketIdx = extContent.indexOf(']');
+                    if (bracketIdx >= 0) extContent = extContent.substring(bracketIdx + 1).trim();
+                    const dashIdx = extContent.indexOf(' - ');
+                    if (dashIdx !== -1) {
+                        parsedOrg = extContent.substring(0, dashIdx).trim();
+                        parsedNurse = extContent.substring(dashIdx + 3).trim();
+                    } else if (extContent && extContent !== 'Unknown') {
+                        parsedOrg = extContent;
+                    }
+                }
+            }
+
+            // Apply ext support mode for admin editing ext support record
+            function applyExtSupportMode() {
+                const extCheckbox = document.getElementById('externalSupportCheck');
+                const extGroup = document.getElementById('externalSupportGroup');
+                extGroup.style.display = 'block';
+                extCheckbox.checked = true;
+                extCheckbox.setAttribute('checked', 'checked');
+                toggleExternalSupport();
+                nurseField.readOnly = true;
+                document.getElementById('externalOrgName').value = parsedOrg;
+                document.getElementById('externalNurseName').value = parsedNurse;
+                console.log('📝 ExtSupport applied → Org:', parsedOrg, '| Nurse:', parsedNurse, '| Checkbox:', extCheckbox.checked,
+                    '| OrgGroupDisplay:', document.getElementById('externalOrgGroup').style.display,
+                    '| NurseGroupDisplay:', document.getElementById('externalNurseGroup').style.display);
+            }
+
+            if (isAdmin && isExternalSupportRecord) {
+                console.log('📝 → Restoring External Support mode');
+                formHeader.textContent = currentLang === 'en' ? 'Edit External Support Case' : 'تعديل حالة دعم خارجي';
+                applyExtSupportMode();
+                // Re-apply after a tick to survive any DOM resets from background callbacks
+                setTimeout(applyExtSupportMode, 50);
+                setTimeout(applyExtSupportMode, 500);
+            } else if (isAdmin) {
+                formHeader.textContent = currentLang === 'en' ? 'Edit Ambulance Case' : 'تعديل حالة إسعاف';
+            }
+
+            // ============================================
+            // STEP 2: Fill standard form fields
+            // ============================================
             
             // Fill vehicle number
             if (record['Vehicle Number']) {
@@ -2957,7 +3744,6 @@
             // Fill driver name
             if (record['Driver Name']) {
                 const driverSelect = document.getElementById('driverName');
-                // Find driver by name
                 const driverOption = Array.from(driverSelect.options).find(opt => opt.text.includes(record['Driver Name']));
                 if (driverOption) {
                     driverSelect.value = driverOption.value;
@@ -2965,7 +3751,7 @@
                 }
             }
             
-            // Fill departure date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
+            // Fill departure date
             if (record['Departure Date']) {
                 const depDate = DateTimeFormatter.formatDate(record['Departure Date']);
                 if (depDate) {
@@ -2985,7 +3771,7 @@
                 }
             }
             
-            // Fill return date - accepts yyyy-mm-dd (driver) or yyyy/mm/dd, displays as yyyy/mm/dd
+            // Fill return date
             const retDate = DateTimeFormatter.formatDate(record['Return Date']);
             if (retDate) {
                 if (flatpickrReturn) flatpickrReturn.setDate(retDate);
@@ -3003,13 +3789,11 @@
                 }
             }
             
-            // Fill destination - check if it's "Other" or a predefined value
+            // Fill destination
             if (record['Destination']) {
                 const destinationSelect = document.getElementById('destination');
                 const destinationOtherInput = document.getElementById('destinationOther');
                 const destValue = record['Destination'].toString().trim();
-                
-                // Check if destination is in the predefined list (SQH)
                 const predefinedDestinations = ['SQH'];
                 if (predefinedDestinations.includes(destValue.toUpperCase())) {
                     destinationSelect.value = destValue.toUpperCase();
@@ -3017,14 +3801,12 @@
                     destinationOtherInput.required = false;
                     destinationOtherInput.value = '';
                 } else {
-                    // It's an "Other" destination
                     destinationSelect.value = 'OTHER';
                     destinationOtherInput.style.display = 'block';
                     destinationOtherInput.value = destValue;
                     destinationOtherInput.required = true;
                 }
             } else {
-                // No destination - hide "Other" input
                 const destinationOtherInput = document.getElementById('destinationOther');
                 if (destinationOtherInput) {
                     destinationOtherInput.style.display = 'none';
@@ -3036,36 +3818,46 @@
             if (record['Patient Name'] || record['patientName']) {
                 document.getElementById('patientName').value = (record['Patient Name'] || record['patientName'] || '').toString().trim();
             }
-            
-            // Nurse name logic: check if this is the logged-in nurse's own trip or someone else's
-            const nurseField = document.getElementById('nurseName');
+
+            // ============================================
+            // STEP 3: Handle nurse name field based on user type
+            // (External support was already handled in STEP 1)
+            // ============================================
             const loggedInStaffNum = (window.loggedInUser && window.loggedInUser.staffNumber || '').toString().trim();
             const loggedInNameAr = (window.loggedInUser && window.loggedInUser.nameAr || '').toString().trim();
             const loggedInNameEn = (window.loggedInUser && window.loggedInUser.nameEn || '').toString().trim();
-            const recordNurseName = (record['Nurse Name'] || '').toString().trim();
-            const recordNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
-            
-            // Identify ownership: prefer Nurse Staff Number match, fallback to name comparison
-            // Also treat records where nurse name is actually an employee number as own trip if it matches
-            const isOwnTrip = recordNurseName === '' ||
-                              (recordNurseStaff && recordNurseStaff === loggedInStaffNum) ||
-                              (!recordNurseStaff && (recordNurseName === loggedInNameAr || recordNurseName === loggedInNameEn)) ||
-                              (looksLikeEmployeeNumber(recordNurseName) && recordNurseName === loggedInStaffNum);
-            
-            if (isOwnTrip) {
-                // Own trip - nurse can edit her name freely
-                loadUserSession(); // Sets English name and makes field editable
-                // If the record had a custom name she entered before, show that instead
-                // But skip if that "name" is actually an employee number
-                if (recordNurseName && !looksLikeEmployeeNumber(recordNurseName) && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
-                    nurseField.value = recordNurseName;
-                }
+
+            if (isAdmin && isExternalSupportRecord) {
+                // Already handled in STEP 1 — do nothing here
+            } else if (isAdmin) {
+                // Admin editing normal record: always editable, show original name
+                nurseField.readOnly = false;
+                nurseField.style.backgroundColor = '';
+                nurseField.style.cursor = '';
+                nurseField.value = (recordNurseName && !looksLikeEmployeeNumber(recordNurseName)) ? recordNurseName : getValidDisplayName(window.loggedInUser || {});
             } else {
-                // Someone else's trip - show original name, readonly
-                nurseField.value = (recordNurseName && !looksLikeEmployeeNumber(recordNurseName)) ? recordNurseName : '-';
-                nurseField.readOnly = true;
-                nurseField.style.backgroundColor = '#f3f4f6';
-                nurseField.style.cursor = 'not-allowed';
+                // Identify ownership: prefer Nurse Staff Number match, fallback to name comparison
+                // Also treat records where nurse name is actually an employee number as own trip if it matches
+                const isOwnTrip = recordNurseName === '' ||
+                                  (recordNurseStaff && recordNurseStaff === loggedInStaffNum) ||
+                                  (!recordNurseStaff && (recordNurseName === loggedInNameAr || recordNurseName === loggedInNameEn)) ||
+                                  (looksLikeEmployeeNumber(recordNurseName) && recordNurseName === loggedInStaffNum);
+                
+                if (isOwnTrip) {
+                    // Own trip - nurse can edit her name freely
+                    loadUserSession(); // Sets English name and makes field editable
+                    // If the record had a custom name she entered before, show that instead
+                    // But skip if that "name" is actually an employee number
+                    if (recordNurseName && !looksLikeEmployeeNumber(recordNurseName) && recordNurseName !== loggedInNameAr && recordNurseName !== loggedInNameEn) {
+                        nurseField.value = recordNurseName;
+                    }
+                } else {
+                    // Someone else's trip - show original name, readonly
+                    nurseField.value = (recordNurseName && !looksLikeEmployeeNumber(recordNurseName)) ? recordNurseName : '-';
+                    nurseField.readOnly = true;
+                    nurseField.style.backgroundColor = '#f3f4f6';
+                    nurseField.style.cursor = 'not-allowed';
+                }
             }
             
             updateTimeInputs();
@@ -3073,7 +3865,7 @@
             // Update submit button text
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.textContent = 'Update Record';
-            submitBtn.style.background = '#10b981';
+            submitBtn.style.background = '#374151';
         }
 
         function parseDate(dateValue) {
@@ -3115,6 +3907,82 @@
             updatePaginationButtons();
         }
 
+        function exportToExcel() {
+            var yearFilter = document.getElementById('yearFilter').value;
+            var monthFilter = document.getElementById('monthFilter').value;
+
+            var filtered = (allRecords || []).slice();
+
+            if (filtered.length === 0) {
+                alert(currentLang === 'en' ? 'No records to export. Please wait for records to load first.' : 'لا توجد سجلات للتصدير. يرجى الانتظار حتى يتم تحميل السجلات.');
+                return;
+            }
+
+            if (typeof XLSX === 'undefined') {
+                alert('Excel library not loaded yet. Please try again.');
+                return;
+            }
+
+            var mNames = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+            var periodLabel = 'All Records';
+            if (monthFilter !== 'all' && yearFilter !== 'all') periodLabel = mNames[parseInt(monthFilter)] + ' ' + yearFilter;
+            else if (monthFilter !== 'all') periodLabel = mNames[parseInt(monthFilter)];
+            else if (yearFilter !== 'all') periodLabel = yearFilter;
+
+            var headers = ['#','Driver Name','Vehicle No.','Staff No.','Destination','Patient Name','Departure Date','Departure Time','Return Date','Return Time','Status','Registered By'];
+
+            var aoa = [];
+            aoa.push(['Ambulance Activity Records - Hasik Health Center']);
+            aoa.push([periodLabel + ' (' + filtered.length + ' records)']);
+            aoa.push([]);
+            aoa.push(headers);
+
+            for (var i = 0; i < filtered.length; i++) {
+                var r = filtered[i];
+                var hasReturn = r['Return Date'] && r['Return Time'];
+                aoa.push([
+                    i + 1,
+                    r['Driver Name'] || '',
+                    r['Vehicle Number'] || '',
+                    r['Staff Number'] || '',
+                    r['Destination'] || '',
+                    r['Patient Name'] || r['patientName'] || '',
+                    DateTimeFormatter.formatDate(r['Departure Date']) || '',
+                    r['Departure Time'] || '',
+                    DateTimeFormatter.formatDate(r['Return Date']) || '',
+                    r['Return Time'] || '',
+                    hasReturn ? 'Completed' : 'Pending Return',
+                    (r['Nurse Name'] || r['nurseName'] || '').toString().trim()
+                ]);
+            }
+
+            var ws = XLSX.utils.aoa_to_sheet(aoa);
+
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } }
+            ];
+
+            ws['!cols'] = [
+                { wch: 5 },
+                { wch: 22 },
+                { wch: 12 },
+                { wch: 12 },
+                { wch: 20 },
+                { wch: 22 },
+                { wch: 14 },
+                { wch: 12 },
+                { wch: 14 },
+                { wch: 12 },
+                { wch: 16 },
+                { wch: 20 }
+            ];
+
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Ambulance Records');
+            XLSX.writeFile(wb, 'Ambulance_Records_' + periodLabel.replace(/\s+/g, '_') + '.xlsx');
+        }
+
         const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
         function generateReportContent() {
@@ -3141,7 +4009,7 @@
             let html = `
                 <div class="report-title">
                     <h1>Hasik Health Center</h1>
-                    <p>Ambulance Activity Log Report</p>
+                    <p>Ambulance Activity Record Report</p>
                     <p style="margin-top: 5px; font-size: 10pt;">${periodText} - Total: ${reportRecords.length} records</p>
                 </div>
                 
@@ -3155,7 +4023,7 @@
                             <th style="width: 15%;">Return</th>
                             <th style="width: 13%;">Destination</th>
                             <th style="width: 13%;">Patient Name</th>
-                            <th style="width: 10%;">Nurse</th>
+                            <th style="width: 10%;">Registered By</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3167,14 +4035,24 @@
                 const retDate = DateTimeFormatter.formatDateForDisplay(record['Return Date']) || '-';
                 const retTime = DateTimeFormatter.formatTimeForDisplay(record['Return Time']) || '';
                 let reportNurse = (record['Nurse Name'] || '').toString().trim() || '-';
-                if (reportNurse !== '-') {
-                    const nurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+                const reportNurseStaff = (record['Nurse Staff Number'] || '').toString().trim();
+                const reportExtCol = (record['Ext Support'] || '').toString().trim();
+                const isReportExtSupport = !!reportExtCol || reportNurse.startsWith('[External Support]') || reportNurseStaff === 'EXT_SUPPORT';
+                if (isReportExtSupport) {
+                    // Backend resolves admin name into Nurse Name for ext support records
+                    // Just use it directly — no client-side fallback needed
+                } else if (reportNurse !== '-') {
                     const loggedUser = window.loggedInUser || {};
                     const loggedStaff = (loggedUser.staffNumber || '').toString().trim();
-                    if (loggedStaff && (nurseStaff === loggedStaff || (looksLikeEmployeeNumber(reportNurse) && reportNurse === loggedStaff))) {
+                    if (loggedStaff && (reportNurseStaff === loggedStaff || (looksLikeEmployeeNumber(reportNurse) && reportNurse === loggedStaff))) {
                         const resolved = getValidDisplayName(loggedUser);
                         if (resolved) reportNurse = resolved;
                     }
+                }
+                // Build ext support badge for table row
+                let extBadge = '';
+                if (isReportExtSupport) {
+                    extBadge = '<br><small style="color:#7c3aed;font-weight:600;">' + (currentLang === 'en' ? 'External Support' : 'دعم خارجي') + '</small>';
                 }
                 html += `
                     <tr>
@@ -3185,7 +4063,7 @@
                         <td>${retDate}<br><small>${retTime}</small></td>
                         <td>${record['Destination'] || '-'}</td>
                         <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                        <td>${reportNurse}</td>
+                        <td>${reportNurse}${extBadge}</td>
                     </tr>
                 `;
             });
@@ -3193,7 +4071,57 @@
             html += `
                     </tbody>
                 </table>
-                
+            `;
+
+            // Show ext support details section for single-record view
+            if (reportRecords.length === 1) {
+                const rec = reportRecords[0];
+                const extVal = (rec['Ext Support'] || '').toString().trim();
+                const recNN = (rec['Nurse Name'] || '').toString().trim();
+                const recNS = (rec['Nurse Staff Number'] || '').toString().trim();
+                const isRecExtSupport = !!extVal || recNN.startsWith('[External Support]') || recNS === 'EXT_SUPPORT';
+                if (isRecExtSupport) {
+                    // Parse org & nurse from Ext Support column or from old [External Support] Nurse Name
+                    let orgName = '';
+                    let extNurseName = '';
+                    if (extVal && extVal !== 'External Support') {
+                        const dashIdx = extVal.indexOf(' - ');
+                        if (dashIdx !== -1) {
+                            orgName = extVal.substring(0, dashIdx).trim();
+                            extNurseName = extVal.substring(dashIdx + 3).trim();
+                        } else {
+                            orgName = extVal;
+                        }
+                    } else if (recNN.startsWith('[External Support]')) {
+                        const bracketEnd = recNN.indexOf(']');
+                        const content = bracketEnd >= 0 ? recNN.substring(bracketEnd + 1).trim() : '';
+                        if (content && content !== 'Unknown') {
+                            const dashIdx = content.indexOf(' - ');
+                            if (dashIdx !== -1) {
+                                orgName = content.substring(0, dashIdx).trim();
+                                extNurseName = content.substring(dashIdx + 3).trim();
+                            } else {
+                                orgName = content;
+                            }
+                        }
+                    }
+                    // Backend resolves admin name into Nurse Name for ext support records
+                    let adminDisplayName = recNN || '';
+                    html += `
+                        <div style="margin:15px 0;padding:12px 16px;background:#f5f3ff;border:2px solid #7c3aed;border-radius:10px;">
+                            <div style="font-weight:700;color:#7c3aed;margin-bottom:8px;font-size:14px;">
+                                ${currentLang === 'en' ? 'External Support Details' : 'تفاصيل الدعم الخارجي'}
+                            </div>
+                            ${adminDisplayName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Registered By: ' : 'المسجّل: ') + '</strong>' + adminDisplayName + '</div>' : ''}
+                            ${orgName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Supported Entity: ' : 'الجهة المدعومة: ') + '</strong>' + orgName + '</div>' : ''}
+                            ${extNurseName ? '<div style="font-size:13px;margin-bottom:4px;"><strong>' + (currentLang === 'en' ? 'Accompanying Nurse: ' : 'الممرض/ة المرافق/ة: ') + '</strong>' + extNurseName + '</div>' : ''}
+                            ${!orgName && !extNurseName ? '<div style="font-size:13px;color:#6b7280;">' + (currentLang === 'en' ? 'External support case' : 'حالة دعم خارجي') + '</div>' : ''}
+                        </div>
+                    `;
+                }
+            }
+
+            html += `
                 <div class="report-footer">
                     <p>Generated on ${DateTimeFormatter.formatDateForReport(now)} at ${DateTimeFormatter.formatTimeForReport(DateTimeFormatter.getCurrentTime())}</p>
                     ${totalPages > 1 ? `<p>Page ${currentReportPage} of ${totalPages}</p>` : ''}
@@ -3253,7 +4181,7 @@
             let html = `
                 <div class="report-title">
                     <h1>Hasik Health Center</h1>
-                    <p>Ambulance Activity Log Report</p>
+                    <p>Ambulance Activity Record Report</p>
                     <p style="margin-top:5px;font-size:10pt;">${periodText} — Total: ${reportRecords.length} trips</p>
                 </div>
                 <table class="report-table">
@@ -3266,7 +4194,7 @@
                             <th style="width:15%;">Return</th>
                             <th style="width:13%;">Destination</th>
                             <th style="width:14%;">Patient Name</th>
-                            <th style="width:10%;">Nurse</th>
+                            <th style="width:10%;">Registered By</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -3284,7 +4212,7 @@
                     <td>${retDate}<br><small>${retTime}</small></td>
                     <td>${record['Destination'] || '-'}</td>
                     <td>${(record['Patient Name'] || record['patientName'] || '').toString().trim() || '-'}</td>
-                    <td>${record['Nurse Name'] || '-'}</td>
+                    <td>${(record['Nurse Name'] || '').toString().trim() || '-'}</td>
                 </tr>`;
             });
             
@@ -3312,9 +4240,9 @@
             }
             
             updateYearlyTotalLabel();
-            loadRecords();
+            loadRecords(false);
         });
-        document.getElementById('monthFilter').addEventListener('change', loadRecords);
+        document.getElementById('monthFilter').addEventListener('change', () => loadRecords(false));
 
         // ============================================
         // INITIALIZE
@@ -3326,6 +4254,22 @@
             return s.length > 0 && /^\d+$/.test(s);
         }
 
+        // Helper: format External Support nurse name for display
+        // "[External Support] OrgName - NurseName" → "External Support: OrgName (NurseName)"
+        function formatExternalSupportDisplay(nurseName) {
+            if (!nurseName || !nurseName.startsWith('[External Support]')) return nurseName;
+            const content = nurseName.replace('[External Support]', '').trim();
+            if (!content || content === 'Unknown') return currentLang === 'en' ? 'External Support' : 'دعم خارجي';
+            const dashIdx = content.indexOf(' - ');
+            const prefix = currentLang === 'en' ? 'Ext. Support' : 'دعم خارجي';
+            if (dashIdx !== -1) {
+                const org = content.substring(0, dashIdx).trim();
+                const nurse = content.substring(dashIdx + 3).trim();
+                return nurse ? `${prefix}: ${org} (${nurse})` : `${prefix}: ${org}`;
+            }
+            return `${prefix}: ${content}`;
+        }
+
         // Helper: get a valid display name from session data, skipping employee numbers
         function getValidDisplayName(userData) {
             const englishName = (userData.nameEn || '').toString().trim();
@@ -3334,6 +4278,35 @@
             if (englishName && !looksLikeEmployeeNumber(englishName)) return englishName;
             if (arabicName && !looksLikeEmployeeNumber(arabicName)) return arabicName;
             return '';
+        }
+
+        // Check if the current user is an admin
+        function isAdminUser() {
+            try {
+                const s = JSON.parse(localStorage.getItem('userSession') || '{}');
+                return s.type === 'admin';
+            } catch(e) { return false; }
+        }
+
+        function toggleExternalSupport() {
+            const checked = document.getElementById('externalSupportCheck').checked;
+            const nurseNameGroup = document.getElementById('nurseNameGroup');
+            const externalOrgGroup = document.getElementById('externalOrgGroup');
+            const externalNurseGroup = document.getElementById('externalNurseGroup');
+            const nurseNameField = document.getElementById('nurseName');
+            if (checked) {
+                nurseNameGroup.style.display = 'none';
+                nurseNameField.required = false;
+                externalOrgGroup.style.display = 'block';
+                externalNurseGroup.style.display = 'block';
+            } else {
+                nurseNameGroup.style.display = 'block';
+                nurseNameField.required = true;
+                externalOrgGroup.style.display = 'none';
+                externalNurseGroup.style.display = 'none';
+                document.getElementById('externalOrgName').value = '';
+                document.getElementById('externalNurseName').value = '';
+            }
         }
 
         // Load user session and set nurse name automatically
@@ -3357,6 +4330,10 @@
                     nurseNameField.readOnly = false;
                     nurseNameField.style.backgroundColor = '';
                     nurseNameField.style.cursor = '';
+
+                    if (userData.type === 'admin') {
+                        document.getElementById('externalSupportGroup').style.display = 'block';
+                    }
                     
                     // Store for later use
                     window.loggedInUser = userData;
@@ -3410,11 +4387,16 @@
         // COMBINED DATA LOADING - ONE request for everything
         // Eliminates 3-4 separate round-trips that caused severe delays
         // ============================================
+        // Request counter prevents stale background callbacks from overwriting
+        // current month data when user switches months rapidly
+        var _nurseDataRequestId = 0;
+
         async function loadAllNurseData(options = {}) {
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const session = JSON.parse(localStorage.getItem('userSession') || '{}');
             const staffNum = session.staffNumber || '';
+            const thisRequestId = ++_nurseDataRequestId;
             
             let url = `${WEB_APP_URL}?action=getNurseData&year=${year}`;
             if (month !== 'all') url += `&month=${month}`;
@@ -3423,7 +4405,7 @@
             const cacheKey = 'cache_nurse_data_' + year + '_' + month;
             
             // Reuse early fetch if available (fired in <head> before CSS/JS loaded)
-            if (window.__earlyNurseFetch && month === 'all') {
+            if (window.__earlyNurseFetch && String(month) === String(window.__earlyNurseMonth || '')) {
                 DataCache._inflight[url] = window.__earlyNurseFetch;
                 window.__earlyNurseFetch = null;
             }
@@ -3433,8 +4415,26 @@
                 (data, meta) => {
                     if (!data) return;
                     
+                    // STALE GUARD: if user already switched to another month,
+                    // skip UI updates (cache is still saved by fetchWithCache)
+                    if (thisRequestId !== _nurseDataRequestId) return;
+                    
+                    // Skip cache callback — loadRecords already displayed cached data
+                    if (meta && meta.fromCache && _nurseDisplayedHash) return;
+                    
+                    // UNCHANGED GUARD: if background revalidation found no changes,
+                    // skip expensive DOM re-render (data already displayed from cache)
+                    if (meta && !meta.fromCache && meta.unchanged) {
+                        requestAnimationFrame(() => {
+                            const overlay = document.getElementById('recordsLoadingOverlay');
+                            if (overlay) overlay.style.display = 'none';
+                            const sec = document.querySelector('.records-section');
+                            if (sec) sec.classList.remove('loading');
+                        });
+                        return;
+                    }
+                    
                     // 1. Refresh user session data FIRST (admin may have changed nurse name)
-                    //    Must happen before displaying records so name resolution uses fresh data
                     if (data.userData) {
                         const serverNameAr = (data.userData.nameAr || '').toString().trim();
                         const serverNameEn = (data.userData.nameEn || '').toString().trim();
@@ -3443,14 +4443,12 @@
                             nameEn: serverNameEn || session.nameEn,
                             type: data.userData.type || session.type
                         });
-                        // Clean up: if nameEn/nameAr still looks like employee number, clear it
                         if (looksLikeEmployeeNumber(updated.nameEn)) updated.nameEn = serverNameEn;
                         if (looksLikeEmployeeNumber(updated.nameAr)) updated.nameAr = serverNameAr;
                         localStorage.setItem('userSession', JSON.stringify(updated));
                         window.loggedInUser = updated;
-                        // Re-populate nurse name field if not editing someone else's trip
                         const nurseField = document.getElementById('nurseName');
-                        if (nurseField && !nurseField.readOnly) {
+                        if (nurseField && !nurseField.readOnly && !editingRecordId) {
                             const freshName = getValidDisplayName(updated);
                             if (freshName) nurseField.value = freshName;
                         }
@@ -3458,9 +4456,42 @@
                     
                     // 2. Apply records (after session refresh so name resolution is correct)
                     if (data.records) {
-                        allRecords = applyPendingEdits(data.records);
-                        nurseRecordsPage = 1;
-                        displayRecords(allRecords);
+                        if (typeof SyncManager !== 'undefined') {
+                            SyncManager.updateMaxIdFromRecords(data.records);
+                            if (data.trips) SyncManager.updateMaxIdFromRecords(data.trips);
+                        }
+                        let mergedRecords = applyPendingEdits(data.records);
+                        
+                        if (_pendingOptimisticRecord && _nurseSubmitAt) {
+                            const opt = _pendingOptimisticRecord;
+                            const optId = String(opt.ID || '');
+                            const isPendingPrefix = optId.startsWith('pending_');
+                            const serverHasIt = mergedRecords.some(r => {
+                                if (!isPendingPrefix && optId && String(r.ID || '') === optId) return true;
+                                return (r['Departure Date'] || '') === (opt['Departure Date'] || '') &&
+                                    (r['Departure Time'] || '') === (opt['Departure Time'] || '') &&
+                                    (r['Return Date'] || '') === (opt['Return Date'] || '') &&
+                                    (r['Return Time'] || '') === (opt['Return Time'] || '') &&
+                                    (r['Patient Name'] || '') === (opt['Patient Name'] || '');
+                            });
+                            if (serverHasIt || (Date.now() - _nurseSubmitAt > 15000)) {
+                                _pendingOptimisticRecord = null;
+                                _nurseSubmitAt = 0;
+                            } else {
+                                mergedRecords = mergedRecords.filter(r => String(r.ID || '') !== optId);
+                                mergedRecords.unshift(opt);
+                            }
+                        }
+                        
+                        allRecords = mergedRecords;
+                        
+                        // Only re-render if data actually changed from what's displayed
+                        var freshHash = DataCache.hash(allRecords);
+                        if (freshHash !== _nurseDisplayedHash) {
+                            nurseRecordsPage = 1;
+                            _nurseDisplayedHash = freshHash;
+                            displayRecords(allRecords);
+                        }
                         
                         if (month === 'all') {
                             allYearRecords = allRecords;
@@ -3476,16 +4507,36 @@
                     // 4. Apply pending trips
                     if (data.trips) {
                         const nurseTrips = data.trips.filter(t => t.status !== 'submitted');
+                        if (_recentlySubmittedTripIds.size > 0) {
+                            const serverTripIds = new Set(data.trips.map(t => t.tripId));
+                            _recentlySubmittedTripIds.forEach(id => {
+                                if (!serverTripIds.has(id) || data.trips.find(t => t.tripId === id && t.status === 'submitted')) {
+                                    _recentlySubmittedTripIds.delete(id);
+                                }
+                            });
+                        }
                         cachedPendingTrips = nurseTrips;
                         displayPendingTrips(nurseTrips);
                     }
                     
                     // 5. Apply vehicles
                     if (data.vehicles && data.vehicles.length > 0) {
-                        VEHICLES_DATA = data.vehicles.map(v => ({
+                        const newVehicles = data.vehicles.map(v => ({
+                            id: v.id,
                             number: v.vehicleNumber,
                             isDefault: v.isDefault || false
                         }));
+                        // Guard: if server/stale-cache returns no default but we already have one
+                        // locally (from admin's last update), preserve it to avoid resetting the dropdown
+                        const serverHasDefault = newVehicles.some(v => v.isDefault);
+                        const localHasDefault = VEHICLES_DATA.some(v => v.isDefault);
+                        if (!serverHasDefault && localHasDefault) {
+                            newVehicles.forEach(v => {
+                                const local = VEHICLES_DATA.find(l => l.number === v.number);
+                                if (local && local.isDefault) v.isDefault = true;
+                            });
+                        }
+                        VEHICLES_DATA = newVehicles;
                         localStorage.setItem('ambulance_vehicles', JSON.stringify(VEHICLES_DATA));
                         populateVehicleDropdown();
                         const defaultVehicle = VEHICLES_DATA.find(v => v.isDefault);
@@ -3494,19 +4545,175 @@
                         }
                     }
                     
-                    // Hide loading spinners
-                    const recordsSection = document.querySelector('.records-section');
-                    const loadingSpinner = document.getElementById('recordsLoadingSpinner');
-                    if (recordsSection) recordsSection.classList.remove('loading');
-                    if (loadingSpinner) loadingSpinner.classList.remove('active');
+                    // Hide loading state after DOM has rendered the new records
+                    requestAnimationFrame(() => {
+                        const overlay = document.getElementById('recordsLoadingOverlay');
+                        if (overlay) overlay.style.display = 'none';
+                        const sec = document.querySelector('.records-section');
+                        if (sec) sec.classList.remove('loading');
+                    });
                 },
                 (result) => result.success ? result : null
             );
         }
         
+        // Show pending trips — prioritise the FAST lightweight fetch over the heavy one.
+        (async function showPendingTripsFromBestSource() {
+            try {
+                // Step 1: Show cached data immediately (zero-delay) so the section is never empty
+                var shownFromCache = false;
+                var localTrips = localStorage.getItem('pending_trips_for_nurse');
+                if (localTrips) {
+                    try {
+                        var trips = JSON.parse(localTrips);
+                        if (Array.isArray(trips)) { displayPendingTrips(trips); shownFromCache = true; }
+                    } catch(e) {}
+                }
+                if (!shownFromCache) {
+                    var year = new Date().getFullYear();
+                    var month = new Date().getMonth() + 1;
+                    var cacheKey = 'cache_nurse_data_' + year + '_' + month;
+                    var cached = null;
+                    try { cached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
+                    if (cached && cached.data && cached.data.trips) {
+                        var ct = cached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        displayPendingTrips(ct);
+                        shownFromCache = true;
+                    }
+                }
+
+                // Step 2: Wait for the FAST pending-trips fetch (1-2s) to replace stale cache
+                if (window.__earlyNursePendingTrips) {
+                    var freshTrips = await Promise.race([
+                        window.__earlyNursePendingTrips,
+                        new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
+                    ]);
+                    if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
+                        displayPendingTrips(freshTrips);
+                        return;
+                    }
+                }
+
+                // Step 3: If fast fetch timed out, try the heavy fetch briefly
+                if (window.__earlyNurseFetch) {
+                    var result = await Promise.race([
+                        window.__earlyNurseFetch,
+                        new Promise(function(r) { setTimeout(function() { r(null); }, 500); })
+                    ]);
+                    if (result && result.trips) {
+                        var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        displayPendingTrips(nt);
+                        return;
+                    }
+                }
+
+                // If we already showed cache, that's fine — background fetches will update later
+                if (shownFromCache) return;
+
+                // No data at all — show loading
+                var container = document.getElementById('pendingTripsContainer');
+                if (container) {
+                    container.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;">' +
+                        '<div style="display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#6b7280;border-radius:50%;animation:spin 0.8s linear infinite;margin-left:8px;vertical-align:middle;"></div> ' +
+                        '<span>' + (currentLang === 'en' ? 'Loading trips...' : 'جاري تحميل الرحلات...') + '</span></div>';
+                }
+            } catch(e) {}
+        })();
+
+        // Invalidate data cache on code update to ensure fresh records with Ext Support column
+        (function() {
+            var codeVer = 'v36';
+            if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
+                localStorage.setItem('_nurseCodeVer', codeVer);
+                try { DataCache.invalidateAll(); } catch(e) {}
+            }
+        })();
+
         // Initial load: session from cache first (instant), then combined server fetch
         loadUserSession();
         loadAllNurseData();
+
+        // Background pre-warming: aggressively prefetch ALL months right after page load
+        // "all" is fetched first (most useful), then adjacent months, then the rest
+        // Uses parallel batches of 2 for speed, with short delays to avoid saturation
+        setTimeout(function() {
+            try {
+                const session = JSON.parse(localStorage.getItem('userSession') || '{}');
+                const staffNum = session.staffNumber || '';
+                const year = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
+                var prevYear = year - 1;
+
+                var monthsToWarm = [];
+                monthsToWarm.push({ y: year, m: 'all' });
+                if (currentMonth > 1) monthsToWarm.push({ y: year, m: currentMonth - 1 });
+                if (currentMonth < 12) monthsToWarm.push({ y: year, m: currentMonth + 1 });
+                for (var m = currentMonth - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = currentMonth + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
+                monthsToWarm.push({ y: prevYear, m: 'all' });
+
+                function fetchAndCache(item) {
+                    var key = 'cache_nurse_data_' + item.y + '_' + item.m;
+                    var existing = DataCache.get(key, DataCache.EXPIRY.RECORDS);
+                    if (existing && existing.data && !existing.isExpired) return Promise.resolve();
+                    var warmUrl = WEB_APP_URL + '?action=getNurseData&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
+                    if (staffNum) warmUrl += '&staffNumber=' + encodeURIComponent(staffNum);
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success) DataCache.set(key, result);
+                    }).catch(function() {});
+                }
+
+                var warmIdx = 0;
+                function warmBatch() {
+                    if (warmIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && warmIdx < monthsToWarm.length) {
+                        batch.push(fetchAndCache(monthsToWarm[warmIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmBatch, 400);
+                    });
+                }
+                warmBatch();
+            } catch(e) {}
+        }, 1000);
+
+        // Initialize SyncManager for instant local saves + background sync
+        SyncManager.init(WEB_APP_URL).then(() => {
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'submitCase' || detail.action === 'updateRecord') {
+                    console.log('✅ SyncManager: Server confirmed, refreshing records...');
+                    // Only invalidate current month + "all" — preserve other months' cache
+                    var sy = document.getElementById('yearFilter').value;
+                    var sm = document.getElementById('monthFilter').value;
+                    DataCache.invalidate(
+                        'cache_nurse_data_' + sy + '_' + sm,
+                        'cache_nurse_data_' + sy + '_all'
+                    );
+                    loadAllNurseData();
+                }
+            });
+            SyncManager.on('failed', (detail) => {
+                console.error('❌ SyncManager: Sync failed for', detail.localId, detail.error);
+            });
+            // Cleanup old synced entries
+            SyncManager.cleanup();
+        }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
+
+        // Cross-tab sync: driver writes pending_trips_for_nurse to localStorage
+        // If on same device, nurse sees new trips instantly without waiting for server poll
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'pending_trips_for_nurse' && e.newValue) {
+                try {
+                    var trips = JSON.parse(e.newValue);
+                    if (Array.isArray(trips) && trips.length > 0) {
+                        smartRefreshNurseData();
+                    }
+                } catch(err) {}
+            }
+        });
 
         // Listen for background session refresh (admin changed nurse name on server)
         window.addEventListener('sessionRefreshed', function(e) {
@@ -3526,7 +4733,6 @@
         let isRefreshing = false;
         
         async function smartRefreshNurseData() {
-            // Skip if page is hidden (saves bandwidth) or already refreshing
             if (document.hidden || isRefreshing) return;
             isRefreshing = true;
             try {
@@ -3540,8 +4746,23 @@
             }
         }
         
-        // Refresh every 15 seconds (combined endpoint returns everything in 1 request)
-        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 15000);
+        window.smartRefreshInterval = setInterval(smartRefreshNurseData, 10000);
+
+        // Instant refresh when nurse returns to the tab
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                // Fast: refresh pending trips immediately via lightweight endpoint
+                fetch(WEB_APP_URL + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                        localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        displayPendingTrips(nt);
+                    }
+                }).catch(function() {});
+                // Heavy: full data refresh in background
+                smartRefreshNurseData();
+            }
+        });
 
         // Track if logout is in progress to prevent spinner issues
         let isLoggingOut = false;
@@ -3697,11 +4918,13 @@
             document.getElementById(id).addEventListener('change', updateTimeInputs);
         });
 
-        // Register Service Worker for PWA with auto-update
+        // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
+                    // Force immediate update check on load (catches stale PWAs)
+                    reg.update().catch(() => {});
                     setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
@@ -3715,10 +4938,15 @@
                     });
                 })
                 .catch(err => console.error('[App] SW registration failed:', err));
+            // Reload when a new SW takes control (most reliable update signal)
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }

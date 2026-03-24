@@ -10,27 +10,24 @@
     <link rel="dns-prefetch" href="https://script.google.com">
     
     <!-- Performance Optimization Scripts -->
-    <script src="request-optimizer.js"></script>
-    <script src="ui-optimizer.js"></script>
-    <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
     
     <!-- Responsive UI Framework - إطار واجهة متجاوبة -->
     <link rel="stylesheet" href="responsive-ui.css">
     
     <!-- HTML Meta Tags -->
-    <meta name="description" content="Ambulance Reg System - Ambulance Activity Log | نظام سجل الإسعاف - سجل رحلات الإسعاف | Ministry of Health - Hasik Health Center | وزارة الصحة - مركز حاسك الصحي">
+    <meta name="description" content="Ambulance Reg System - Ambulance Activity Record | نظام سجل الإسعاف - سجل رحلات الإسعاف | Ministry of Health - Hasik Health Center | وزارة الصحة - مركز حاسك الصحي">
     <meta name="theme-color" content="#1e40af">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Ambulance Log | سجل الإسعاف">
+    <meta name="apple-mobile-web-app-title" content="Ambulance Record | سجل الإسعاف">
     
     <!-- Facebook / Open Graph Meta Tags -->
     <meta property="og:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
-    <meta property="og:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta property="og:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Record System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
     <meta property="og:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -44,7 +41,7 @@
     <meta property="twitter:domain" content="officerhasikhc.github.io">
     <meta property="twitter:url" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/login.html">
     <meta name="twitter:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
-    <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Log System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
+    <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Record System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
     <meta name="twitter:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
     <link rel="manifest" href="manifest-ar.json?v=2" id="app-manifest">
     
@@ -68,31 +65,25 @@
     <style>
         :root {
             --primary-blue: #1e40af;
-            --light-blue: #3b82f6;
+            --light-blue:   #2563eb;
             --lighter-blue: #eff6ff;
-            --dark-blue: #1e3a8a;
-            --bg-blue: #dbeafe;
-            --white: #ffffff;
-            --text-primary: #1f2937;
+            --dark-blue:    #0f2748;
+            --accent-red:   #c0392b;
+            --white:        #ffffff;
+            --text-primary:   #1a2333;
             --text-secondary: #6b7280;
-            --border-color: #d1d5db;
+            --border-color:   #d1d5db;
             --success: #10b981;
             --warning: #f59e0b;
-            --error: #ef4444;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --error:   #ef4444;
+            --shadow-xl: 0 20px 50px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.1);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
-            background: linear-gradient(135deg, var(--dark-blue) 0%, var(--primary-blue) 50%, var(--light-blue) 100%);
+            background: linear-gradient(160deg, #0f2748 0%, #1a3d7c 45%, #1e55b5 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -105,373 +96,329 @@
             font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
+        /* ── Card ─────────────────────────────────────────── */
         .login-container {
             background: var(--white);
-            border-radius: 20px;
-            padding: 40px;
+            border-radius: 16px;
+            padding: 0;
             width: 100%;
             max-width: 420px;
             box-shadow: var(--shadow-xl);
             position: relative;
+            overflow: hidden;
         }
 
+        /* Omani accent stripe at top */
+        .login-container::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, #c0392b 30%, #ffffff 50%, #1a7a3c 70%);
+        }
+
+        .login-inner {
+            padding: 36px 40px 32px;
+        }
+
+        /* ── Header ───────────────────────────────────────── */
         .login-header {
             text-align: center;
-            margin-bottom: 32px;
-            margin-top: 20px;
+            margin-bottom: 28px;
+            margin-top: 14px;
         }
 
         .login-logo {
-            width: 80px;
-            height: 80px;
+            width: 76px;
+            height: 76px;
             object-fit: contain;
-            margin: 0 auto 16px auto;
+            margin: 0 auto 14px auto;
             display: block;
         }
 
-        .login-title {
-            color: var(--primary-blue);
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .login-subtitle {
-            color: var(--text-secondary);
+        .login-org-name {
+            color: #1a2333;
             font-size: 14px;
-            line-height: 1.5;
+            font-weight: 700;
+            line-height: 1.8;
+            margin-bottom: 10px;
         }
-        
-        /* Mobile: Larger elements - scaled up ~25% for better readability on phones */
 
+        .login-divider {
+            width: 48px;
+            height: 2px;
+            background: var(--primary-blue);
+            margin: 10px auto;
+            border-radius: 2px;
+            opacity: 0.4;
+        }
+
+        .login-system-name {
+            color: #1e3a8a;
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 6px 18px;
+            margin-top: 10px;
+            background: #eef2ff;
+            border: 1.5px solid #c7d2fe;
+            border-radius: 6px;
+            display: inline-block;
+            letter-spacing: 0.3px;
+        }
+
+        /* ── Language Switch ──────────────────────────────── */
         .lang-switch {
             position: absolute;
-            top: 16px;
-            right: 16px;
+            top: 14px;
+            right: 14px;
             display: flex;
-            gap: 4px;
-            background: var(--lighter-blue);
-            padding: 4px;
-            border-radius: 10px;
+            gap: 3px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 3px;
+            border-radius: 8px;
             z-index: 10;
         }
 
-        [dir="ltr"] .lang-switch {
-            right: auto;
-            left: 16px;
-        }
+        [dir="ltr"] .lang-switch { right: auto; left: 14px; }
 
         .lang-btn {
-            padding: 6px 12px;
+            padding: 5px 11px;
             border: none;
             background: transparent;
             color: var(--text-secondary);
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.2s;
-            font-size: 12px;
+            border-radius: 6px;
+            transition: all 0.18s;
+            font-size: 11px;
             font-family: inherit;
-            min-width: 36px;
+            min-width: 34px;
         }
 
         .lang-btn.active {
             background: var(--primary-blue);
             color: var(--white);
-            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+            box-shadow: 0 1px 4px rgba(30,64,175,0.3);
         }
 
-        .lang-btn:hover:not(.active) {
-            background: rgba(30, 64, 175, 0.1);
-        }
+        .lang-btn:hover:not(.active) { background: #e2e8f0; }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        /* ── Form ─────────────────────────────────────────── */
+        .form-group { margin-bottom: 18px; }
 
         .form-label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 14px;
+            margin-bottom: 7px;
+            font-weight: 700;
+            color: #374151;
+            font-size: 13px;
         }
 
-        .input-with-icon {
-            position: relative;
-        }
+        .input-with-icon { position: relative; }
 
         .input-icon {
             position: absolute;
             top: 50%;
-            right: 16px;
+            right: 14px;
             transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             color: #9ca3af;
             pointer-events: none;
             transition: color 0.2s;
         }
 
-        [dir="ltr"] .input-icon {
-            right: auto;
-            left: 16px;
-        }
+        [dir="ltr"] .input-icon { right: auto; left: 14px; }
 
-        .input-with-icon .form-input {
-            padding-right: 48px;
-        }
+        .input-with-icon .form-input { padding-right: 44px; }
 
-        [dir="ltr"] .input-with-icon .form-input {
-            padding-right: 16px;
-            padding-left: 48px;
-        }
+        [dir="ltr"] .input-with-icon .form-input { padding-right: 14px; padding-left: 44px; }
 
-        .input-with-icon:focus-within .input-icon {
-            color: var(--primary-blue);
-        }
+        .input-with-icon:focus-within .input-icon { color: var(--primary-blue); }
 
         .form-input {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            font-size: 16px;
+            padding: 13px 14px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 9px;
+            font-size: 15px;
             font-family: inherit;
             transition: all 0.2s;
-            background: var(--white);
+            background: #fafafa;
+            color: var(--text-primary);
         }
 
         .form-input:focus {
             outline: none;
             border-color: var(--primary-blue);
-            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+            background: var(--white);
+            box-shadow: 0 0 0 3px rgba(30,64,175,0.1);
         }
 
-        .form-input::placeholder {
-            color: var(--text-secondary);
-        }
+        .form-input::placeholder { color: #b0b7c3; }
 
-        .login-btn {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--light-blue) 100%);
-            color: var(--white);
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: inherit;
-        }
-
-        .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .login-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .error-message {
-            background: #fee2e2;
-            color: #dc2626;
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .footer-text {
-            text-align: center;
-            margin-top: 24px;
-            color: var(--text-secondary);
-            font-size: 12px;
-        }
-
-        .footer-text a {
-            color: var(--primary-blue);
-            text-decoration: none;
-        }
-
-        .footer-text a:hover {
-            text-decoration: underline;
-        }
-
+        /* ── Remember Me ──────────────────────────────────── */
         .remember-me {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
 
         .remember-me input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             accent-color: var(--primary-blue);
             cursor: pointer;
         }
 
         .remember-me label {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-secondary);
             cursor: pointer;
         }
 
-        .install-btn {
-            display: inline-flex;
-            width: auto;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        /* ── Login Button ─────────────────────────────────── */
+        .login-btn {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #1e40af, #2563eb);
             color: var(--white);
             border: none;
-            border-radius: 25px;
+            border-radius: 9px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.22s ease;
+            font-family: inherit;
+            letter-spacing: 0.3px;
+            box-shadow: 0 3px 12px rgba(30,64,175,0.3);
+        }
+
+        .login-btn:hover {
+            background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+            transform: translateY(-1px);
+            box-shadow: 0 5px 16px rgba(30,64,175,0.4);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(30,64,175,0.25);
+        }
+
+        .login-btn:disabled {
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.75;
+            box-shadow: none;
+        }
+
+        /* ── Error ────────────────────────────────────────── */
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
             font-size: 13px;
-            font-weight: 600;
+            display: none;
+        }
+
+        .error-message.show { display: block; }
+
+        /* ── Install Button ───────────────────────────────── */
+        .install-container {
+            text-align: center;
+            margin-top: 18px;
+            display: none; /* hidden until PWA is installable */
+        }
+
+        .install-container.visible { display: block; }
+
+        .install-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            background: #f0f4ff;
+            color: #3730a3;
+            border: 1.5px solid #c7d2fe;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
             font-family: inherit;
-            margin-top: 16px;
-            gap: 6px;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
 
         .install-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            background: #e0e7ff;
+            border-color: #a5b4fc;
+            transform: translateY(-1px);
         }
 
-        .install-btn .device-icon {
-            font-size: 16px;
-        }
+        .install-btn .device-icon { font-size: 14px; }
 
-        .install-container {
+        /* ── Footer ───────────────────────────────────────── */
+        .footer-text {
             text-align: center;
             margin-top: 20px;
+            color: #9ca3af;
+            font-size: 11px;
         }
 
+        /* ── Spinner ──────────────────────────────────────── */
         .loading-spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.35);
             border-radius: 50%;
             border-top-color: white;
             animation: spin 0.8s linear infinite;
             margin-left: 8px;
+            vertical-align: middle;
         }
 
-        [dir="ltr"] .loading-spinner {
-            margin-left: 0;
-            margin-right: 8px;
-        }
+        [dir="ltr"] .loading-spinner { margin-left: 0; margin-right: 8px; }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-
+        /* ── Mobile ───────────────────────────────────────── */
         @media (max-width: 480px) {
-            body {
-                padding: 12px;
-            }
+            body { padding: 10px; align-items: flex-start; padding-top: 30px; }
 
-            .login-container {
-                padding: 32px 28px;
-                padding-top: 44px;
-                max-width: 100%;
-                border-radius: 24px;
-            }
+            .login-container { border-radius: 20px; max-width: 100%; }
 
-            .login-logo {
-                width: 110px;
-                height: 110px;
-                margin-bottom: 20px;
-            }
+            .login-inner { padding: 28px 24px 28px; }
 
-            .login-header {
-                margin-bottom: 36px;
-                margin-top: 16px;
-            }
+            .login-logo { width: 96px; height: 96px; margin-bottom: 16px; }
 
-            .login-title {
-                font-size: 26px;
-                margin-bottom: 12px;
-            }
+            .login-header { margin-bottom: 30px; margin-top: 12px; }
 
-            .login-subtitle {
-                font-size: 16px;
-                line-height: 1.6;
-            }
+            .login-org-name { font-size: 15px; }
 
-            .form-label {
-                font-size: 16px;
-                margin-bottom: 10px;
-            }
+            .login-system-name { font-size: 13.5px; }
 
-            .form-input {
-                padding: 16px 18px;
-                font-size: 18px;
-                border-radius: 12px;
-            }
+            .form-label { font-size: 14px; }
 
-            .form-group {
-                margin-bottom: 24px;
-            }
+            .form-input { padding: 14px 16px; font-size: 16px; border-radius: 10px; }
 
-            .remember-me {
-                margin-bottom: 24px;
-            }
+            .form-group { margin-bottom: 20px; }
 
-            .remember-me input[type="checkbox"] {
-                width: 22px;
-                height: 22px;
-            }
+            .remember-me { margin-bottom: 20px; }
+            .remember-me input[type="checkbox"] { width: 18px; height: 18px; }
+            .remember-me label { font-size: 14px; }
 
-            .remember-me label {
-                font-size: 16px;
-            }
+            .login-btn { padding: 15px; font-size: 17px; border-radius: 11px; }
 
-            .login-btn {
-                padding: 16px;
-                font-size: 18px;
-                border-radius: 12px;
-            }
+            .footer-text { font-size: 12px; margin-top: 24px; }
 
-            .install-btn {
-                padding: 12px 24px;
-                font-size: 15px;
-            }
-
-            .footer-text {
-                font-size: 13px;
-                margin-top: 28px;
-            }
-
-            .lang-switch {
-                top: 14px;
-                right: 14px;
-            }
-
-            [dir="ltr"] .lang-switch {
-                left: 14px;
-            }
-
-            .lang-btn {
-                padding: 8px 14px;
-                font-size: 13px;
-            }
+            .lang-switch { top: 12px; right: 12px; }
+            [dir="ltr"] .lang-switch { left: 12px; }
+            .lang-btn { padding: 6px 12px; font-size: 12px; }
         }
     </style>
 </head>
@@ -482,47 +429,52 @@
             <button class="lang-btn" onclick="setLanguage('en')">EN</button>
         </div>
 
-        <div class="login-header">
-            <img src="moh-logo.png" alt="Logo" class="login-logo">
-            <h1 class="login-title" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Log System">نظام سجل نشاط الإسعاف</h1>
-            <p class="login-subtitle" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
-        </div>
+        <div class="login-inner">
 
-        <div class="error-message" id="errorMessage"></div>
+            <div class="login-header">
+                <img src="moh-logo.png" alt="Logo" class="login-logo">
+                <p class="login-org-name" data-ar="المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي" data-en="Directorate General of Health Services - Dhofar<br>Hasik Health Center">المديرية العامة للخدمات الصحية بمحافظة ظفار<br>مركز حاسك الصحي</p>
+                <div class="login-divider"></div>
+                <div class="login-system-name" data-ar="نظام سجل نشاط الإسعاف" data-en="Ambulance Activity Record System">نظام سجل نشاط الإسعاف</div>
+            </div>
 
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="form-group">
-                <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number or Civil ID">الرقم الوظيفي أو المدني</label>
-                <div class="input-with-icon">
-                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                    <input type="text" class="form-input" id="staffNumber" 
-                           placeholder="أدخل الرقم الوظيفي أو المدني" 
-                           data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
-                           data-placeholder-en="Enter Staff Number or Civil ID"
-                           required autocomplete="off">
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label" data-ar="الرقم الوظيفي أو المدني" data-en="Staff Number">الرقم الوظيفي أو المدني</label>
+                    <div class="input-with-icon">
+                        <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                        </svg>
+                        <input type="text" class="form-input" id="staffNumber"
+                               placeholder="أدخل الرقم الوظيفي أو المدني"
+                               data-placeholder-ar="أدخل الرقم الوظيفي أو المدني"
+                               data-placeholder-en="Enter Staff Number"
+                               required autocomplete="off">
+                    </div>
                 </div>
+
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberMe" checked>
+                    <label for="rememberMe" data-ar="تذكرني" data-en="Remember me">تذكرني</label>
+                </div>
+
+                <button type="submit" class="login-btn" id="loginBtn">
+                    <span data-ar="تسجيل الدخول" data-en="Login">تسجيل الدخول</span>
+                </button>
+            </form>
+
+            <div class="install-container" id="installContainer">
+                <button class="install-btn" id="installBtn" onclick="installApp()">
+                    <span class="device-icon" id="deviceIcon">📲</span>
+                    <span data-ar="تثبيت التطبيق" data-en="Install App" id="installText">تثبيت التطبيق</span>
+                </button>
             </div>
 
-            <div class="remember-me">
-                <input type="checkbox" id="rememberMe" checked>
-                <label for="rememberMe" data-ar="تذكرني" data-en="Remember me">تذكرني</label>
-            </div>
+            <p class="footer-text" data-ar="© 2026 مركز حاسك الصحي — جميع الحقوق محفوظة" data-en="© 2026 Hasik Health Center — All Rights Reserved">© 2026 مركز حاسك الصحي — جميع الحقوق محفوظة</p>
 
-            <button type="submit" class="login-btn" id="loginBtn">
-                <span data-ar="تسجيل الدخول" data-en="Login">تسجيل الدخول</span>
-            </button>
-        </form>
-
-        <div class="install-container">
-            <button class="install-btn" id="installBtn" onclick="installApp()">
-                <span class="device-icon" id="deviceIcon">📱</span>
-                <span data-ar="تثبيت التطبيق" data-en="Install App" id="installText">تثبيت التطبيق</span>
-            </button>
-        </div>
-
-        <p class="footer-text" data-ar="© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة" data-en="© 2026 Hasik Health Center - All Rights Reserved">© 2026 مركز حاسك الصحي - جميع الحقوق محفوظة</p>
+        </div><!-- /.login-inner -->
     </div>
 
     <script>
@@ -618,7 +570,193 @@
             setLanguage(currentLang);
             loadSavedCredentials();
             checkInstallPrompt();
+            prefetchOnPageLoad();
+
+            // Speculative prefetch: when user types a known staff number, start loading data early
+            var specPrefetchDone = {};
+            var specDebounce = null;
+            document.getElementById('staffNumber').addEventListener('input', function() {
+                var val = this.value.trim();
+                if (val.length < 3 || specPrefetchDone[val]) return;
+                clearTimeout(specDebounce);
+                specDebounce = setTimeout(function() {
+                    var user = USERS[val] || findUserInLocalStorage(val);
+                    if (user && !specPrefetchDone[val]) {
+                        specPrefetchDone[val] = true;
+                        prefetchForUserType(user.type, val);
+                        // Prefetch target page HTML
+                        try {
+                            var link = document.createElement('link');
+                            link.rel = 'prefetch';
+                            link.href = user.redirect;
+                            document.head.appendChild(link);
+                        } catch(e) {}
+                    }
+                }, 300);
+            });
         });
+
+        /**
+         * SMART PRE-WARMING: Start fetching data BEFORE user clicks login
+         * If user has a saved session or saved staff number, we know their type
+         * and can prefetch their full page data immediately on login page load.
+         */
+        function prefetchOnPageLoad() {
+            try {
+                // Check existing session first (user refreshed/returned)
+                var session = null;
+                try { session = JSON.parse(localStorage.getItem('userSession') || 'null'); } catch(e) {}
+                
+                if (session && session.type) {
+                    prefetchForUserType(session.type, session.staffNumber || '');
+                    return;
+                }
+                
+                // Check saved staff number (Remember Me) — look up user type
+                var savedNum = localStorage.getItem('savedStaffNumber');
+                if (savedNum) {
+                    var user = USERS[savedNum] || findUserInLocalStorage(savedNum);
+                    if (user) {
+                        prefetchForUserType(user.type, savedNum);
+                    }
+                }
+            } catch(e) { console.warn('Prefetch on load error (non-fatal):', e); }
+        }
+
+        /**
+         * Prefetch full page data based on user type.
+         * Stores in DataCache localStorage so target page loads instantly.
+         * Returns a Promise that resolves when the FIRST (highest priority) fetch completes.
+         */
+        function prefetchForUserType(userType, staffNumber) {
+            var url = WEB_APP_URL;
+            var year = new Date().getFullYear();
+            var month = new Date().getMonth() + 1;
+            
+            if (userType === 'nurse') {
+                // Fast fetch: lightweight pending trips ONLY (1-2s) — returned as firstFetch so login waits for it
+                var firstFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try {
+                            var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nt));
+                        } catch(e) {}
+                    }
+                }).catch(function() {});
+
+                // Heavy fetch: full nurse data (records + trips + stats) — runs in background
+                var nurseUrl = url + '?action=getNurseData&year=' + year + '&month=' + month;
+                if (staffNumber) nurseUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
+                fetch(nurseUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && typeof DataCache !== 'undefined') {
+                        DataCache.set('cache_nurse_data_' + year + '_' + month, result);
+                    }
+                    if (result && result.trips) {
+                        try {
+                            var nurseTrips = result.trips.filter(function(t) { return t.status !== 'submitted'; });
+                            localStorage.setItem('pending_trips_for_nurse', JSON.stringify(nurseTrips));
+                        } catch(e) {}
+                    }
+                }).catch(function() {});
+
+                // Phase 2: "all" + adjacent months + rest (parallel batches, faster intervals)
+                var monthsToWarm = [];
+                monthsToWarm.push({ y: year, m: 'all' });
+                if (month > 1) monthsToWarm.push({ y: year, m: month - 1 });
+                if (month < 12) monthsToWarm.push({ y: year, m: month + 1 });
+                for (var m = month - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
+                for (var m2 = month + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
+                var prevYear = year - 1;
+                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
+
+                function fetchNurseMonth(item) {
+                    var key = 'cache_nurse_data_' + item.y + '_' + item.m;
+                    if (typeof DataCache !== 'undefined') {
+                        var existing = DataCache.get(key, 15 * 60 * 1000);
+                        if (existing && existing.data && !existing.isExpired) return Promise.resolve();
+                    }
+                    var warmUrl = url + '?action=getNurseData&year=' + item.y;
+                    if (item.m !== 'all') warmUrl += '&month=' + item.m;
+                    if (staffNumber) warmUrl += '&staffNumber=' + encodeURIComponent(staffNumber);
+                    return fetch(warmUrl).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result && result.success && typeof DataCache !== 'undefined') {
+                            DataCache.set(key, result);
+                        }
+                    }).catch(function() {});
+                }
+
+                var wIdx = 0;
+                function warmLoginBatch() {
+                    if (wIdx >= monthsToWarm.length) return;
+                    var batch = [];
+                    while (batch.length < 2 && wIdx < monthsToWarm.length) {
+                        batch.push(fetchNurseMonth(monthsToWarm[wIdx++]));
+                    }
+                    Promise.allSettled(batch).then(function() {
+                        setTimeout(warmLoginBatch, 500);
+                    });
+                }
+                setTimeout(warmLoginBatch, 800);
+
+                return firstFetch;
+
+            } else if (userType === 'driver') {
+                var driverUrl = url + '?action=getPendingTrips';
+                return fetch(driverUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && typeof DataCache !== 'undefined') {
+                        DataCache.set('cache_pending_trips', result.trips || []);
+                    }
+                }).catch(function() {});
+            } else if (userType === 'admin') {
+                // Fast fetch: lightweight pending trips ONLY (1-2s) — returned as firstFetch so login waits for it
+                var firstAdminFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success && Array.isArray(result.trips)) {
+                        try { localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, ts: Date.now() })); } catch(e) {}
+                    }
+                }).catch(function() {});
+
+                // Heavy fetch: full admin data (stats + records + trips) — runs in background
+                var adminUrl = url + '?action=getAdminData&year=' + year + '&month=' + month;
+                fetch(adminUrl).then(function(r) { return r.json(); }).then(function(result) {
+                    if (result && result.success) {
+                        try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
+                        if (typeof DataCache !== 'undefined') {
+                            DataCache.set('cache_admin_data', result);
+                        }
+                    }
+                }).catch(function() {});
+
+                // Also prefetch "all" and adjacent months' records for admin
+                setTimeout(function() {
+                    var adminMonths = [{ y: year, m: 'all' }];
+                    if (month > 1) adminMonths.push({ y: year, m: month - 1 });
+                    if (month < 12) adminMonths.push({ y: year, m: month + 1 });
+                    for (var am = month - 2; am >= 1; am--) adminMonths.push({ y: year, m: am });
+                    
+                    var aIdx = 0;
+                    function warmAdminLogin() {
+                        if (aIdx >= adminMonths.length) return;
+                        var itm = adminMonths[aIdx++];
+                        var key = 'cache_records_' + itm.y + '_' + itm.m + '_';
+                        if (typeof DataCache !== 'undefined') {
+                            var ex = DataCache.get(key, 15 * 60 * 1000);
+                            if (ex && ex.data) { setTimeout(warmAdminLogin, 100); return; }
+                        }
+                        var wUrl = url + '?action=getAllRecords&year=' + itm.y;
+                        if (itm.m !== 'all') wUrl += '&month=' + itm.m;
+                        fetch(wUrl).then(function(r) { return r.json(); }).then(function(result) {
+                            if (result && result.success && result.data && typeof DataCache !== 'undefined') {
+                                DataCache.set(key, result.data);
+                            }
+                        }).catch(function() {}).finally(function() { setTimeout(warmAdminLogin, 600); });
+                    }
+                    warmAdminLogin();
+                }, 1000);
+
+                return firstAdminFetch;
+            }
+            return Promise.resolve();
+        }
 
         // Load saved credentials (Remember Me)
         function loadSavedCredentials() {
@@ -629,63 +767,72 @@
             }
         }
 
-        // Check if app can be installed
+        // Smart PWA install detection
         function checkInstallPrompt() {
-            // Detect device type and update icon
+            const container = document.getElementById('installContainer');
+
+            // If already running as installed PWA (standalone mode) → never show
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                              || window.navigator.standalone === true;
+            if (isStandalone) {
+                container.style.display = 'none';
+                return;
+            }
+
+            // Update device icon based on platform
             updateDeviceIcon();
-            
+
+            // Chrome / Edge / Android: fires when app is installable
             window.addEventListener('beforeinstallprompt', (e) => {
                 e.preventDefault();
                 deferredPrompt = e;
-                document.getElementById('installBtn').classList.add('show');
+                container.classList.add('visible');
             });
 
-            // Hide install button if already installed
+            // Fired after user installs via the prompt — hide button immediately
             window.addEventListener('appinstalled', () => {
-                document.getElementById('installBtn').classList.remove('show');
+                container.classList.remove('visible');
                 deferredPrompt = null;
             });
+
+            // iOS Safari: beforeinstallprompt never fires, but if not in standalone mode
+            // show a subtle hint so the user knows they can add to home screen
+            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+            const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|chrome/i.test(navigator.userAgent);
+            if (isIOS && isSafari && !isStandalone) {
+                document.getElementById('deviceIcon').textContent = '🍏';
+                document.getElementById('installText').setAttribute('data-ar', 'أضف للشاشة الرئيسية');
+                document.getElementById('installText').setAttribute('data-en', 'Add to Home Screen');
+                document.getElementById('installText').textContent = currentLang === 'ar' ? 'أضف للشاشة الرئيسية' : 'Add to Home Screen';
+                container.classList.add('visible');
+            }
         }
 
         // Detect device type and update install button icon
         function updateDeviceIcon() {
             const deviceIcon = document.getElementById('deviceIcon');
-            const installText = document.getElementById('installText');
-            const userAgent = navigator.userAgent.toLowerCase();
-            
-            if (/android/i.test(userAgent)) {
-                // Android phone
-                deviceIcon.textContent = '📱';
-            } else if (/iphone|ipad|ipod/i.test(userAgent)) {
-                // iOS device
-                deviceIcon.textContent = '🍏';
-            } else if (/windows/i.test(userAgent)) {
-                // Windows PC
-                deviceIcon.textContent = '💻';
-            } else if (/macintosh|mac os x/i.test(userAgent)) {
-                // Mac
-                deviceIcon.textContent = '🖥️';
-            } else if (/linux/i.test(userAgent)) {
-                // Linux
-                deviceIcon.textContent = '🖥️';
-            } else {
-                // Default
-                deviceIcon.textContent = '📲';
-            }
+            const ua = navigator.userAgent;
+            if (/android/i.test(ua))              deviceIcon.textContent = '📱';
+            else if (/iphone|ipad|ipod/i.test(ua)) deviceIcon.textContent = '🍏';
+            else if (/windows/i.test(ua))          deviceIcon.textContent = '💻';
+            else                                   deviceIcon.textContent = '📲';
         }
 
         // Install app
         async function installApp() {
+            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
             if (!deferredPrompt) {
-                alert(currentLang === 'ar' ? 'التطبيق مثبت بالفعل أو غير متاح للتثبيت' : 'App is already installed or not available for installation');
+                if (isIOS) {
+                    alert(currentLang === 'ar'
+                        ? 'لإضافة التطبيق: اضغط على زر المشاركة ثم اختر "إضافة إلى الشاشة الرئيسية"'
+                        : 'To install: tap the Share button, then "Add to Home Screen"');
+                }
                 return;
             }
-            
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            
             if (outcome === 'accepted') {
-                document.getElementById('installBtn').classList.remove('show');
+                document.getElementById('installContainer').classList.remove('visible');
             }
             deferredPrompt = null;
         }
@@ -849,19 +996,34 @@
                     localStorage.setItem('userSession', JSON.stringify(sessionData));
                     localStorage.setItem('appLanguage', currentLang);
                     
-                    // Pre-warm target page API to eliminate cold start delay
+                    // Pre-warm target page data before redirect
+                    var prefetchDone = false;
                     try {
-                        var targetApi = '';
-                        if (user.redirect === 'driver-interface.html') {
-                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
-                        } else if (user.redirect === 'nurse-interface.html') {
-                            targetApi = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec?action=getPendingTrips';
+                        var firstFetch = prefetchForUserType(user.type, sessionData.staffNumber);
+                        if (firstFetch && firstFetch.then) {
+                            firstFetch.then(function() { prefetchDone = true; }).catch(function() {});
                         }
-                        if (targetApi) fetch(targetApi).catch(function(){});
                     } catch(e) {}
                     
-                    // Redirect based on user type
-                    window.location.href = user.redirect;
+                    // Prefetch target page HTML so browser has it cached
+                    try {
+                        var link = document.createElement('link');
+                        link.rel = 'prefetch';
+                        link.href = user.redirect;
+                        document.head.appendChild(link);
+                    } catch(e) {}
+                    
+                    // Wait for fast data fetch to complete (up to 2s max)
+                    // This ensures pending trips are in localStorage before nurse page loads
+                    var redirectTimer = setTimeout(function() {
+                        window.location.href = user.redirect;
+                    }, 2000);
+                    if (firstFetch && firstFetch.then) {
+                        firstFetch.then(function() {
+                            clearTimeout(redirectTimer);
+                            setTimeout(function() { window.location.href = user.redirect; }, 50);
+                        }).catch(function() {});
+                    }
                 } else {
                     // User not found
                     resetLoginButton();
@@ -887,38 +1049,33 @@
             errorMessage.classList.add('show');
         }
 
-        // Register Service Worker for PWA with auto-update
+        // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
-                    
-                    // Check for updates every 60 seconds
-                    setInterval(() => {
-                        reg.update();
-                    }, 60000);
-                    
-                    // Listen for updates
+                    reg.update().catch(() => {});
+                    setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
                         console.log('[App] New Service Worker found, installing...');
-                        
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                 console.log('[App] New version available! Reloading...');
-                                // Auto-reload to get the new version
                                 setTimeout(() => window.location.reload(), 1000);
                             }
                         });
                     });
                 })
                 .catch(err => console.error('[App] Service Worker registration failed:', err));
-            
-            // Listen for messages from Service Worker
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }

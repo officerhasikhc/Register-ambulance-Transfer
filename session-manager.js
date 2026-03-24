@@ -1,6 +1,6 @@
 /**
  * Session Manager - إدارة الجلسات والحماية
- * Hasik Health Center - Ambulance Activity Log System
+ * Hasik Health Center - Ambulance Activity Record System
  * 
  * Features:
  * 1. Page protection - redirects to login if no valid session
@@ -60,6 +60,7 @@
         if (currentPage.includes('admin')) return 'admin';
         if (currentPage.includes('nurse')) return 'nurse';
         if (currentPage.includes('driver')) return 'driver';
+        if (currentPage.includes('inspection')) return 'driver';
         if (currentPage.includes('settings')) return 'admin';
         return null;
     }

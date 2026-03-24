@@ -10,19 +10,41 @@
     <link rel="dns-prefetch" href="https://script.google.com">
     
     <!-- Performance Optimization Scripts - Load First -->
-    <script src="request-optimizer.js"></script>
-    <script src="ui-optimizer.js"></script>
-    <script src="connection-monitor.js"></script>
     <script src="data-cache.js"></script>
+    <script src="reliable-post.js"></script>
+    <script src="sync-manager.js"></script>
     
     <!-- Start fetching data IMMEDIATELY — don't wait for DOM or init() -->
     <script>
     (function() {
         var url = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+        window.__earlyFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).then(function(result) {
+            // Update local caches immediately so page shows fresh data
+            if (result && result.success && Array.isArray(result.trips)) {
+                try {
+                    localStorage.setItem('cache_pending_trips', JSON.stringify({ data: result.trips, timestamp: Date.now() }));
+                    // Clear stale driver pending trips that no longer exist on server
+                    var serverStaffNums = {};
+                    result.trips.forEach(function(t) {
+                        if (t.status === 'pending' && t.staffNumber) serverStaffNums[t.staffNumber.toString().trim()] = true;
+                    });
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var k = localStorage.key(i);
+                        if (k && k.startsWith('pending_trip_')) {
+                            try {
+                                var lt = JSON.parse(localStorage.getItem(k));
+                                if (lt && lt.tripId && lt.staffNumber && !serverStaffNums[lt.staffNumber.toString().trim()]) {
+                                    localStorage.removeItem(k);
+                                }
+                            } catch(e2) {}
+                        }
+                    }
+                } catch(e) {}
+            }
+            return result;
+        }).catch(function() { return null; });
         if (typeof DataCache !== 'undefined') {
             DataCache.preload(url, 'driver');
-        } else {
-            window.__earlyFetch = fetch(url + '?action=getPendingTrips').then(function(r) { return r.json(); }).catch(function() { return null; });
         }
     })();
     </script>
@@ -852,6 +874,187 @@
         body.offline-mode .main-card {
             border: 2px solid #f59e0b;
         }
+
+        /* ── Module Navigation ── */
+        .module-nav {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 14px;
+        }
+        .module-card {
+            flex: 1;
+            background: rgba(255,255,255,0.15);
+            border: 1.5px solid rgba(255,255,255,0.3);
+            border-radius: 12px;
+            padding: 12px 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: rgba(255,255,255,0.85);
+        }
+        .module-card.active {
+            background: rgba(255,255,255,0.95);
+            border-color: white;
+            color: var(--primary-blue);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .module-card:hover:not(.active) { background: rgba(255,255,255,0.25); }
+        .module-card-icon  { margin-bottom: 5px; line-height: 1; }
+        .module-card-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+        .module-card-sub   { font-size: 11px; opacity: 0.8; }
+
+        /* ── Trip Progress Track ─────────────────────────── */
+        .trip-track {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding: 0 4px;
+        }
+        .track-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            min-width: 56px;
+        }
+        .track-dot {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2.5px solid #d1d5db;
+            background: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #9ca3af;
+            transition: all 0.35s ease;
+        }
+        .track-dot.dot-active {
+            border-color: #3b82f6;
+            background: #3b82f6;
+            color: white;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+            animation: dot-pulse 2s ease-in-out infinite;
+        }
+        .track-dot.dot-done {
+            border-color: #22c55e;
+            background: #22c55e;
+            color: white;
+            box-shadow: none;
+            animation: none;
+        }
+        @keyframes dot-pulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2); }
+            50%       { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.08); }
+        }
+        .track-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #9ca3af;
+            text-align: center;
+            transition: color 0.3s;
+        }
+        .track-label.active { color: #3b82f6; }
+        .track-label.done   { color: #16a34a; }
+        .track-connector {
+            flex: 1;
+            height: 3px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            margin: 13px 6px 0;
+            transition: background 0.4s ease;
+        }
+        .track-connector.filled { background: #22c55e; }
+
+        /* ── Departure Done Badge ────────────────────────── */
+        .step-done-badge {
+            background: #f0fdf4;
+            border: 1.5px solid #86efac;
+            border-radius: 12px;
+            padding: 10px 16px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #166534;
+            font-weight: 600;
+            margin-bottom: 14px;
+            animation: badge-in 0.3s ease;
+        }
+        .step-done-badge.show { display: flex; }
+        @keyframes badge-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .badge-check {
+            width: 22px;
+            height: 22px;
+            background: #22c55e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        /* ── Main Action Button ──────────────────────────── */
+        .btn-main {
+            width: 100%;
+            padding: 20px 24px;
+            border-radius: 18px;
+            border: none;
+            font-family: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            transition: transform 0.15s, box-shadow 0.15s;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-main:active { transform: scale(0.98); }
+        .btn-main-icon svg { display: block; }
+        .btn-main-label {
+            font-size: 19px;
+            letter-spacing: 0.01em;
+        }
+        .btn-main-hint {
+            font-size: 12px;
+            font-weight: 500;
+            opacity: 0.75;
+        }
+        .btn-go {
+            background: linear-gradient(135deg, #16a34a, #22c55e);
+            color: white;
+            box-shadow: 0 6px 20px rgba(22, 163, 74, 0.35);
+        }
+        .btn-go:hover:not(:disabled) {
+            box-shadow: 0 8px 24px rgba(22, 163, 74, 0.5);
+            transform: translateY(-1px);
+        }
+        .btn-back {
+            background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+            color: white;
+            box-shadow: 0 6px 20px rgba(29, 78, 216, 0.35);
+        }
+        .btn-back:hover:not(:disabled) {
+            box-shadow: 0 8px 24px rgba(29, 78, 216, 0.5);
+            transform: translateY(-1px);
+        }
+        .btn-main:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        /* ─────────────────────────────────────────────────── */
     </style>
 </head>
 <body>
@@ -864,6 +1067,28 @@
         <img src="moh-logo.png" alt="شعار وزارة الصحة" class="logo">
         <h1>المديرية العامة للخدمات الصحية بمحافظة ظفار</h1>
         <h2>ولاية سدح - مركز حاسك الصحي</h2>
+    </div>
+
+    <!-- Module Navigation -->
+    <div class="module-nav">
+        <div class="module-card active">
+            <div class="module-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1" y="8" width="22" height="10" rx="2"/><path d="M5 8V6a2 2 0 0 1 2-2h3l2 4"/><path d="M16 8V6a2 2 0 0 0-2-2h-1"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+                </svg>
+            </div>
+            <div class="module-card-title">تسجيل رحلة</div>
+            <div class="module-card-sub">ذهاب وعودة</div>
+        </div>
+        <a href="inspection-interface.html" class="module-card">
+            <div class="module-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+            </div>
+            <div class="module-card-title">فحص السيارة</div>
+            <div class="module-card-sub">الفحص اليومي</div>
+        </a>
     </div>
 
     <div class="main-card">
@@ -903,24 +1128,10 @@
             </div>
         </div>
 
-        <!-- Pending Trip Alert - Combined single card (ABOVE time display) -->
-        <div class="pending-trip-card" id="pendingTrip" style="display: none;">
-            <div class="pending-trip-header">
-                <span class="pending-title">رحلة قيد التنفيذ</span>
-                <span class="pending-separator">-</span>
-                <span class="pending-reminder">يرجى تسجيل العودة عند الوصول</span>
-            </div>
-            <div class="departure-label">بيانات رحلة الذهاب</div>
-            <div class="pending-trip-details">
-                <div class="detail-item">
-                    <span class="detail-label">التاريخ:</span>
-                    <span class="detail-value" id="pendingDate">-</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">الوقت:</span>
-                    <span class="detail-value" id="pendingTime">-</span>
-                </div>
-            </div>
+        <!-- Hidden data container — JS updates these IDs (pendingDate, pendingTime) -->
+        <div id="pendingTrip" style="display: none !important;">
+            <span id="pendingDate"></span>
+            <span id="pendingTime"></span>
         </div>
 
         <!-- Current Time Display -->
@@ -929,27 +1140,61 @@
             <div class="current-date" id="currentDate"></div>
         </div>
 
-
         <!-- Success Message -->
         <div class="success-message" id="successMessage" style="display: none !important;">
             <h4 id="successTitle">تم التسجيل بنجاح</h4>
             <p id="successText"></p>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="action-buttons" id="actionButtons" style="display: none;">
-            <div class="btn-wrapper" id="departureWrapper">
-                <div class="btn-hint" id="departureHint">يرجى تسجيل الذهاب</div>
-                <button class="btn btn-departure active-btn" id="btnDeparture" onclick="if(!isSubmittingDeparture && !isSubmittingReturn) recordDeparture()">
-                    <span>→ تسجيل وقت الذهاب</span>
-                </button>
+        <!-- Trip Progress Track + Action Area -->
+        <div id="actionButtons" style="display: none;">
+
+            <!-- Step Indicator -->
+            <div class="trip-track">
+                <div class="track-node">
+                    <div class="track-dot dot-active" id="dotDep">1</div>
+                    <span class="track-label active" id="labelDep">الذهاب</span>
+                </div>
+                <div class="track-connector" id="trackConnector"></div>
+                <div class="track-node">
+                    <div class="track-dot" id="dotRet">2</div>
+                    <span class="track-label" id="labelRet">العودة</span>
+                </div>
             </div>
-            <div class="btn-wrapper" id="returnWrapper">
-                <div class="btn-hint" id="returnHint" style="display: none;">يرجى تسجيل العودة في حالة الوصول</div>
-                <button class="btn btn-return" id="btnReturn" onclick="if(!isSubmittingDeparture && !isSubmittingReturn) recordReturn()" disabled>
-                    <span>← تسجيل وقت العودة</span>
-                </button>
+
+            <!-- Departure Done Badge (shows after departure recorded) -->
+            <div class="step-done-badge" id="doneBadge">
+                <div class="badge-check">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <span>تم تسجيل الذهاب — الساعة <span id="depBadgeTime">-</span></span>
             </div>
+
+            <!-- Departure Button (Step 1) -->
+            <button class="btn-main btn-go" id="btnDeparture"
+                onclick="if(!isSubmittingDeparture && !isSubmittingReturn) recordDeparture()">
+                <div class="btn-main-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1" y="9" width="15" height="9" rx="2"/><path d="M16 13h3l3 3v4h-6v-7z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/><path d="M10 9V6a1 1 0 0 0-1-1H6L4 9"/><line x1="8" y1="12" x2="8" y2="15"/><line x1="6.5" y1="13.5" x2="9.5" y2="13.5"/>
+                    </svg>
+                </div>
+                <span class="btn-main-label">تسجيل وقت الذهاب</span>
+                <span class="btn-main-hint">اضغط عند مغادرة المركز</span>
+            </button>
+
+            <!-- Return Button (Step 2 — hidden initially) -->
+            <button class="btn-main btn-back" id="btnReturn"
+                onclick="if(!isSubmittingDeparture && !isSubmittingReturn) recordReturn()"
+                style="display: none;">
+                <div class="btn-main-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.41"/>
+                    </svg>
+                </div>
+                <span class="btn-main-label">تسجيل وقت العودة</span>
+                <span class="btn-main-hint">اضغط عند العودة للمركز</span>
+            </button>
+
         </div>
 
         <!-- Trip History -->
@@ -977,6 +1222,10 @@
         // CONFIGURATION
         // ============================================
         const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
+
+        // Original innerHTML for each main button — restored after processing spinner clears it
+        const DEPARTURE_BTN_HTML = `<div class="btn-main-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="9" width="15" height="9" rx="2"/><path d="M16 13h3l3 3v4h-6v-7z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/><path d="M10 9V6a1 1 0 0 0-1-1H6L4 9"/><line x1="8" y1="12" x2="8" y2="15"/><line x1="6.5" y1="13.5" x2="9.5" y2="13.5"/></svg></div><span class="btn-main-label">تسجيل وقت الذهاب</span><span class="btn-main-hint">اضغط عند مغادرة المركز</span>`;
+        const RETURN_BTN_HTML    = `<div class="btn-main-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.41"/></svg></div><span class="btn-main-label">تسجيل وقت العودة</span><span class="btn-main-hint">اضغط عند العودة للمركز</span>`;
 
         // ============================================
         // DRIVERS DATA
@@ -1035,6 +1284,56 @@
             initializeMonthFilter();
             updateClock();
             setInterval(updateClock, 1000);
+            
+            // Initialize SyncManager for instant local saves + background sync
+            SyncManager.init(WEB_APP_URL).then(() => {
+                SyncManager.cleanup();
+            }).catch(err => console.warn('SyncManager init error (non-fatal):', err));
+            
+            // Listen for sync events to reconcile predicted vs server trip IDs
+            SyncManager.on('synced', (detail) => {
+                if (detail.action === 'driverDeparture' && detail.serverResponse) {
+                    const serverTripId = detail.serverResponse.tripId || detail.serverResponse.id || '';
+                    const clientTripId = detail.data ? detail.data.tripId : '';
+                    if (serverTripId && clientTripId && serverTripId !== clientTripId) {
+                        console.log('🔄 Trip ID reconciliation: local=' + clientTripId + ' → server=' + serverTripId);
+                        // Update local history with server's actual ID
+                        if (selectedDriver) {
+                            const histKey = 'trip_history_' + selectedDriver.staffNumber;
+                            try {
+                                const hist = JSON.parse(localStorage.getItem(histKey) || '[]');
+                                let updated = false;
+                                for (let i = 0; i < hist.length; i++) {
+                                    if (hist[i].tripId === clientTripId) {
+                                        hist[i].tripId = serverTripId;
+                                        updated = true;
+                                        break;
+                                    }
+                                }
+                                if (updated) {
+                                    localStorage.setItem(histKey, JSON.stringify(hist));
+                                    // Update in-memory array too
+                                    for (let i = 0; i < allDriverHistory.length; i++) {
+                                        if (allDriverHistory[i].tripId === clientTripId) {
+                                            allDriverHistory[i].tripId = serverTripId;
+                                            break;
+                                        }
+                                    }
+                                    renderDriverHistoryPage();
+                                }
+                            } catch(e) {}
+                        }
+                        // Update SyncManager's max ID tracker
+                        const serverNum = parseInt(String(serverTripId).replace(/\D/g, '')) || 0;
+                        if (serverNum > 0) SyncManager.updateMaxIdFromRecords([{tripId: serverTripId}]);
+                    }
+                    // Also update pending trip display with server ID
+                    if (serverTripId && pendingTrip) {
+                        pendingTrip.tripId = serverTripId;
+                        try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify(pendingTrip)); } catch(e) {}
+                    }
+                }
+            });
             
             // Request notification permission
             requestNotificationPermission();
@@ -1273,11 +1572,25 @@
         // ============================================
         // TRIP MANAGEMENT
         // ============================================
+        let _returnCompletedAt = 0; // timestamp when return was last recorded
+        let _departureRecordedAt = 0; // timestamp when departure was last recorded
+        
         function processPendingTripsData(trips) {
             if (!selectedDriver) return;
             
             // CRITICAL: Don't process if a submission is in progress
             if (isSubmittingDeparture || isSubmittingReturn) {
+                return;
+            }
+            
+            // Guard: don't touch UI for 10s after return was recorded
+            if (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) {
+                return;
+            }
+            
+            // Guard: don't touch UI for 10s after departure was recorded
+            // (server may not have the trip yet — keep our local pending card as-is)
+            if (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) {
                 return;
             }
             
@@ -1303,21 +1616,21 @@
                             departureTime: serverTrip.departureTime
                         };
                         localStorage.setItem(key, JSON.stringify(pendingTrip));
-                    } else if (localTrip && localTrip.status === 'pending' && localTrip.departureDate && localTrip.departureTime) {
-                        // Keep local trip - driver must be able to record return (server sync delay or format mismatch)
+                    } else if (localTrip && localTrip.status === 'pending' && !localTrip.tripId && localTrip.departureDate && localTrip.departureTime) {
+                        // Only keep local trip if it was NEVER synced to server (no tripId).
+                        // If it has a tripId but server doesn't have it → admin deleted it.
                         pendingTrip = localTrip;
                         localStorage.setItem(key, JSON.stringify(pendingTrip));
                     } else {
-                        // Trip not found on server and no valid local trip — clear
                         localStorage.removeItem(key);
                         pendingTrip = null;
                     }
-                } else if (localTrip && localTrip.status === 'pending' && localTrip.departureDate && localTrip.departureTime) {
-                    // Server returned empty but we have local pending trip — keep it so driver can record return
+                } else if (localTrip && localTrip.status === 'pending' && !localTrip.tripId && localTrip.departureDate && localTrip.departureTime) {
+                    // Server returned empty. Only keep local trip if it has no tripId (unsynced).
+                    // If it has a tripId → server confirmed it before, now it's gone (admin deleted).
                     pendingTrip = localTrip;
                     localStorage.setItem(key, JSON.stringify(pendingTrip));
                 } else {
-                    // Server returned empty list and no valid local trip — clear
                     localStorage.removeItem(key);
                     pendingTrip = null;
                 }
@@ -1349,23 +1662,59 @@
 
         async function loadPendingTrip() {
             if (!selectedDriver) return;
+            
+            // Guard: skip if return or departure was just recorded (server hasn't caught up yet)
+            const _guardActive = (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) ||
+                                 (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000));
+            if (_guardActive) {
+                // Still load history from localStorage but don't touch pending card or server data
+                const historyKey = `trip_history_${selectedDriver.staffNumber}`;
+                const localHistory = JSON.parse(localStorage.getItem(historyKey)) || [];
+                if (localHistory.length > 0 && allDriverHistory.length === 0) {
+                    allDriverHistory = localHistory.map(t => ({ ...t, syncing: false }));
+                    renderDriverHistoryPage();
+                }
+                return;
+            }
 
-            // === INSTANT LOCAL LOAD FIRST ===
+            // === SMART LOCAL LOAD: prefer fresh data over stale cache ===
             const pendingKey = `pending_trip_${selectedDriver.staffNumber}`;
             const historyKey = `trip_history_${selectedDriver.staffNumber}`;
+            const staffStr = selectedDriver.staffNumber ? selectedDriver.staffNumber.toString().trim() : '';
             
-            // Check for locally saved pending trip
+            // If early fetch already completed and updated the cache, use that.
+            // The early fetch started in <head> and cleans up deleted trips from localStorage.
+            // So by now, localStorage should already reflect server state.
             const localPending = localStorage.getItem(pendingKey);
             if (localPending) {
                 try {
-                    pendingTrip = JSON.parse(localPending);
-                    const pendingDiv = document.getElementById('pendingTrip');
-                    if (pendingDiv && pendingTrip.departureDate) {
-                        pendingDiv.style.display = 'block';
-                        document.getElementById('pendingDate').textContent = pendingTrip.departureDate;
-                        document.getElementById('pendingTime').textContent = pendingTrip.departureTime || '';
+                    const localTrip = JSON.parse(localPending);
+                    // Only show if the trip hasn't been deleted on server (check DataCache)
+                    const cachedServerTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 5);
+                    let serverSaysGone = false;
+                    if (cachedServerTrips && cachedServerTrips.data && Array.isArray(cachedServerTrips.data) && localTrip.tripId) {
+                        const stillOnServer = cachedServerTrips.data.some(t => {
+                            const tStaff = t.staffNumber ? t.staffNumber.toString().trim() : '';
+                            return tStaff === staffStr && t.status === 'pending';
+                        });
+                        if (!stillOnServer) serverSaysGone = true;
                     }
-                    updateButtons();
+                    
+                    if (serverSaysGone) {
+                        localStorage.removeItem(pendingKey);
+                        pendingTrip = null;
+                        document.getElementById('pendingTrip').style.display = 'none';
+                        updateButtons();
+                    } else if (localTrip.departureDate) {
+                        pendingTrip = localTrip;
+                        const pendingDiv = document.getElementById('pendingTrip');
+                        if (pendingDiv) {
+                            pendingDiv.style.display = 'block';
+                            document.getElementById('pendingDate').textContent = localTrip.departureDate;
+                            document.getElementById('pendingTime').textContent = localTrip.departureTime || '';
+                        }
+                        updateButtons();
+                    }
                 } catch (e) {}
             }
             
@@ -1385,10 +1734,18 @@
                     if (meta?.fromCache) return;
                     if (isSubmittingDeparture || isSubmittingReturn) return;
                     
+                    // Guard: don't overwrite local data while departure/return is settling
+                    if ((_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) ||
+                        (_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000))) {
+                        return;
+                    }
+                    
                     const now = Date.now();
                     if (now - _lastHistoryRender < _MIN_RENDER_INTERVAL && allDriverHistory.length > 0 && meta?.unchanged) return;
                     
                     _lastHistoryRender = now;
+                    // Update SyncManager's ID tracker with server trips
+                    if (typeof SyncManager !== 'undefined') SyncManager.updateMaxIdFromRecords(trips);
                     processPendingTripsData(trips);
                     renderTripHistoryFromData(trips);
                 },
@@ -1397,25 +1754,32 @@
         }
 
         function updateButtons() {
-            const btnDeparture = document.getElementById('btnDeparture');
-            const btnReturn = document.getElementById('btnReturn');
-            const departureHint = document.getElementById('departureHint');
-            const returnHint = document.getElementById('returnHint');
+            const btnDeparture   = document.getElementById('btnDeparture');
+            const btnReturn      = document.getElementById('btnReturn');
+            const dotDep         = document.getElementById('dotDep');
+            const dotRet         = document.getElementById('dotRet');
+            const labelDep       = document.getElementById('labelDep');
+            const labelRet       = document.getElementById('labelRet');
+            const trackConnector = document.getElementById('trackConnector');
+            const doneBadge      = document.getElementById('doneBadge');
+            const depBadgeTime   = document.getElementById('depBadgeTime');
 
             if (!selectedDriver) {
-                btnDeparture.disabled = true;
-                btnReturn.disabled = true;
-                btnDeparture.classList.remove('active-btn');
-                btnReturn.classList.remove('pulse-attention');
-                departureHint.style.display = 'none';
-                returnHint.style.display = 'none';
+                btnDeparture.style.display = 'flex';
+                btnReturn.style.display    = 'none';
+                btnDeparture.disabled      = true;
+                btnReturn.disabled         = true;
+                if (dotDep) { dotDep.className = 'track-dot'; dotDep.textContent = '1'; }
+                if (dotRet) { dotRet.className = 'track-dot'; dotRet.textContent = '2'; }
+                if (labelDep) labelDep.className = 'track-label';
+                if (labelRet) labelRet.className = 'track-label';
+                if (trackConnector) trackConnector.classList.remove('filled');
+                if (doneBadge) doneBadge.classList.remove('show');
                 return;
             }
 
             // CRITICAL: Don't update buttons if a submission is in progress
-            if (isSubmittingDeparture || isSubmittingReturn) {
-                return;
-            }
+            if (isSubmittingDeparture || isSubmittingReturn) return;
 
             // Also check if buttons are currently locked or processing
             if (btnDeparture.classList.contains('btn-locked') || btnReturn.classList.contains('btn-locked') ||
@@ -1424,25 +1788,38 @@
             }
 
             if (pendingTrip) {
-                btnDeparture.disabled = true;
-                btnDeparture.classList.remove('active-btn');
-                btnDeparture.classList.add('btn-registered');
-                btnDeparture.innerHTML = '<span>✓ تم تسجيل رحلة الذهاب</span>';
-                btnReturn.disabled = false;
-                btnReturn.classList.add('pulse-attention');
+                // ── State: trip in progress → show Return button ──────────
+                btnDeparture.style.display = 'none';
+                btnReturn.style.display    = 'flex';
+                btnReturn.disabled         = false;
                 btnReturn.style.pointerEvents = '';
-                departureHint.style.display = 'none';
-                returnHint.style.display = 'block';
+
+                // Track: step 1 done, step 2 active
+                if (dotDep) { dotDep.className = 'track-dot dot-done'; dotDep.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+                if (dotRet) { dotRet.className = 'track-dot dot-active'; dotRet.textContent = '2'; }
+                if (labelDep) { labelDep.className = 'track-label done'; labelDep.textContent = 'الذهاب'; }
+                if (labelRet) { labelRet.className = 'track-label active'; labelRet.textContent = 'العودة'; }
+                if (trackConnector) trackConnector.classList.add('filled');
+
+                // Done badge
+                if (doneBadge) doneBadge.classList.add('show');
+                if (depBadgeTime) depBadgeTime.textContent = pendingTrip.departureTime || document.getElementById('pendingTime').textContent || '-';
+
             } else {
-                btnDeparture.disabled = false;
-                btnDeparture.classList.remove('btn-registered');
-                btnDeparture.classList.add('active-btn');
-                btnDeparture.innerHTML = '<span>→ تسجيل وقت الذهاب</span>';
+                // ── State: ready for departure → show Departure button ────
+                btnDeparture.style.display = 'flex';
+                btnReturn.style.display    = 'none';
+                btnDeparture.disabled      = false;
                 btnDeparture.style.pointerEvents = '';
-                btnReturn.disabled = true;
-                btnReturn.classList.remove('pulse-attention');
-                departureHint.style.display = 'block';
-                returnHint.style.display = 'none';
+                btnReturn.disabled         = true;
+
+                // Track: step 1 active, step 2 inactive
+                if (dotDep) { dotDep.className = 'track-dot dot-active'; dotDep.textContent = '1'; }
+                if (dotRet) { dotRet.className = 'track-dot'; dotRet.textContent = '2'; }
+                if (labelDep) { labelDep.className = 'track-label active'; labelDep.textContent = 'الذهاب'; }
+                if (labelRet) { labelRet.className = 'track-label'; labelRet.textContent = 'العودة'; }
+                if (trackConnector) trackConnector.classList.remove('filled');
+                if (doneBadge) doneBadge.classList.remove('show');
             }
         }
 
@@ -1593,6 +1970,7 @@
             };
             const key = `pending_trip_${selectedDriver.staffNumber}`;
             localStorage.setItem(key, JSON.stringify(pendingTrip));
+            _departureRecordedAt = Date.now(); // Guard: prevent background fetch from clearing pending card
 
             // === OPTIMISTIC UI ===
             
@@ -1602,9 +1980,16 @@
             document.getElementById('pendingDate').textContent = date;
             document.getElementById('pendingTime').textContent = time;
             
-            // Add trip to history list with sync indicator
+            // Predict trip ID locally for instant display
+            const predictedTripId = (typeof SyncManager !== 'undefined' && SyncManager._localMaxId >= 0)
+                ? SyncManager.predictNextId()
+                : '';
+            // Inject predicted ID into tripData so server uses the same ID
+            if (predictedTripId) tripData.tripId = predictedTripId;
+            
+            // Add trip to history list — show with predicted ID immediately
             const newTripEntry = {
-                tripId: '',
+                tripId: predictedTripId,
                 driverName: selectedDriver.nameEn,
                 driverNameAr: selectedDriver.nameAr,
                 staffNumber: selectedDriver.staffNumber,
@@ -1614,81 +1999,70 @@
                 returnTime: '',
                 status: 'pending',
                 offlineSaved: !isOnline,
-                syncing: isOnline // Show sync indicator if online
+                syncing: false
             };
             
-            const existsInHistory = allDriverHistory.some(t => 
-                t.departureDate === date && t.departureTime === time
+            // Remove any duplicate (same date AND time) then add new entry at top
+            allDriverHistory = allDriverHistory.filter(t => 
+                !(t.departureDate === date && t.departureTime === time)
             );
-            if (!existsInHistory) {
-                allDriverHistory.unshift(newTripEntry);
-                driverHistoryPage = 1;
-                renderDriverHistoryPage();
-            }
+            allDriverHistory.unshift(newTripEntry);
+            driverHistoryPage = 1;
+            renderDriverHistoryPage();
             
-            // === SEND TO SERVER IN BACKGROUND (non-blocking) ===
-            const syncCompleteDeparture = () => {
-                allDriverHistory = allDriverHistory.map(t => {
-                    if (t.departureDate === date && t.departureTime === time) {
-                        return { ...t, syncing: false };
-                    }
-                    return t;
-                });
-                renderDriverHistoryPage();
+            // Persist to localStorage so background refresh won't lose it
+            saveTripToHistoryQuiet(newTripEntry);
+            
+            // Save to nurse pending trips for cross-interface sync
+            savePendingTripForNurse({
+                ...tripData,
+                status: 'pending',
+                departureTimestamp: now.getTime()
+            });
+            
+            // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('driverDeparture', tripData).then(() => {
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-                // Persist syncing:false to localStorage
-                const histKey = `trip_history_${selectedDriver.staffNumber}`;
-                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
-                const updated = stored.map(t => {
-                    if (t.departureDate === date && t.departureTime === time) {
-                        const { syncing, ...rest } = t;
-                        return rest;
-                    }
-                    return t;
-                });
-                localStorage.setItem(histKey, JSON.stringify(updated));
-            };
-            
-            if (isOnline) {
-                fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(tripData)
-                }).then(() => {
-                    setTimeout(syncCompleteDeparture, 800);
-                }).catch(error => {
-                    console.error('Background fetch failed, queuing offline:', error);
+            }).catch(err => {
+                console.error('SyncManager departure error:', err);
+                // Fallback
+                if (isOnline) {
+                    ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 }).catch(() => {});
+                } else {
                     queueOfflineData(tripData);
-                    syncCompleteDeparture();
-                });
-            } else {
-                queueOfflineData(tripData);
-                syncCompleteDeparture();
-            }
+                }
+            });
 
             // === INSTANT UI UPDATE - NO DELAYS ===
 
-            // Done processing - switch to registered state IMMEDIATELY
             btn.classList.remove('btn-processing');
             actionButtons.classList.remove('processing');
-            
-            // Update button to show registered state
-            btn.classList.add('btn-registered');
-            btn.innerHTML = '<span>✓ تم تسجيل رحلة الذهاب</span>';
+            btn.innerHTML = DEPARTURE_BTN_HTML; // restore original HTML (spinner replaced it)
+
+            // Transition to "return mode" — hide departure, show return
+            btn.style.display = 'none';
             btn.disabled = true;
-            btn.style.pointerEvents = 'none';
-            
-            // Enable return button with attention animation
             unlockButton(btnReturn);
+            btnReturn.style.display = 'flex';
             btnReturn.disabled = false;
-            btnReturn.classList.add('pulse-attention');
             btnReturn.style.pointerEvents = '';
-            
-            // Update hints
-            document.getElementById('departureHint').style.display = 'none';
-            document.getElementById('returnHint').style.display = 'block';
-            
+
+            // Update progress track: step 1 done, step 2 active
+            const _dDep = document.getElementById('dotDep');
+            const _dRet = document.getElementById('dotRet');
+            const _lDep = document.getElementById('labelDep');
+            const _lRet = document.getElementById('labelRet');
+            const _conn = document.getElementById('trackConnector');
+            const _badge = document.getElementById('doneBadge');
+            const _bTime = document.getElementById('depBadgeTime');
+            if (_dDep) { _dDep.className = 'track-dot dot-done'; _dDep.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+            if (_dRet) { _dRet.className = 'track-dot dot-active'; _dRet.textContent = '2'; }
+            if (_lDep) _lDep.className = 'track-label done';
+            if (_lRet) _lRet.className = 'track-label active';
+            if (_conn)  _conn.classList.add('filled');
+            if (_badge) _badge.classList.add('show');
+            if (_bTime) _bTime.textContent = new Date().toTimeString().slice(0,5);
+
             // Clear flag IMMEDIATELY
             isSubmittingDeparture = false;
             
@@ -1777,21 +2151,21 @@
                 returnTime: time
             };
 
-            // === STEP 1: HIDE PENDING TRIP CARD FIRST ===
+            // === STEP 1: HIDE PENDING TRIP CARD INSTANTLY + set guard ===
             document.getElementById('pendingTrip').style.display = 'none';
+            _returnCompletedAt = Date.now(); // Guard: prevent background fetch from re-showing pending card
             
             const tripDepartureDate = pendingTrip.departureDate;
             const tripDepartureTime = pendingTrip.departureTime;
             const key = `pending_trip_${selectedDriver.staffNumber}`;
             
-            // Complete the trip data
+            // Complete the trip data — NO syncing flag, show "مكتملة" instantly
             pendingTrip.returnDate = date;
             pendingTrip.returnTime = time;
             pendingTrip.returnTimestamp = now.getTime();
             pendingTrip.status = 'complete';
-            pendingTrip.syncing = true; // Mark as syncing
 
-            // === STEP 2: UPDATE HISTORY LIST TO "COMPLETE" WITH SYNC INDICATOR ===
+            // === STEP 2: UPDATE HISTORY LIST TO "COMPLETE" INSTANTLY (no spinner) ===
             allDriverHistory = allDriverHistory.map(t => {
                 if (t.staffNumber === selectedDriver.staffNumber && 
                     t.departureDate === tripDepartureDate && 
@@ -1803,13 +2177,13 @@
                         returnTime: time, 
                         status: 'complete',
                         statusText: 'مكتملة ✓',
-                        syncing: true
+                        syncing: false
                     };
                 }
                 return t;
             });
             
-            // Render the updated list IMMEDIATELY (with sync indicator)
+            // Render the updated list IMMEDIATELY — shows "مكتملة ✓" right away
             renderDriverHistoryPage();
 
             // === STEP 3: SAVE TO LOCAL STORAGE ===
@@ -1818,46 +2192,16 @@
             localStorage.removeItem(key);
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
 
-            // === STEP 4: SEND TO SERVER IN BACKGROUND ===
-            const syncComplete = () => {
-                allDriverHistory = allDriverHistory.map(t => {
-                    if (t.departureDate === tripDepartureDate && 
-                        t.departureTime === tripDepartureTime) {
-                        return { ...t, syncing: false };
-                    }
-                    return t;
-                });
-                renderDriverHistoryPage();
-                // Persist syncing:false to localStorage
-                const histKey = `trip_history_${selectedDriver.staffNumber}`;
-                const stored = JSON.parse(localStorage.getItem(histKey) || '[]');
-                const updated = stored.map(t => {
-                    if (t.departureDate === tripDepartureDate && t.departureTime === tripDepartureTime) {
-                        const { syncing, ...rest } = t;
-                        return rest;
-                    }
-                    return t;
-                });
-                localStorage.setItem(histKey, JSON.stringify(updated));
-            };
-            
-            if (isOnline) {
-                fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(returnData)
-                }).then(() => {
-                    setTimeout(syncComplete, 1200);
-                }).catch(error => {
-                    console.error('Background fetch failed, queuing offline:', error);
+            // === STEP 4: SAVE VIA SYNC MANAGER — instant local + background server sync ===
+            SyncManager.save('driverReturn', returnData).catch(err => {
+                console.error('SyncManager return error:', err);
+                // Fallback
+                if (isOnline) {
+                    ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 }).catch(() => {});
+                } else {
                     queueOfflineData(returnData);
-                    syncComplete();
-                });
-            } else {
-                queueOfflineData(returnData);
-                syncComplete();
-            }
+                }
+            });
 
             // === INSTANT UI UPDATE - NO DELAYS ===
             
@@ -1867,24 +2211,32 @@
             // Remove processing class from container
             actionButtons.classList.remove('processing');
             
-            // Update return button to show done state briefly
-            btn.classList.remove('btn-processing');
-            btn.classList.remove('btn-locked');
-            btn.classList.add('btn-registered');
-            btn.innerHTML = '<span>✓ تم تسجيل العودة</span>';
+            btn.classList.remove('btn-processing', 'btn-locked');
+            btn.innerHTML = RETURN_BTN_HTML;    // restore return button HTML
+            btnDep.innerHTML = DEPARTURE_BTN_HTML; // restore departure button HTML
 
-            // Reset departure button for new trip IMMEDIATELY
+            // Reset to departure mode immediately — hide return, show departure
+            btn.style.display = 'none';
+            btn.disabled = true;
             unlockButton(btnDep);
-            btnDep.classList.remove('btn-registered');
             btnDep.classList.remove('btn-locked');
+            btnDep.style.display = 'flex';
             btnDep.disabled = false;
-            btnDep.classList.add('active-btn');
-            btnDep.innerHTML = '<span>→ تسجيل وقت الذهاب</span>';
             btnDep.style.pointerEvents = '';
-            
-            // Update hints
-            document.getElementById('departureHint').style.display = 'block';
-            document.getElementById('returnHint').style.display = 'none';
+
+            // Update progress track: reset to step 1 active
+            const _dDep2 = document.getElementById('dotDep');
+            const _dRet2 = document.getElementById('dotRet');
+            const _lDep2 = document.getElementById('labelDep');
+            const _lRet2 = document.getElementById('labelRet');
+            const _conn2 = document.getElementById('trackConnector');
+            const _badge2 = document.getElementById('doneBadge');
+            if (_dDep2) { _dDep2.className = 'track-dot dot-active'; _dDep2.textContent = '1'; }
+            if (_dRet2) { _dRet2.className = 'track-dot'; _dRet2.textContent = '2'; }
+            if (_lDep2) _lDep2.className = 'track-label active';
+            if (_lRet2) _lRet2.className = 'track-label';
+            if (_conn2)  _conn2.classList.remove('filled');
+            if (_badge2) _badge2.classList.remove('show');
             
             // Clear flag IMMEDIATELY
             isSubmittingReturn = false;
@@ -1893,15 +2245,6 @@
             requestAnimationFrame(() => {
                 showOfficialToast('تم الحفظ بنجاح', 'الرحلة مكتملة وجاهزة للاعتماد');
             });
-            
-            // Reset return button after a short visual feedback
-            setTimeout(() => {
-            btn.classList.remove('btn-registered');
-            btn.innerHTML = '<span>← تسجيل وقت العودة</span>';
-            btn.disabled = true;
-            btn.classList.remove('pulse-attention');
-                btn.style.pointerEvents = '';
-            }, 1500);
         }
         
         // Update the pending trip for nurse with return data
@@ -2274,13 +2617,7 @@
                 }
             }, 2000);
             
-            // Reset buttons
-            document.getElementById('btnDeparture').classList.remove('btn-registered');
-            document.getElementById('btnDeparture').disabled = false;
-            document.getElementById('btnDeparture').innerHTML = '<span>→ تسجيل وقت الذهاب</span>';
-            document.getElementById('btnReturn').disabled = true;
-            document.getElementById('btnReturn').innerHTML = '<span>← تسجيل وقت العودة</span>';
-            document.getElementById('btnReturn').classList.remove('pulse-attention');
+            // Reset buttons via updateButtons (pendingTrip is null at this point)
             updateButtons();
             
             // Reload page after 2 minutes to reset to default state
@@ -2312,6 +2649,12 @@
                 return;
             }
             
+            // Don't refresh if departure or return was just recorded (server hasn't caught up)
+            if ((_returnCompletedAt && (Date.now() - _returnCompletedAt < 10000)) ||
+                (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000))) {
+                return;
+            }
+            
             // Also check button states
             const btnDeparture = document.getElementById('btnDeparture');
             const btnReturn = document.getElementById('btnReturn');
@@ -2336,6 +2679,14 @@
         setInterval(() => {
             if (!document.hidden) autoRefreshHistory();
         }, 12000);
+        
+        // Refresh immediately when driver returns to the app (tab/PWA switch)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && selectedDriver) {
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+                loadPendingTrip();
+            }
+        });
 
         // ============================================
         // OFFLINE SUPPORT | دعم العمل بدون إنترنت
@@ -2392,13 +2743,8 @@
 
             for (const item of queue) {
                 try {
-                    await fetch(WEB_APP_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify(item)
-                    });
-                    successCount++;
+                    const syncResult = await ReliablePost.send(WEB_APP_URL, item, { timeout: 30000 });
+                    if (!syncResult.offline) successCount++;
                     
                     // Update offlineSaved flag for synced trips
                     if (selectedDriver && item.staffNumber === selectedDriver.staffNumber) {
@@ -2485,17 +2831,11 @@
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[App] Service Worker registered successfully');
-                    
-                    // Check for updates every 60 seconds
-                    setInterval(() => {
-                        reg.update();
-                    }, 60000);
-                    
-                    // Listen for updates
+                    reg.update().catch(() => {});
+                    setInterval(() => { reg.update(); }, 60000);
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
                         console.log('[App] New Service Worker found, installing...');
-                        
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                 console.log('[App] New version available! Reloading...');
@@ -2505,12 +2845,14 @@
                     });
                 })
                 .catch(err => console.log('Service Worker registration failed:', err));
-            
-            // Listen for messages from Service Worker
+            var _reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            });
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data && event.data.type === 'SW_UPDATED') {
                     console.log('[App] ' + event.data.message);
-                    window.location.reload();
+                    if (!_reloading) { _reloading = true; window.location.reload(); }
                 }
             });
         }
