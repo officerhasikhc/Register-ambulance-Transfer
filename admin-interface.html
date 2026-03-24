@@ -3966,6 +3966,24 @@
             keysToRemove.forEach(key => localStorage.removeItem(key));
         }
 
+        // ============================================================
+        // DELETION SIGNAL — propagates trip removal to driver & nurse pages
+        // Writes to admin_deleted_trips (localStorage, 24h TTL)
+        // Broadcasts _cache_invalidation_signal so open tabs react instantly
+        // ============================================================
+        function signalTripDeletion(tripId, staffNumber, type) {
+            try {
+                var now = Date.now();
+                var existing = JSON.parse(localStorage.getItem('admin_deleted_trips') || '[]');
+                // Prune entries older than 24 hours
+                existing = existing.filter(function(e) { return now - e.ts < 24 * 60 * 60 * 1000; });
+                existing.push({ tripId: tripId || '', staffNumber: staffNumber || '', type: type || 'pending', ts: now });
+                localStorage.setItem('admin_deleted_trips', JSON.stringify(existing));
+            } catch(e) {}
+            // Cross-tab/cross-page signal via DataCache invalidation bus
+            DataCache.signalCacheInvalidation('admin_delete');
+        }
+
         // Delete pending trip — optimistic instant deletion
         async function deletePendingTrip(tripId) {
             const confirmed = await sysConfirm({
@@ -4010,6 +4028,10 @@
             
             showToast(`تم حذف الطلب ${tripId}`, 'success');
             
+            // Signal other pages (driver/nurse) about this deletion
+            var _deletedTrip = pendingTripsArr.concat(approvedTripsArr).find(t => (t.tripId || t.id) === tripId) || {};
+            signalTripDeletion(tripId, _deletedTrip.staffNumber || '', 'pending');
+
             // === BACKGROUND SERVER SYNC (silent) ===
             try {
                 const response = await fetch(`${WEB_APP_URL}?action=deletePendingTrip&tripId=${encodeURIComponent(tripId)}`);
@@ -4090,6 +4112,7 @@
                 showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
                 invalidateAdminCaches(id, false);
                 clearLocalPendingTripCaches();
+                signalTripDeletion(id, '', 'record');
             } catch (error) {
                 console.error('SyncManager direct delete error:', error);
                 // Fallback to original GET method
@@ -4100,6 +4123,7 @@
                         showToast(`تم حذف الطلب ${id} بنجاح`, 'success');
                         invalidateAdminCaches(id, false);
                         clearLocalPendingTripCaches();
+                        signalTripDeletion(id, '', 'record');
                     } else {
                         showToast(result.error || 'فشل في الحذف', 'error');
                         loadAdminData();
@@ -4162,6 +4186,7 @@
             invalidateAdminCaches(confirmedRecordId, false);
             if (confirmedAction === 'delete') {
                 clearLocalPendingTripCaches();
+                signalTripDeletion(confirmedRecordId, '', 'record');
             }
 
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===

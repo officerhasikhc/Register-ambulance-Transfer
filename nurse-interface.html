@@ -2392,9 +2392,26 @@
         let nursePendingPage = 1;
         const NURSE_PENDING_PER_PAGE = 5;
 
+        // Returns a Set of tripIds deleted by admin (from admin_deleted_trips, 24h TTL)
+        function getAdminDeletedTripIds() {
+            try {
+                var now = Date.now();
+                var deleted = JSON.parse(localStorage.getItem('admin_deleted_trips') || '[]');
+                return new Set(deleted
+                    .filter(function(e) { return now - e.ts < 24 * 60 * 60 * 1000; })
+                    .map(function(e) { return String(e.tripId || ''); })
+                    .filter(function(id) { return id !== ''; }));
+            } catch(e) { return new Set(); }
+        }
+
         function displayPendingTrips(pendingTrips) {
+            // Filter out trips deleted by admin (works cross-tab on same device)
+            var _adminDeleted = getAdminDeletedTripIds();
+            let filtered = (pendingTrips || []);
+            if (_adminDeleted.size > 0) {
+                filtered = filtered.filter(function(t) { return !_adminDeleted.has(String(t.tripId || '')); });
+            }
             // Filter out trips that were recently submitted by this nurse (stale cache protection)
-            let filtered = pendingTrips || [];
             if (_recentlySubmittedTripIds.size > 0) {
                 filtered = filtered.filter(t => !_recentlySubmittedTripIds.has(t.tripId));
             }
@@ -4578,96 +4595,139 @@
             );
         }
         
-        // Show pending trips — prioritise the FAST lightweight fetch over the heavy one.
-        // Smart stale-flash prevention: if cached data is old (>45s), defer display until
-        // the fast fetch resolves so users never see outdated trips flash on screen.
+        // ============================================================
+        // INSTANT PENDING TRIPS DISPLAY — 4-source strategy
+        // Principle: any cached data > spinner. Show first, update silently.
+        // Sources (priority order):
+        //   1. pending_trips_for_nurse  — any age, no freshness check
+        //   2. cache_pending_trips       — shared with admin page
+        //   3. cache_nurse_data_YYYY_MM  — extended expiry (100x)
+        //   4. pending_trip_* keys       — driver local (same device)
+        // ============================================================
+
+        function _getNurseTripsSource1() {
+            // Source 1: pending_trips_for_nurse — any age
+            try {
+                var raw = localStorage.getItem('pending_trips_for_nurse');
+                if (!raw) return null;
+                var parsed = JSON.parse(raw);
+                var trips = (parsed && parsed.trips) ? parsed.trips : (Array.isArray(parsed) ? parsed : null);
+                return (trips && trips.length > 0) ? trips : null;
+            } catch(e) { return null; }
+        }
+
+        function _getNurseTripsSource2() {
+            // Source 2: cache_pending_trips — written by admin page and early fetches
+            try {
+                var raw = localStorage.getItem('cache_pending_trips');
+                if (!raw) return null;
+                var parsed = JSON.parse(raw);
+                var arr = parsed.data || (Array.isArray(parsed) ? parsed : null);
+                if (!Array.isArray(arr)) return null;
+                var trips = arr.filter(function(t) { return t.status !== 'submitted'; });
+                return trips.length > 0 ? trips : null;
+            } catch(e) { return null; }
+        }
+
+        function _getNurseTripsSource3() {
+            // Source 3: cache_nurse_data_YYYY_MM — extended expiry (100x, any age)
+            try {
+                var year = new Date().getFullYear();
+                var month = new Date().getMonth() + 1;
+                var cacheKey = 'cache_nurse_data_' + year + '_' + month;
+                var cached = DataCache.get(cacheKey, (DataCache.EXPIRY.RECORDS || 300000) * 100);
+                if (!cached || !cached.data) return null;
+                var trips = cached.data.trips;
+                if (!Array.isArray(trips)) return null;
+                var filtered = trips.filter(function(t) { return t.status !== 'submitted'; });
+                return filtered.length > 0 ? filtered : null;
+            } catch(e) { return null; }
+        }
+
+        function _getNurseTripsSource4() {
+            // Source 4: driver local pending_trip_* keys (same device/browser)
+            try {
+                var trips = [];
+                var keys = Object.keys(localStorage);
+                for (var i = 0; i < keys.length; i++) {
+                    var key = keys[i];
+                    if (!key.startsWith('pending_trip_')) continue;
+                    try {
+                        var t = JSON.parse(localStorage.getItem(key));
+                        if (t && t.tripId && t.departureDate && t.status !== 'submitted') {
+                            trips.push(t);
+                        }
+                    } catch(e2) {}
+                }
+                return trips.length > 0 ? trips : null;
+            } catch(e) { return null; }
+        }
+
+        // Main: show instantly from best available source, update silently in background
         (async function showPendingTripsFromBestSource() {
             try {
-                // Step 1: Check cached data age before deciding to show it
+                // ── INSTANT DISPLAY ─────────────────────────────────────────────
+                var bestTrips = _getNurseTripsSource1()
+                             || _getNurseTripsSource2()
+                             || _getNurseTripsSource3()
+                             || _getNurseTripsSource4();
+
                 var shownFromCache = false;
-                var cachedNurseTrips = DataCache.getPendingTripsForNurse();
-
-                if (cachedNurseTrips && Array.isArray(cachedNurseTrips.trips)) {
-                    if (cachedNurseTrips.isFresh) {
-                        // Fresh cache (< 45s old) — show immediately, no flash risk
-                        displayPendingTrips(cachedNurseTrips.trips);
-                        shownFromCache = true;
-                    } else {
-                        // Stale cache — show with a subtle refreshing badge so users
-                        // know the data is being updated (avoids misleading old data)
-                        displayPendingTrips(cachedNurseTrips.trips);
-                        shownFromCache = true;
-                        var container = document.getElementById('pendingTripsContainer');
-                        if (container) {
-                            var badge = document.createElement('div');
-                            badge.id = '_staleRefreshBadge';
-                            badge.style.cssText = 'text-align:center;padding:6px 10px;font-size:11px;color:#9ca3af;display:flex;align-items:center;justify-content:center;gap:6px;';
-                            badge.innerHTML = '<div style="width:12px;height:12px;border:2px solid #e5e7eb;border-top-color:#6b7280;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>' +
-                                '<span>' + (currentLang === 'en' ? 'Checking for updates...' : 'جاري التحقق من التحديثات...') + '</span>';
-                            container.appendChild(badge);
-                        }
+                if (bestTrips) {
+                    displayPendingTrips(bestTrips);
+                    shownFromCache = true;
+                } else {
+                    // Truly no data anywhere — show "no trips" rather than spinner
+                    var container = document.getElementById('pendingTripsContainer');
+                    if (container && !container.querySelector('.pending-trip-card')) {
+                        container.innerHTML = '<div style="background:white;padding:14px;border-radius:10px;text-align:center;color:#6b7280;">' +
+                            '<span>' + (currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار') + '</span></div>';
                     }
                 }
 
-                if (!shownFromCache) {
-                    var year = new Date().getFullYear();
-                    var month = new Date().getMonth() + 1;
-                    var cacheKey = 'cache_nurse_data_' + year + '_' + month;
-                    var dcCached = null;
-                    try { dcCached = DataCache.get(cacheKey, DataCache.EXPIRY.RECORDS); } catch(e) {}
-                    if (dcCached && dcCached.data && dcCached.data.trips) {
-                        var ct = dcCached.data.trips.filter(function(t) { return t.status !== 'submitted'; });
-                        displayPendingTrips(ct);
-                        shownFromCache = true;
-                    }
-                }
+                // ── SILENT BACKGROUND UPDATE ────────────────────────────────────
+                // Wait for the fast lightweight fetch (started in <head>, ~1-3s)
+                // Only re-render if data actually changed — zero visible flicker
+                var _silentlyUpdated = false;
 
-                // Step 2: Wait for the FAST pending-trips fetch (1-2s) — removes stale badge
                 if (window.__earlyNursePendingTrips) {
                     var freshTrips = await Promise.race([
                         window.__earlyNursePendingTrips,
-                        new Promise(function(r) { setTimeout(function() { r('timeout'); }, 2500); })
+                        new Promise(function(r) { setTimeout(function() { r('timeout'); }, 4000); })
                     ]);
-                    // Remove stale badge regardless of outcome
-                    var oldBadge = document.getElementById('_staleRefreshBadge');
-                    if (oldBadge) oldBadge.remove();
+                    window.__earlyNursePendingTrips = null;
                     if (freshTrips && freshTrips !== 'timeout' && Array.isArray(freshTrips)) {
-                        displayPendingTrips(freshTrips);
+                        var freshHash = DataCache.hash(freshTrips);
+                        var prevHash  = DataCache.hash(bestTrips || []);
+                        if (freshHash !== prevHash) {
+                            displayPendingTrips(freshTrips); // silent — no spinner shown
+                        }
+                        _silentlyUpdated = true;
                         return;
                     }
                 }
 
-                // Step 3: If fast fetch timed out, try the heavy fetch briefly
-                if (window.__earlyNurseFetch) {
+                // Fallback: check heavy fetch briefly if fast one timed out/unavailable
+                if (!_silentlyUpdated && window.__earlyNurseFetch) {
                     var result = await Promise.race([
                         window.__earlyNurseFetch,
-                        new Promise(function(r) { setTimeout(function() { r(null); }, 500); })
+                        new Promise(function(r) { setTimeout(function() { r(null); }, 600); })
                     ]);
-                    var oldBadge2 = document.getElementById('_staleRefreshBadge');
-                    if (oldBadge2) oldBadge2.remove();
                     if (result && result.trips) {
                         var nt = result.trips.filter(function(t) { return t.status !== 'submitted'; });
-                        displayPendingTrips(nt);
-                        return;
+                        var ntHash = DataCache.hash(nt);
+                        var prevHash2 = DataCache.hash(bestTrips || []);
+                        if (ntHash !== prevHash2) {
+                            displayPendingTrips(nt);
+                        }
                     }
-                }
-
-                // If we already showed cache, that's fine — background fetches will update later
-                if (shownFromCache) return;
-
-                // No data at all — show loading
-                var container = document.getElementById('pendingTripsContainer');
-                if (container) {
-                    container.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;">' +
-                        '<div style="display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#6b7280;border-radius:50%;animation:spin 0.8s linear infinite;margin-left:8px;vertical-align:middle;"></div> ' +
-                        '<span>' + (currentLang === 'en' ? 'Loading trips...' : 'جاري تحميل الرحلات...') + '</span></div>';
                 }
             } catch(e) {}
         })();
 
         // Invalidate data cache on code update to ensure fresh records with Ext Support column
         (function() {
-            var codeVer = 'v37';
+            var codeVer = 'v39';
             if (localStorage.getItem('_nurseCodeVer') !== codeVer) {
                 localStorage.setItem('_nurseCodeVer', codeVer);
                 try { DataCache.invalidateAll(); } catch(e) {}
@@ -4762,11 +4822,17 @@
             }
         });
 
-        // Cross-tab invalidation signal: driver departure/return from another tab
-        // Forces nurse page to refresh pending trips immediately (no waiting for 10s poll)
+        // Cross-tab invalidation signals: driver departure/return OR admin deletion
         DataCache.listenForInvalidation(function(signal) {
             if (signal.source === 'driver_trip' || signal.source === 'driver_return') {
                 console.log('[Nurse] Cross-tab signal:', signal.source, '— refreshing pending trips');
+                loadPendingTrips(false, true);
+            } else if (signal.source === 'admin_delete') {
+                // Admin deleted a trip — immediately re-render with filter applied
+                if (currentPendingTrips && currentPendingTrips.length > 0) {
+                    displayPendingTrips(currentPendingTrips);
+                }
+                // Also force a fresh fetch to stay in sync
                 loadPendingTrips(false, true);
             }
         });

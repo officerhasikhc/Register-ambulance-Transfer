@@ -2888,6 +2888,9 @@
         // instead of fetching from server (which may not have synced yet).
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && selectedDriver) {
+                // Check for admin-deleted trips first — clear ghost trips instantly
+                checkAdminDeletions();
+
                 // Check for persistent return-completed flag first
                 const flag = getReturnCompletedFlag(selectedDriver.staffNumber);
                 if (flag) {
@@ -2917,6 +2920,64 @@
 
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
                 loadPendingTrip();
+            }
+        });
+
+        // ============================================================
+        // ADMIN DELETION SYNC — react to admin deleting a trip
+        // Checks admin_deleted_trips localStorage key (written by admin page)
+        // Works instantly on same device; on other devices: triggers on next load
+        // ============================================================
+        function checkAdminDeletions() {
+            if (!selectedDriver) return;
+            try {
+                var now = Date.now();
+                var deleted = JSON.parse(localStorage.getItem('admin_deleted_trips') || '[]');
+                // Keep only last 24 hours
+                deleted = deleted.filter(function(e) { return now - e.ts < 24 * 60 * 60 * 1000; });
+                if (deleted.length === 0) return;
+                var deletedIds = new Set(deleted.map(function(e) { return String(e.tripId || ''); }));
+                var staffStr   = String(selectedDriver.staffNumber || '').trim();
+
+                // 1. Clear active pending trip if admin deleted it
+                if (pendingTrip && pendingTrip.tripId && deletedIds.has(String(pendingTrip.tripId))) {
+                    var pendingKey = 'pending_trip_' + selectedDriver.staffNumber;
+                    localStorage.removeItem(pendingKey);
+                    clearReturnCompletedFlag(selectedDriver.staffNumber);
+                    pendingTrip = null;
+                    var pendingDiv = document.getElementById('pendingTrip');
+                    if (pendingDiv) pendingDiv.style.display = 'none';
+                    updateButtons();
+                    showTripDeletionToast();
+                }
+
+                // 2. Clean trip_history_* from deleted entries
+                var histKey = 'trip_history_' + selectedDriver.staffNumber;
+                var hist = JSON.parse(localStorage.getItem(histKey) || '[]');
+                var cleanHist = hist.filter(function(t) { return !deletedIds.has(String(t.tripId || '')); });
+                if (cleanHist.length !== hist.length) {
+                    allDriverHistory = allDriverHistory.filter(function(t) { return !deletedIds.has(String(t.tripId || '')); });
+                    localStorage.setItem(histKey, JSON.stringify(cleanHist));
+                    renderTripHistoryFromData(allDriverHistory);
+                }
+            } catch(e) {}
+        }
+
+        function showTripDeletionToast() {
+            try {
+                var el = document.createElement('div');
+                el.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;padding:12px 22px;border-radius:12px;font-size:14px;font-weight:600;z-index:9999;text-align:center;direction:rtl;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+                el.textContent = '⚠️ تم إلغاء هذه الرحلة بواسطة الإدارة';
+                document.body.appendChild(el);
+                setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 5000);
+            } catch(e) {}
+        }
+
+        // Listen for admin_delete cross-tab signal — react immediately
+        DataCache.listenForInvalidation(function(signal) {
+            if (signal.source === 'admin_delete') {
+                checkAdminDeletions();
+                if (selectedDriver) loadPendingTrip();
             }
         });
 
