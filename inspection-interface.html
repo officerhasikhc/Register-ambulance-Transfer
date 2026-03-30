@@ -182,10 +182,6 @@
         .session-btn.done .done-dot { display: block; }
         .session-btn.done.active .done-dot { background: white; border-color: var(--success); }
         .session-hint { font-size: 11px; font-weight: 600; color: var(--success); flex: 1; text-align: center; transition: opacity 0.3s; }
-        .session-time-row { display: flex; align-items: center; gap: 6px; margin-right: auto; }
-        .session-time-label { font-size: 11px; color: var(--text-secondary); }
-        .session-time-input { padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 7px; font-family: inherit; font-size: 12px; width: 90px; text-align: center; }
-        .session-time-input:focus { outline: none; border-color: var(--primary-blue); }
 
         /* ── Global Progress ── */
         .global-progress-wrap { margin-bottom: 13px; }
@@ -376,6 +372,45 @@
         .badge-fault    { background: var(--error-light);   color: #991b1b; }
         .history-empty { text-align: center; color: var(--text-secondary); font-size: 13px; padding: 20px; }
 
+        /* ── Session Period Label ── */
+        .session-period-label {
+            text-align: center; margin-bottom: 8px; padding: 6px 12px;
+            border-radius: 8px; font-size: 13px; font-weight: 700;
+            transition: all 0.25s ease;
+        }
+        .session-period-label.period-am {
+            background: #fefce8; border: 1px solid #fde68a; color: #a16207;
+        }
+        .session-period-label.period-pm {
+            background: #f0f4ff; border: 1px solid #c7d2fe; color: #4338ca;
+        }
+        .session-period-label.period-done {
+            background: var(--success-light); border: 1px solid #6ee7b7; color: #065f46;
+        }
+
+        /* ── Time Badge on Session Buttons ── */
+        .session-btn .sess-time-badge {
+            display: block; font-size: 9px; font-weight: 600;
+            opacity: 0.75; margin-top: 1px; direction: ltr;
+        }
+        .session-btn.done .sess-time-badge { opacity: 1; }
+        .session-btn.active .sess-time-badge { opacity: 0.85; }
+
+        /* ── Mini Week Progress ── */
+        .week-mini-progress {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            margin-bottom: 10px; font-size: 11px; color: var(--text-secondary);
+        }
+        .week-mini-dots { display: flex; gap: 4px; }
+        .week-mini-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #e5e7eb; transition: background 0.2s;
+        }
+        .week-mini-dot.dot-done { background: var(--success); }
+        .week-mini-dot.dot-partial { background: var(--warning); }
+        .week-mini-dot.dot-future { background: #f3f4f6; border: 1px dashed #d1d5db; }
+        .week-mini-label { font-weight: 600; }
+
         @media (max-width: 480px) {
             body { padding: 6px; }
             .main-card { padding: 12px; border-radius: 14px; }
@@ -403,7 +438,6 @@
             .day-tab-date { font-size: 9px; }
             .session-btn { padding: 5px 12px; font-size: 11px; }
             .session-hint { font-size: 10px; }
-            .session-time-input { width: 82px; font-size: 11px; }
             .section-header { padding: 6px 8px; }
             .sec-title { font-size: 11px; }
             .sec-icon-badge { width: 22px; height: 22px; }
@@ -418,6 +452,9 @@
             .btn-save-next { font-size: 11px; padding: 6px 11px; }
             .btn-submit-week { font-size: 13px; padding: 12px; }
             .session-switch-toast { font-size: 12px; padding: 8px 18px; white-space: normal; text-align: center; max-width: calc(100vw - 32px); }
+            .session-period-label { font-size: 12px; padding: 5px 10px; }
+            .week-mini-progress { font-size: 10px; }
+            .week-mini-dot { width: 7px; height: 7px; }
             .item-row    { scroll-margin-top: 90px; }
             .inspection-section { scroll-margin-top: 60px; }
         }
@@ -510,18 +547,22 @@
         <!-- Day Tabs -->
         <div class="day-tabs" id="dayTabs"></div>
 
+        <!-- Mini Week Progress -->
+        <div class="week-mini-progress" id="weekMiniProgress"></div>
+
         <!-- Session Bar -->
         <div class="session-bar">
             <div class="session-toggle">
-                <button class="session-btn active" id="btnAm" onclick="switchSession('am')">صباح<span class="done-dot"></span></button>
-                <button class="session-btn" id="btnPm" onclick="switchSession('pm')">مساء<span class="done-dot"></span></button>
+                <button class="session-btn active" id="btnAm" onclick="switchSession('am')">صباح<span class="sess-time-badge" id="amTimeBadge"></span><span class="done-dot"></span></button>
+                <button class="session-btn" id="btnPm" onclick="switchSession('pm')">مساء<span class="sess-time-badge" id="pmTimeBadge"></span><span class="done-dot"></span></button>
             </div>
             <span class="session-hint" id="sessionHint"></span>
-            <div class="session-time-row">
-                <span class="session-time-label">الساعة:</span>
-                <input type="time" class="session-time-input" id="sessionTimeInput" oninput="onTimeChange(this.value)">
-            </div>
         </div>
+        <!-- Hidden time input for data compatibility -->
+        <input type="time" id="sessionTimeInput" style="display:none">
+
+        <!-- Session Period Label -->
+        <div class="session-period-label" id="sessionPeriodLabel"></div>
 
         <!-- Global Progress -->
         <div class="global-progress-wrap">
@@ -557,16 +598,18 @@
             <textarea class="general-notes-input" id="generalNotesInput" placeholder="أي ملاحظة إضافية..." oninput="onNotesChange(this.value)"></textarea>
         </div>
 
-        <!-- Submit Section -->
-        <div class="submit-section">
+        <!-- Submit Section (visible only on Saturday after PM done) -->
+        <div class="submit-section" style="display:none;">
             <div class="week-status-summary" id="weekSummary"></div>
             <div class="validation-errors" id="validationErrors" style="display:none;"></div>
             <button class="btn-submit-week" id="btnSubmitWeek" onclick="submitWeek()">
                 إرسال الأسبوع كاملاً
             </button>
-            <div class="saved-badge" id="savedBadge">✓ تم الحفظ محلياً</div>
-            <div class="alert-msg" id="alertMsg"></div>
         </div>
+
+        <!-- Always visible feedback -->
+        <div class="saved-badge" id="savedBadge">✓ تم الحفظ محلياً</div>
+        <div class="alert-msg" id="alertMsg"></div>
     </div>
 
     <!-- Section Complete Toast -->
@@ -728,10 +771,45 @@
             } catch(e) { initWeek(todayStr); }
         } else { initWeek(todayStr); }
 
-        // Open today's tab if within current week
+        // Smart resume: navigate to last saved day/session, or today if no data
         if (weekDates.length === 7) {
-            const diff = Math.floor((today - weekDates[0]) / 86400000);
-            if (diff >= 0 && diff < 7) currentDayIdx = diff;
+            let resumeDay = 0, resumeSession = 'am';
+            let foundData = false;
+
+            // Find the furthest day with data, and the correct session
+            for (let d = 6; d >= 0; d--) {
+                const dayData = draft.days[d];
+                if (!dayData) continue;
+                const pmF = Object.values((dayData.pm||{}).items||{}).filter(Boolean).length;
+                const amF = Object.values((dayData.am||{}).items||{}).filter(Boolean).length;
+                if (amF > 0 || pmF > 0) {
+                    resumeDay = d;
+                    foundData = true;
+                    // If AM done but PM not done → resume at PM
+                    if (amF >= TOTAL_ITEMS && pmF < TOTAL_ITEMS) {
+                        resumeSession = 'pm';
+                    } else if (amF >= TOTAL_ITEMS && pmF >= TOTAL_ITEMS) {
+                        // Both done: go to next available day if exists
+                        for (let nd = d + 1; nd < 7; nd++) {
+                            if (!isFutureDay(nd)) { resumeDay = nd; resumeSession = 'am'; break; }
+                        }
+                    } else {
+                        resumeSession = 'am';
+                    }
+                    break;
+                }
+            }
+
+            if (!foundData) {
+                // No saved data: default to today
+                const diff = Math.floor((today - weekDates[0]) / 86400000);
+                if (diff >= 0 && diff < 7) resumeDay = diff;
+            }
+
+            currentDayIdx  = resumeDay;
+            currentSession = resumeSession;
+            document.getElementById('btnAm').classList.toggle('active', resumeSession === 'am');
+            document.getElementById('btnPm').classList.toggle('active', resumeSession === 'pm');
         }
 
         updateDatepickerLabel();
@@ -740,10 +818,6 @@
         loadHistory();
         updateWeekSummary();
         setTimeout(checkIncompleteReminder, 400);
-        // Sync any pending draft data immediately on page load
-        if (hasDraftData()) {
-            setTimeout(autoSyncDraft, 2000);
-        }
     }
 
     // ============================================================
@@ -1057,26 +1131,28 @@
         if (isFutureDay(currentDayIdx)) {
             document.getElementById('btnAm').disabled = true;
             document.getElementById('btnPm').disabled = true;
-            document.getElementById('sessionTimeInput').disabled = true;
             document.getElementById('generalNotesInput').disabled = true;
+            document.getElementById('sessionPeriodLabel').style.display = 'none';
             container.innerHTML = `
                 <div class="day-locked">
                     <div class="day-locked-icon">🔒</div>
                     <p>هذا اليوم لم يحن بعد<br><span style="font-size:11px;opacity:.7;">لا يمكن إدخال بيانات لأيام مستقبلية</span></p>
                 </div>`;
             updateProgress(0);
+            updateTimeBadges();
+            updateWeekMiniProgress();
+            updateSubmitSectionVisibility();
             return;
         }
 
         document.getElementById('btnAm').disabled = false;
         document.getElementById('btnPm').disabled = false;
-        document.getElementById('sessionTimeInput').disabled = false;
         document.getElementById('generalNotesInput').disabled = false;
 
         const dayData  = draft.days[currentDayIdx] || {};
         const sessData = dayData[currentSession]    || { time:'', items:{}, itemNotes:{} };
 
-        // Time: default to now if not set
+        // Time: auto-set to now (kept in hidden input for data compat)
         const timeVal = sessData.time || '';
         if (!timeVal) {
             const now = new Date();
@@ -1085,6 +1161,15 @@
         } else {
             document.getElementById('sessionTimeInput').value = timeVal;
         }
+
+        // Update session period label
+        updateSessionPeriodLabel();
+        // Update time badges on AM/PM buttons
+        updateTimeBadges();
+        // Update mini week progress
+        updateWeekMiniProgress();
+        // Update submit section visibility
+        updateSubmitSectionVisibility();
 
         document.getElementById('generalNotesInput').value = dayData.notes || '';
 
@@ -1567,9 +1652,113 @@
                 window._autoSwitchTimer = setTimeout(() => switchSession('pm', true), 1400);
             }
         }
-        // Schedule silent sync when any session completes
-        if (filled === TOTAL_ITEMS) scheduleAutoSync();
         updateSessionButtons();
+    }
+
+    // ============================================================
+    // SESSION PERIOD LABEL
+    // ============================================================
+    function updateSessionPeriodLabel() {
+        const el = document.getElementById('sessionPeriodLabel');
+        if (!el) return;
+        el.style.display = '';
+
+        const dayData   = draft.days[currentDayIdx] || {};
+        const amItems   = (dayData.am||{}).items || {};
+        const pmItems   = (dayData.pm||{}).items || {};
+        const amDone    = Object.values(amItems).filter(Boolean).length >= TOTAL_ITEMS;
+        const pmDone    = Object.values(pmItems).filter(Boolean).length >= TOTAL_ITEMS;
+
+        el.classList.remove('period-am','period-pm','period-done');
+
+        if (amDone && pmDone) {
+            el.textContent = '✅ اكتمل فحص اليوم';
+            el.classList.add('period-done');
+        } else if (currentSession === 'pm') {
+            el.innerHTML = '🌙 فحص المساء' + (amDone ? ' <span style="font-size:11px;opacity:.7;">(الصباح مكتمل ✓)</span>' : '');
+            el.classList.add('period-pm');
+        } else {
+            el.textContent = '☀ فحص الصباح';
+            el.classList.add('period-am');
+        }
+    }
+
+    // ============================================================
+    // TIME BADGES ON SESSION BUTTONS
+    // ============================================================
+    function updateTimeBadges() {
+        const dayData = draft.days[currentDayIdx] || {};
+        ['am','pm'].forEach(sess => {
+            const badge = document.getElementById(sess === 'am' ? 'amTimeBadge' : 'pmTimeBadge');
+            if (!badge) return;
+            const sessObj  = dayData[sess] || {};
+            const time     = sessObj.time || '';
+            const items    = sessObj.items || {};
+            const filled   = Object.values(items).filter(Boolean).length;
+            if (time && filled > 0) {
+                badge.textContent = time;
+            } else {
+                badge.textContent = '';
+            }
+        });
+    }
+
+    // ============================================================
+    // MINI WEEK PROGRESS
+    // ============================================================
+    function updateWeekMiniProgress() {
+        const el = document.getElementById('weekMiniProgress');
+        if (!el) return;
+        let doneCount = 0, totalAvail = 0;
+        let dotsHtml = '';
+        for (let d = 0; d < 7; d++) {
+            const future = isFutureDay(d);
+            const day    = draft.days[d] || {};
+            const amF    = Object.values((day.am||{}).items||{}).filter(Boolean).length;
+            const pmF    = Object.values((day.pm||{}).items||{}).filter(Boolean).length;
+            const amDone = amF >= TOTAL_ITEMS;
+            const pmDone = pmF >= TOTAL_ITEMS;
+
+            let cls = 'week-mini-dot';
+            if (future) {
+                cls += ' dot-future';
+            } else {
+                totalAvail++;
+                if (amDone && pmDone) { cls += ' dot-done'; doneCount++; }
+                else if (amF > 0 || pmF > 0) { cls += ' dot-partial'; }
+            }
+            dotsHtml += `<span class="${cls}" title="${DAY_NAMES_AR[d]}"></span>`;
+        }
+        el.innerHTML = `<div class="week-mini-dots">${dotsHtml}</div><span class="week-mini-label">${doneCount} من ${totalAvail} أيام مكتملة</span>`;
+    }
+
+    // ============================================================
+    // SUBMIT SECTION VISIBILITY (Saturday only after PM done)
+    // ============================================================
+    function updateSubmitSectionVisibility() {
+        const submitSec = document.querySelector('.submit-section');
+        if (!submitSec) return;
+
+        // Check if Saturday PM is done
+        const satData   = draft.days[6] || {};
+        const satPmDone = Object.values((satData.pm||{}).items||{}).filter(Boolean).length >= TOTAL_ITEMS;
+
+        // Check if ALL available (non-future) days have both AM+PM complete
+        let allAvailDone = true;
+        for (let d = 0; d < 7; d++) {
+            if (isFutureDay(d)) continue;
+            const dd = draft.days[d] || {};
+            const amF = Object.values((dd.am||{}).items||{}).filter(Boolean).length;
+            const pmF = Object.values((dd.pm||{}).items||{}).filter(Boolean).length;
+            if (amF < TOTAL_ITEMS || pmF < TOTAL_ITEMS) { allAvailDone = false; break; }
+        }
+
+        // Show submit when: viewing Saturday + Saturday PM done, OR all days complete
+        if ((currentDayIdx === 6 && satPmDone) || allAvailDone) {
+            submitSec.style.display = '';
+        } else {
+            submitSec.style.display = 'none';
+        }
     }
 
     function updateSessionButtons() {
@@ -1601,6 +1790,11 @@
 
         // Show/update the day-complete bar
         checkDayComplete();
+        // Refresh dynamic UI elements
+        updateSessionPeriodLabel();
+        updateTimeBadges();
+        updateWeekMiniProgress();
+        updateSubmitSectionVisibility();
     }
 
     // ============================================================
@@ -1674,7 +1868,11 @@
         } else {
             // All available days done - show a soft success message
             showAlert('تم حفظ جميع الأيام المتاحة. يمكنك إرسال الأسبوع عند اكتماله.', 'success');
-            document.getElementById('btnSubmitWeek')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            updateSubmitSectionVisibility();
+            const submitBtn = document.getElementById('btnSubmitWeek');
+            if (submitBtn && submitBtn.closest('.submit-section')?.style.display !== 'none') {
+                submitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
     }
 
@@ -1771,7 +1969,6 @@
         if (badge) { badge.style.display = 'block'; clearTimeout(window._savedTimer); window._savedTimer = setTimeout(() => { badge.style.display = 'none'; }, 2000); }
         clearTimeout(window._reminderCheckTimer);
         window._reminderCheckTimer = setTimeout(checkIncompleteReminder, 300);
-        scheduleAutoSync();
     }
 
     // ============================================================
@@ -1857,18 +2054,10 @@
 
         let success = false;
         try {
-            const res = await fetch(WEB_APP_URL, {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            success = data.success;
+            const result = await ReliablePost.send(WEB_APP_URL, payload, { timeout: 60000 });
+            success = result.success;
         } catch(e) {
-            try {
-                const enc = encodeURIComponent(JSON.stringify(payload));
-                const res = await fetch(`${WEB_APP_URL}?action=postViaGet&payload=${enc}`);
-                const data = await res.json();
-                success = data.success;
-            } catch(e2) {}
+            console.error('submitWeek error:', e);
         }
 
         if (success) {
@@ -1948,7 +2137,9 @@
     function renderHistoryData(weeks) {
         _historyWeeks = weeks;
         const el   = document.getElementById('historyContainer');
-        const keys = Object.keys(weeks).sort().reverse();
+        // Filter out current active draft week — it hasn't been officially submitted yet
+        const activeDraftWeek = (hasDraftData() && draft.weekStart) ? draft.weekStart : null;
+        const keys = Object.keys(weeks).filter(ws => ws !== activeDraftWeek).sort().reverse();
         if (!keys.length) { el.innerHTML = '<div class="history-empty">لا توجد فحوصات مرسلة سابقاً</div>'; return; }
         el.innerHTML = '';
         keys.slice(0,8).forEach(ws => {
