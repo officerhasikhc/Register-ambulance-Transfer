@@ -577,6 +577,9 @@ function doPost(e) {
       case 'submitInspectionWeek':
         return submitInspectionWeek(data);
 
+      case 'deleteInspectionWeek':
+        return deleteInspectionWeek(data);
+
       default:
         return ContentService
           .createTextOutput(JSON.stringify({
@@ -4298,6 +4301,72 @@ function getWeeklyInspections(params) {
 
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, inspections: inspections }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Delete inspection rows for a specific week.
+ * If staffNumber is supplied, only delete that driver's records for the week.
+ */
+function deleteInspectionWeek(data) {
+  try {
+    var sheet = setupInspectionSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, deleted: 0 }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var weekStart = String(data.weekStart || '').trim();
+    var staffNumber = String(data.staffNumber || '').trim();
+    var driverName = String(data.driverName || '').trim();
+
+    if (!weekStart) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'weekStart is required' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var keepRows = [];
+    var deleted = 0;
+    for (var i = 0; i < values.length; i++) {
+      var row = values[i];
+      var rowWeek = row[2];
+      if (rowWeek instanceof Date) {
+        rowWeek = Utilities.formatDate(rowWeek, CONFIG.TIME_ZONE, 'yyyy-MM-dd');
+      }
+      var rowStaff = String(row[5] || '').trim();
+      var rowDriver = String(row[4] || '').trim();
+      var matchWeek = String(rowWeek || '').trim() === weekStart;
+      var matchStaff = !staffNumber || rowStaff === staffNumber;
+      var matchDriver = !driverName || rowDriver === driverName;
+      if (matchWeek && matchStaff && matchDriver) {
+        deleted += 1;
+      } else {
+        keepRows.push(row);
+      }
+    }
+
+    if (deleted > 0) {
+      if (values.length > 0) {
+        sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+        if (keepRows.length > 0) {
+          sheet.getRange(2, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
+        }
+      }
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, deleted: deleted }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
