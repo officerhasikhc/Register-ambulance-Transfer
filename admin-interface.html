@@ -2039,9 +2039,8 @@
                             </div>
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;">
-                            <button onclick="clearLocalInspectionDraftsForSelectedWeek()" class="btn btn-export" style="background:#f97316;color:white;border:none;">مسح المسودات المحلية للأسبوع المحدد</button>
-                            <button onclick="clearAllLocalInspectionDrafts()" class="btn btn-export" style="background:#ef4444;color:white;border:none;">مسح كل المسودات المحلية</button>
-                            <button onclick="deleteInspectionWeekFromServer()" class="btn btn-export" style="background:#b91c1c;color:white;border:none;">مسح الفحوصات المخزنة للأسبوع المحدد</button>
+                            <button onclick="showLocalDraftsDetails()" class="btn btn-export" style="background:#f97316;color:white;border:none;padding:8px 12px;font-size:12px;">مسح المسودات المحلية</button>
+                            <button onclick="showServerInspectionsDetails()" class="btn btn-export" style="background:#b91c1c;color:white;border:none;padding:8px 12px;font-size:12px;">مسح الفحوصات المخزنة</button>
                         </div>
                     </div>
 
@@ -5341,6 +5340,117 @@
 ${pages}
 </body>
 </html>`;
+        }
+
+        // New functions for showing details before clearing inspections
+        function getLocalDraftsDetails() {
+            const draftKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('inspection_draft_')) {
+                    draftKeys.push(key);
+                }
+            }
+
+            const details = [];
+            draftKeys.forEach(key => {
+                try {
+                    const value = localStorage.getItem(key);
+                    if (!value) return;
+                    const draft = JSON.parse(value);
+                    const weekStart = String(draft.weekStart || '').trim();
+                    const driverName = draft.driverName || 'غير محدد';
+                    details.push({ weekStart, driverName, key });
+                } catch (_) {}
+            });
+
+            return details;
+        }
+
+        function getServerInspectionsDetails() {
+            if (!_allInspections || _allInspections.length === 0) return [];
+
+            const weekStart = getSelectedInspectionWeek();
+            const driverFilter = document.getElementById('inspDriverFilter').value;
+
+            const filtered = _allInspections.filter(r =>
+                (!weekStart || String(r.Week_Start||'').trim() === weekStart) &&
+                (!driverFilter || r.Driver_Name === driverFilter)
+            );
+
+            // Group by driver and week
+            const groups = {};
+            filtered.forEach(r => {
+                const ws = String(r.Week_Start || '').trim().substring(0, 10);
+                const key = r.Driver_Name + '|' + ws;
+                if (!groups[key]) {
+                    groups[key] = { driver: r.Driver_Name, weekStart: ws, count: 0 };
+                }
+                groups[key].count++;
+            });
+
+            return Object.values(groups);
+        }
+
+        async function showLocalDraftsDetails() {
+            const details = getLocalDraftsDetails();
+            if (details.length === 0) {
+                showToast('لا توجد مسودات محلية للفحوصات', 'info');
+                return;
+            }
+
+            const weekGroups = {};
+            details.forEach(d => {
+                if (!weekGroups[d.weekStart]) weekGroups[d.weekStart] = [];
+                weekGroups[d.weekStart].push(d.driverName);
+            });
+
+            let message = 'المسودات المحلية الموجودة:\n\n';
+            Object.keys(weekGroups).sort().forEach(week => {
+                const drivers = [...new Set(weekGroups[week])];
+                message += `الأسبوع: ${week}\n`;
+                message += `السائقون: ${drivers.join(', ')}\n`;
+                message += `عدد المسودات: ${weekGroups[week].length}\n\n`;
+            });
+
+            const confirmed = await sysConfirm({
+                title: 'تفاصيل المسودات المحلية',
+                message: message,
+                icon: 'warning',
+                confirmText: 'مسح الكل',
+                cancelText: 'إلغاء'
+            });
+
+            if (confirmed) {
+                clearAllLocalInspectionDrafts();
+            }
+        }
+
+        async function showServerInspectionsDetails() {
+            const details = getServerInspectionsDetails();
+            if (details.length === 0) {
+                showToast('لا توجد بيانات فحوصات مخزنة تطابق الفلاتر المحددة', 'info');
+                return;
+            }
+
+            let message = 'البيانات المخزنة التي سيتم مسحها:\n\n';
+            details.forEach(d => {
+                message += `السائق: ${d.driver}\n`;
+                message += `الأسبوع: ${d.weekStart}\n`;
+                message += `عدد الأيام: ${d.count}\n\n`;
+            });
+
+            const confirmed = await sysConfirm({
+                title: 'تفاصيل الفحوصات المخزنة',
+                message: message,
+                icon: 'danger',
+                confirmText: 'مسح الكل',
+                cancelText: 'إلغاء'
+            });
+
+            if (confirmed) {
+                await deleteInspectionWeekFromServer();
+            }
         }
 
         // Auto-load inspections on page load
