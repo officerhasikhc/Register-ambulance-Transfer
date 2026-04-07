@@ -819,6 +819,7 @@
         updateWeekSummary();
         setTimeout(checkIncompleteReminder, 400);
         syncDraftWithServer();
+        checkInspectionLock();
     }
 
     // ============================================================
@@ -1013,6 +1014,7 @@
             renderForm();
             updateWeekSummary();
             saveDraft();
+            checkInspectionLock();
         } else {
             // Not Sunday → navigate to that day within current week (if it falls in it)
             const pickedISO = toISO(d);
@@ -2016,11 +2018,31 @@
     // ============================================================
     let _syncInProgress = false;
     let _autoSyncTimer  = null;
+    let _syncRetryCount = 0;
+    const _SYNC_MAX_RETRY_DELAY = 300000; // 5 minutes max
 
-    function scheduleAutoSync() {
+    function scheduleAutoSync(delaySec) {
         clearTimeout(_autoSyncTimer);
-        _autoSyncTimer = setTimeout(autoSyncDraft, 15000);
+        const ms = delaySec ? delaySec * 1000 : 15000;
+        _autoSyncTimer = setTimeout(autoSyncDraft, ms);
     }
+
+    function scheduleRetrySync() {
+        _syncRetryCount++;
+        // Exponential backoff: 30s, 60s, 120s, 240s, capped at 300s
+        const delay = Math.min(30000 * Math.pow(2, _syncRetryCount - 1), _SYNC_MAX_RETRY_DELAY);
+        console.log('[AutoSync] Retry #' + _syncRetryCount + ' in ' + (delay/1000) + 's');
+        scheduleAutoSync(delay / 1000);
+    }
+
+    // Retry immediately when internet comes back
+    window.addEventListener('online', function() {
+        if (hasDraftData && hasDraftData() && !_syncInProgress) {
+            console.log('[AutoSync] Online detected, retrying now');
+            _syncRetryCount = 0;
+            scheduleAutoSync(2);
+        }
+    });
 
     let _syncPendingRetry = false;
 
@@ -2044,6 +2066,7 @@
         try {
             const result = await ReliablePost.send(WEB_APP_URL, payload, { background: true });
             if (result && result.success) {
+                _syncRetryCount = 0;
                 DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber);
                 if (syncDot) {
                     const prev = syncDot.textContent;
@@ -2053,8 +2076,20 @@
                         syncDot.textContent = prev.startsWith('☁✓') ? '' : prev;
                     }, 3000);
                 }
+            } else {
+                if (syncDot) {
+                    syncDot.textContent = '☁↻ سيُعاد المحاولة';
+                    syncDot.style.color = 'var(--warning, #f59e0b)';
+                }
+                scheduleRetrySync();
             }
         } catch(_) {
+            if (syncDot) {
+                syncDot.textContent = '☁↻ سيُعاد المحاولة';
+                syncDot.style.color = 'var(--warning, #f59e0b)';
+            }
+            scheduleRetrySync();
+        } finally {
             _syncInProgress = false;
             if (_syncPendingRetry) {
                 _syncPendingRetry = false;
@@ -2064,9 +2099,61 @@
     }
 
     // ============================================================
+    // INSPECTION LOCK CHECK (prevent concurrent staff submissions)
+    // ============================================================
+    let _weekLocked = false;
+    let _weekLockedBy = '';
+
+    async function checkInspectionLock() {
+        if (!loggedInUser?.staffNumber || !draft.weekStart) return;
+        try {
+            const url = `${WEB_APP_URL}?action=checkInspectionLock&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&weekStart=${encodeURIComponent(draft.weekStart)}&_t=${Date.now()}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data && data.success && data.locked) {
+                _weekLocked = true;
+                _weekLockedBy = data.lockedBy || data.lockedStaff || '';
+                showLockBanner(true);
+            } else {
+                _weekLocked = false;
+                _weekLockedBy = '';
+                showLockBanner(false);
+            }
+        } catch(e) {
+            // Network error — don't block, allow optimistic work
+            console.warn('checkInspectionLock failed:', e);
+        }
+    }
+
+    function showLockBanner(locked) {
+        let banner = document.getElementById('lockBanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'lockBanner';
+            banner.style.cssText = 'display:none;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 16px;margin:8px 0;text-align:center;font-size:13px;font-weight:600;color:#92400e;';
+            const form = document.getElementById('inspectionForm') || document.querySelector('.card');
+            if (form) form.parentNode.insertBefore(banner, form);
+        }
+        if (locked) {
+            banner.innerHTML = `⚠ هذا الأسبوع مسجّل بالفعل من قِبل <strong>${_weekLockedBy}</strong>. لا يمكن تسجيل فحوصات جديدة لهذا الأسبوع.`;
+            banner.style.display = 'block';
+            const submitBtn = document.getElementById('btnSubmitWeek');
+            if (submitBtn) submitBtn.disabled = true;
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+
+    // ============================================================
     // SUBMIT WEEK
     // ============================================================
     async function submitWeek() {
+        // 0. Check lock before submission
+        if (_weekLocked) {
+            showAlert('⚠ هذا الأسبوع مسجّل من قِبل ' + _weekLockedBy + '. لا يمكن الإرسال.', 'error');
+            return;
+        }
+
         // 1. Validate all days up to today are complete
         const errors = validateWeekForSubmission();
         if (errors.length) {
@@ -2079,6 +2166,27 @@
 
         const btn = document.getElementById('btnSubmitWeek');
         btn.disabled = true;
+        btn.textContent = 'جارٍ التحقق...';
+
+        // Double-check lock from server before submitting
+        try {
+            const lockUrl = `${WEB_APP_URL}?action=checkInspectionLock&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&weekStart=${encodeURIComponent(draft.weekStart)}&_t=${Date.now()}`;
+            const lockRes = await fetch(lockUrl);
+            const lockData = await lockRes.json();
+            if (lockData && lockData.success && lockData.locked) {
+                _weekLocked = true;
+                _weekLockedBy = lockData.lockedBy || lockData.lockedStaff || '';
+                showLockBanner(true);
+                btn.disabled = false;
+                btn.textContent = 'إرسال الأسبوع كاملاً';
+                showAlert('⚠ هذا الأسبوع مسجّل من قِبل ' + _weekLockedBy + '. لا يمكن الإرسال.', 'error');
+                return;
+            }
+        } catch(e) {
+            console.warn('Lock check before submit failed:', e);
+            // Continue with submission if lock check fails (network issue)
+        }
+
         btn.textContent = 'جارٍ الإرسال...';
 
         const payload = {

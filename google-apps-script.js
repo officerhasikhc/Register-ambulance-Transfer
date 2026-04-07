@@ -466,6 +466,9 @@ function doGet(e) {
       case 'getDraftInspection':
         return getDraftInspection(e.parameter);
 
+      case 'checkInspectionLock':
+        return checkInspectionLock(e.parameter);
+
       case 'checkReminders':
         checkPendingTripsAndSendReminders();
         return ContentService
@@ -4263,6 +4266,75 @@ function getDraftInspection(params) {
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Check if an inspection week is already submitted by another staff member.
+ * Returns { locked: true/false, lockedBy, lockedStaff }
+ */
+function checkInspectionLock(params) {
+  try {
+    var weekStart   = String(params.weekStart || '').trim();
+    var staffNumber = String(params.staffNumber || '').trim();
+
+    if (!weekStart || !staffNumber) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, locked: false }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var sheet   = setupInspectionSheet();
+    var lastRow = sheet.getLastRow();
+    var tz      = CONFIG.TIME_ZONE;
+
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, locked: false }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var staffIdx  = headers.indexOf('Staff_Number');
+    var weekIdx   = headers.indexOf('Week_Start');
+    var draftIdx  = headers.indexOf('Is_Draft');
+    var nameIdx   = headers.indexOf('Driver_Name');
+
+    var lockedBy = '';
+    var lockedStaff = '';
+
+    for (var r = 0; r < allData.length; r++) {
+      var row = allData[r];
+      var cellWeek = row[weekIdx];
+      if (cellWeek instanceof Date) {
+        cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+      }
+      if (String(cellWeek).trim() !== weekStart) continue;
+      var rowStaff = String(row[staffIdx]).trim();
+      if (rowStaff === staffNumber) continue; // same staff, not a conflict
+      var isDraft = String(row[draftIdx] || '').trim() === 'نعم';
+      if (isDraft) continue; // drafts don't lock
+      // Found a submitted record by another staff member
+      lockedBy = String(row[nameIdx] || '').trim();
+      lockedStaff = rowStaff;
+      break;
+    }
+
+    if (lockedStaff) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, locked: true, lockedBy: lockedBy, lockedStaff: lockedStaff }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, locked: false }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString(), locked: false }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }

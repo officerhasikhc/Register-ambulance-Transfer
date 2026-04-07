@@ -5151,8 +5151,11 @@
             const targetYear  = parseInt(yearStr);
             const targetMonth = parseInt(monthStr);
 
+            // Filter: only sent inspections (exclude drafts)
+            const sentInspections = _allInspections.filter(r => String(r.Is_Draft||'').trim() !== 'نعم');
+
             // Collect weeks that belong to this month (Wednesday Rule)
-            const allWeeks = [...new Set(_allInspections.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort();
+            const allWeeks = [...new Set(sentInspections.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort();
             const monthWeeks = allWeeks.filter(w => {
                 const wm = getWeekMonth(w);
                 return wm && wm.year === targetYear && wm.month === targetMonth;
@@ -5163,19 +5166,21 @@
                 return;
             }
 
-            // Take up to 4 weeks (sorted ascending)
-            const weeksForReport = monthWeeks.slice(0, 4);
+            // Take up to 5 weeks (sorted ascending)
+            const weeksForReport = monthWeeks.slice(0, 5);
 
-            // Collect all drivers who appear in these weeks
+            // Collect all drivers who appear in these weeks (dedup by Staff_Number)
             const driverMap = new Map(); // staffNumber → {name, staff, vehicle}
-            _allInspections.forEach(r => {
+            sentInspections.forEach(r => {
                 var rws = String(r.Week_Start||'').trim().substring(0,10);
                 if (weeksForReport.includes(rws) && r.Staff_Number) {
-                    if (!driverMap.has(r.Staff_Number)) {
+                    const existing = driverMap.get(r.Staff_Number);
+                    if (!existing || String(r.Submitted_At||'') > String(existing._submittedAt||'')) {
                         driverMap.set(r.Staff_Number, {
                             name: r.Driver_Name || '—',
                             staff: r.Staff_Number,
-                            vehicle: r.Vehicle_Number || '—'
+                            vehicle: r.Vehicle_Number || '—',
+                            _submittedAt: r.Submitted_At || ''
                         });
                     }
                 }
@@ -5194,7 +5199,7 @@
             const monthLabel = new Date(targetYear, targetMonth - 1, 1)
                 .toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
 
-            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc, targetYear, targetMonth);
+            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc, targetYear, targetMonth, sentInspections);
 
             const pw = window.open('', '_blank', 'width=1200,height=850');
             if (!pw) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
@@ -5204,7 +5209,7 @@
             pw.onload = function() { pw.focus(); pw.print(); };
         }
 
-        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc, targetYear, targetMonth) {
+        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc, targetYear, targetMonth, sentData) {
             const DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
             const SECTIONS = [
                 { title: 'أولاً: الهيكل الخارجي والإطارات', items: [
@@ -5290,21 +5295,40 @@
             drivers.forEach(driver => {
                 weeks.forEach((weekStart, wIdx) => {
                     const weekEnd = (() => {
-                        const r = _allInspections.find(r => r.Week_Start === weekStart);
+                        const r = sentData.find(r => r.Week_Start === weekStart);
                         return r ? r.Week_End : '';
                     })();
-                    const weekLabel = fmtDateAr(weekStart, { day:'numeric', month:'long', year:'numeric' })
-                                   + ' — '
-                                   + fmtDateAr(weekEnd, { day:'numeric', month:'long', year:'numeric' });
-                    const weekRows = _allInspections.filter(r =>
+                    const weekRows = sentData.filter(r =>
                         r.Week_Start === weekStart && r.Staff_Number === driver.staff
                     );
+
+                    // Skip: no data for this driver in this week
+                    if (weekRows.length === 0) return;
+
                     const weekDates = [];
                     for (let d = 0; d < 7; d++) {
                         const date = new Date(weekStart + 'T00:00:00');
                         date.setDate(date.getDate() + d);
                         weekDates.push(date);
                     }
+
+                    // Skip: no actual data within the target month days
+                    const hasDataInMonth = weekRows.some(r => {
+                        const di = parseInt(r.Day_Index);
+                        if (isNaN(di) || di < 0 || di > 6) return false;
+                        const dd = weekDates[di];
+                        if (dd.getMonth() + 1 !== targetMonth || dd.getFullYear() !== targetYear) return false;
+                        try {
+                            const am = JSON.parse(r.AM_Items || '{}');
+                            const pm = JSON.parse(r.PM_Items || '{}');
+                            return Object.keys(am.items||{}).length > 0 || Object.keys(pm.items||{}).length > 0;
+                        } catch(e) { return false; }
+                    });
+                    if (!hasDataInMonth) return;
+
+                    const weekLabel = fmtDateAr(weekStart, { day:'numeric', month:'long', year:'numeric' })
+                                   + ' — '
+                                   + fmtDateAr(weekEnd, { day:'numeric', month:'long', year:'numeric' });
 
                     // Build table rows
                     let tableRows = '';
@@ -5416,96 +5440,97 @@
 <title>تقرير الفحص الشهري — ${monthLabel}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 8pt; color: #111; background: #fff; }
+  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 7.5pt; color: #111; background: #fff; }
   .report-page {
     width: 277mm; max-height: 190mm;
-    padding: 6mm 6mm 6mm;
+    padding: 5mm 5mm 4mm;
     page-break-after: always;
-    display: flex; flex-direction: column; gap: 3mm;
+    display: flex; flex-direction: column; gap: 2mm;
     overflow: hidden;
   }
   .report-page:last-child { page-break-after: avoid; }
 
   /* ── HEADER ── */
   .page-header {
-    display: flex; align-items: center; gap: 6mm;
-    border-bottom: 2px solid #1e3a8a; padding-bottom: 4mm;
+    display: flex; align-items: center; gap: 5mm;
+    border-bottom: 1.5px solid #1e3a8a; padding-bottom: 2mm;
   }
-  .header-logo { width: 20mm; height: 20mm; object-fit: contain; }
+  .header-logo { width: 16mm; height: 16mm; object-fit: contain; }
   .header-logo-wrap { flex-shrink: 0; }
   .header-center { flex: 1; text-align: center; }
-  .header-main { font-size: 11pt; font-weight: 700; color: #1e3a8a; }
-  .header-sub  { font-size: 9.5pt; font-weight: 600; color: #374151; margin-top: 1mm; }
-  .header-title { font-size: 10pt; font-weight: 700; color: #111; margin-top: 2mm;
-    border: 1.5px solid #1e3a8a; display: inline-block; padding: 1mm 5mm; border-radius: 3px; }
-  .header-meta { text-align: left; font-size: 8pt; line-height: 1.6; white-space: nowrap; color: #374151; }
+  .header-main { font-size: 10pt; font-weight: 700; color: #1e3a8a; }
+  .header-sub  { font-size: 8.5pt; font-weight: 600; color: #374151; margin-top: 0.5mm; }
+  .header-title { font-size: 9pt; font-weight: 700; color: #111; margin-top: 1mm;
+    border: 1px solid #1e3a8a; display: inline-block; padding: 0.5mm 4mm; border-radius: 2px; }
+  .header-meta { text-align: left; font-size: 7pt; line-height: 1.5; white-space: nowrap; color: #374151; }
   .meta-line strong { color: #1e3a8a; }
 
   /* ── DRIVER BAR ── */
   .driver-bar {
-    display: flex; gap: 10mm; background: #eff6ff;
-    border: 1px solid #bfdbfe; border-radius: 4px;
-    padding: 2mm 4mm; font-size: 9pt;
+    display: flex; gap: 8mm; background: #eff6ff;
+    border: 1px solid #bfdbfe; border-radius: 3px;
+    padding: 1.5mm 3mm; font-size: 8pt;
   }
   .driver-bar strong { color: #1e3a8a; }
 
   /* ── TABLE ── */
   .insp-table {
-    width: 100%; border-collapse: collapse; font-size: 7pt;
+    width: 100%; border-collapse: collapse; font-size: 6.5pt;
     flex: 1;
   }
   .insp-table th, .insp-table td {
-    border: 0.5pt solid #9ca3af; text-align: center; padding: 1pt 1.5pt;
+    border: 0.5pt solid #9ca3af; text-align: center; padding: 1pt 1pt;
   }
-  .th-item { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 8pt;
-    width: 30mm; text-align: right; padding: 2pt 4pt; }
-  .th-day  { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 7.5pt; }
-  .th-sess { background: #1e40af; color: #fff; font-size: 7pt; }
+  .th-item { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 7pt;
+    width: 28mm; text-align: right; padding: 1.5pt 3pt; }
+  .th-day  { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 6.5pt; }
+  .th-sess { background: #1e40af; color: #fff; font-size: 6pt; }
   .thead-day th, .thead-sess th { border-color: #1e3a8a; }
 
   .sec-header td {
     background: #dbeafe; color: #1e3a8a; font-weight: 700;
-    text-align: right; padding: 2pt 4pt; font-size: 8pt;
-    border-top: 1pt solid #1e3a8a;
+    text-align: right; padding: 1.5pt 3pt; font-size: 7pt;
+    border-top: 0.5pt solid #1e3a8a;
   }
   .item-label {
-    text-align: right; padding: 2pt 4pt; background: #f9fafb;
-    font-size: 7.5pt; color: #374151;
+    text-align: right; padding: 1.5pt 3pt; background: #f9fafb;
+    font-size: 6.5pt; color: #374151;
   }
   .item-row:nth-child(even) .item-label { background: #f3f4f6; }
 
   .cell-ok    { color: #065f46; font-weight: 700; background: #f0fdf4; }
   .cell-fault { color: #991b1b; font-weight: 700; background: #fef2f2; }
   .cell-fup   { color: #78350f; font-weight: 700; background: #fffbeb; }
-  .cell-empty { color: #9ca3af; font-size: 7pt; }
+  .cell-empty { color: #9ca3af; font-size: 6pt; }
 
-  .notes-row td { background: #f8fafc; font-size: 6.5pt; color: #374151; vertical-align: top; }
+  .notes-row td { background: #f8fafc; font-size: 6pt; color: #374151; vertical-align: top; }
 
   /* ── ISSUES ── */
   .issues-section {
-    border: 1pt solid #fbbf24; border-radius: 3px;
-    padding: 2mm 4mm; background: #fffbeb; font-size: 7.5pt;
+    border: 0.5pt solid #fbbf24; border-radius: 2px;
+    padding: 1.5mm 3mm; background: #fffbeb; font-size: 6.5pt;
+    max-height: 16mm; overflow: hidden;
   }
-  .issues-title { font-weight: 700; color: #92400e; margin-bottom: 1mm; }
-  .issues-list  { padding-right: 5mm; color: #374151; line-height: 1.6; }
-  .issues-list li { margin-bottom: 0.5mm; }
+  .issues-title { font-weight: 700; color: #92400e; margin-bottom: 0.5mm; font-size: 6.5pt; }
+  .issues-list  { padding-right: 4mm; color: #374151; line-height: 1.4; }
+  .issues-list li { margin-bottom: 0.3mm; }
 
   /* ── FOOTER ── */
   .page-footer {
-    display: flex; gap: 6mm; justify-content: space-between;
-    border-top: 1pt solid #1e3a8a; padding-top: 3mm; margin-top: auto;
+    display: flex; gap: 5mm; justify-content: space-between;
+    border-top: 0.5pt solid #1e3a8a; padding-top: 2mm; margin-top: auto;
   }
   .footer-cell { flex: 1; text-align: center; }
-  .footer-label { font-size: 8pt; font-weight: 700; color: #1e3a8a; margin-bottom: 1mm; }
-  .footer-line  { border-bottom: 1pt solid #6b7280; height: 8mm; }
-  .footer-sig   { border: 1pt solid #9ca3af; height: 10mm; border-radius: 3px; }
+  .footer-label { font-size: 7pt; font-weight: 700; color: #1e3a8a; margin-bottom: 0.5mm; }
+  .footer-line  { border-bottom: 0.5pt solid #6b7280; height: 6mm; }
+  .footer-sig   { border: 0.5pt solid #9ca3af; height: 8mm; border-radius: 2px; }
 
   /* ── PRINT ── */
   @media print {
     html, body { margin: 0; padding: 0; }
-    .report-page { width: 100%; padding: 6mm; }
+    .report-page { width: 100%; padding: 5mm; }
     .no-print { display: none !important; }
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: A4 landscape; margin: 5mm; }
   }
 
   /* ── SCREEN TOOLBAR ── */
