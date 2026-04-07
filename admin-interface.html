@@ -2037,7 +2037,7 @@
                             </select>
                             <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
                             <div style="display:flex;align-items:center;gap:6px;margin-right:auto;border-right:1.5px solid #e5e7eb;padding-right:10px;">
-                                <select id="inspMonthFilter" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <select id="inspMonthFilter" onchange="handleInspectionMonthChange()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
                                     <option value="">اختر الشهر</option>
                                 </select>
                                 <button onclick="printInspectionsMonth()" style="padding:8px 16px;background:linear-gradient(135deg,#1e40af,#2563eb);color:white;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">طباعة التقرير الشهري</button>
@@ -4641,6 +4641,44 @@
             return { month: d.getMonth() + 1, year: d.getFullYear() };
         }
 
+        function inspectionWeekBelongsToMonth(weekStartISO, monthValue) {
+            if (!monthValue) return true;
+            const wm = getWeekMonth(weekStartISO);
+            if (!wm) return false;
+            const [yearStr, monthStr] = String(monthValue).split('-');
+            return wm.year === parseInt(yearStr, 10) && wm.month === parseInt(monthStr, 10);
+        }
+
+        function updateInspectionWeekOptions(rows, preferredWeek) {
+            const wSel = document.getElementById('inspWeekFilter');
+            const monthValue = document.getElementById('inspMonthFilter')?.value || '';
+            const selectedWeek = preferredWeek !== undefined ? preferredWeek : wSel.value;
+            const weeks = [...new Set(rows
+                .map(r => String(r.Week_Start || '').trim().substring(0, 10))
+                .filter(Boolean)
+                .filter(w => inspectionWeekBelongsToMonth(w, monthValue))
+            )].sort().reverse();
+
+            wSel.innerHTML = '<option value="">جميع الأسابيع</option>';
+            weeks.forEach(w => {
+                const lbl = fmtDateAr(w, { day:'numeric', month:'long', year:'numeric' });
+                const opt = document.createElement('option');
+                opt.value = w;
+                opt.textContent = 'أسبوع ' + lbl;
+                if (w === selectedWeek) opt.selected = true;
+                wSel.appendChild(opt);
+            });
+
+            if (selectedWeek && !weeks.includes(selectedWeek)) {
+                wSel.value = '';
+            }
+        }
+
+        function handleInspectionMonthChange() {
+            updateInspectionWeekOptions(_allInspections || []);
+            renderInspectionsTable(_allInspections || []);
+        }
+
         function fmtDateAr(isoStr, opts) {
             var d = parseDateSafe(isoStr);
             if (!d) return '—';
@@ -4648,7 +4686,6 @@
         }
 
         function populateInspectionFilters(rows) {
-            const weeks   = [...new Set(rows.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort().reverse();
             const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
 
             const statusSel = document.getElementById('inspStatusFilter');
@@ -4657,17 +4694,6 @@
                 statusSel.innerHTML = '<option value="sent">مرسلة فقط</option><option value="draft">مسودات فقط</option><option value="all">الكل</option>';
                 statusSel.value = currentStatus;
             }
-
-            const wSel = document.getElementById('inspWeekFilter');
-            const curW = wSel.value;
-            wSel.innerHTML = '<option value="">جميع الأسابيع</option>';
-            weeks.forEach(w => {
-                const lbl = fmtDateAr(w, { day:'numeric', month:'long', year:'numeric' });
-                const opt = document.createElement('option');
-                opt.value = w; opt.textContent = 'أسبوع ' + lbl;
-                if (w === curW) opt.selected = true;
-                wSel.appendChild(opt);
-            });
 
             const dSel = document.getElementById('inspDriverFilter');
             const curD = dSel.value;
@@ -4682,8 +4708,9 @@
             // Populate month filter using Wednesday Rule
             const mSel = document.getElementById('inspMonthFilter');
             const curM = mSel.value;
+            const allWeeks = [...new Set(rows.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort().reverse();
             const monthSet = new Map(); // key: "YYYY-MM" → {year, month, label}
-            weeks.forEach(w => {
+            allWeeks.forEach(w => {
                 const wm = getWeekMonth(w);
                 if (!wm) return; // skip invalid week dates
                 const { month, year } = wm;
@@ -4708,6 +4735,8 @@
                 const target = sortedKeys.includes(curKey) ? curKey : sortedKeys[0];
                 for (const opt of mSel.options) { if (opt.value === target) { opt.selected = true; break; } }
             }
+
+            updateInspectionWeekOptions(rows);
         }
 
         function getSelectedInspectionWeek() {
@@ -4799,9 +4828,11 @@
         function renderInspectionsTable(rows) {
             const filterWeek   = document.getElementById('inspWeekFilter').value;
             const filterDriver = document.getElementById('inspDriverFilter').value;
+            const filterMonth  = document.getElementById('inspMonthFilter')?.value || '';
 
             const filtered = rows.filter(r =>
-                (!filterWeek   || String(r.Week_Start||'').trim() === filterWeek)   &&
+                (!filterMonth  || inspectionWeekBelongsToMonth(String(r.Week_Start || '').trim().substring(0, 10), filterMonth)) &&
+                (!filterWeek   || String(r.Week_Start||'').trim().substring(0, 10) === filterWeek)   &&
                 (!filterDriver || r.Driver_Name  === filterDriver)
             );
 
@@ -4914,6 +4945,7 @@
             );
             const dayRow = matches.sort((a,b) => String(b.Submitted_At||'').localeCompare(String(a.Submitted_At||'')))[0];
             if (!dayRow) { alert('لا توجد بيانات لهذا اليوم'); return; }
+            _currentInspectionDetail = dayRow;
 
             const DAY_NAMES_AR = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
             const ITEM_LABELS  = {
@@ -5162,7 +5194,7 @@
             const monthLabel = new Date(targetYear, targetMonth - 1, 1)
                 .toLocaleDateString('ar-OM', { month: 'long', year: 'numeric' });
 
-            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc);
+            const html = buildMonthlyReportHtml(monthLabel, weeksForReport, drivers, logoSrc, targetYear, targetMonth);
 
             const pw = window.open('', '_blank', 'width=1200,height=850');
             if (!pw) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
@@ -5172,7 +5204,7 @@
             pw.onload = function() { pw.focus(); pw.print(); };
         }
 
-        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc) {
+        function buildMonthlyReportHtml(monthLabel, weeks, drivers, logoSrc, targetYear, targetMonth) {
             const DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
             const SECTIONS = [
                 { title: 'أولاً: الهيكل الخارجي والإطارات', items: [
@@ -5224,10 +5256,15 @@
             }
 
             // Build issues summary for a week/driver
-            function buildIssues(weekRows) {
+            function buildIssues(weekRows, weekDates) {
                 const issues = [];
                 weekRows.forEach(row => {
-                    const dayName = DAY_NAMES[parseInt(row.Day_Index)] || '';
+                    const dayIndex = parseInt(row.Day_Index, 10);
+                    const dayDate = weekDates[dayIndex];
+                    if (!dayDate || dayDate.getMonth() + 1 !== targetMonth || dayDate.getFullYear() !== targetYear) {
+                        return;
+                    }
+                    const dayName = DAY_NAMES[dayIndex] || '';
                     ['am', 'pm'].forEach(sess => {
                         const jsonStr = sess === 'am' ? row.AM_Items : row.PM_Items;
                         const obj = parseSession(jsonStr);
@@ -5304,7 +5341,7 @@
                     notesRow += '</tr>';
 
                     // Issues list
-                    const issues = buildIssues(weekRows);
+                    const issues = buildIssues(weekRows, weekDates);
                     const issuesHtml = issues.length
                         ? `<div class="issues-section"><div class="issues-title">البنود التي تحتاج انتباهاً في هذا الأسبوع:</div><ul class="issues-list">${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`
                         : `<div class="issues-section" style="color:#166534;">جميع البنود سليمة في هذا الأسبوع.</div>`;
