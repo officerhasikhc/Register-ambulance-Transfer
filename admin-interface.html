@@ -2030,6 +2030,11 @@
                             <select id="inspDriverFilter" onchange="renderInspectionsTable(_allInspections)" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
                                 <option value="">جميع السائقين</option>
                             </select>
+                            <select id="inspStatusFilter" onchange="loadInspections()" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
+                                <option value="sent">مرسلة فقط</option>
+                                <option value="draft">مسودات فقط</option>
+                                <option value="all">الكل</option>
+                            </select>
                             <button onclick="loadInspections()" class="btn btn-export">تحديث</button>
                             <div style="display:flex;align-items:center;gap:6px;margin-right:auto;border-right:1.5px solid #e5e7eb;padding-right:10px;">
                                 <select id="inspMonthFilter" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:13px;">
@@ -4595,13 +4600,16 @@
         const WEB_APP_URL_INSP = WEB_APP_URL; // same endpoint
 
         let _allInspections = [];
+        let _currentInspectionDetail = null;
+        let _currentInspectionEditSession = 'am';
 
         async function loadInspections() {
             const el = document.getElementById('inspectionsContainer');
             el.innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">جارٍ التحميل...</div>';
 
             try {
-                const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections&_t=' + Date.now());
+                const status = document.getElementById('inspStatusFilter')?.value || 'sent';
+            const res  = await fetch(WEB_APP_URL_INSP + '?action=getWeeklyInspections&status=' + encodeURIComponent(status) + '&_t=' + Date.now());
                 const data = await res.json();
                 if (!data.success || !data.inspections || data.inspections.length === 0) {
                     el.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;font-size:13px;">لا توجد فحوصات مرسلة حتى الآن</div>';
@@ -4642,6 +4650,13 @@
         function populateInspectionFilters(rows) {
             const weeks   = [...new Set(rows.map(r => String(r.Week_Start||'').trim().substring(0,10)).filter(Boolean))].sort().reverse();
             const drivers = [...new Set(rows.map(r => r.Driver_Name).filter(Boolean))].sort();
+
+            const statusSel = document.getElementById('inspStatusFilter');
+            const currentStatus = statusSel?.value || 'sent';
+            if (statusSel) {
+                statusSel.innerHTML = '<option value="sent">مرسلة فقط</option><option value="draft">مسودات فقط</option><option value="all">الكل</option>';
+                statusSel.value = currentStatus;
+            }
 
             const wSel = document.getElementById('inspWeekFilter');
             const curW = wSel.value;
@@ -4801,7 +4816,18 @@
             filtered.forEach(r => {
                 const ws  = String(r.Week_Start || '').trim().substring(0, 10);
                 const key = (r.Staff_Number || '') + '|' + ws;
-                if (!groups[key]) groups[key] = { dayMap: {}, driver: r.Driver_Name, staff: r.Staff_Number, vehicle: r.Vehicle_Number, weekStart: ws, weekEnd: String(r.Week_End||'').trim().substring(0,10) };
+                if (!groups[key]) groups[key] = {
+                    dayMap: {},
+                    driver: r.Driver_Name,
+                    staff: r.Staff_Number,
+                    vehicle: r.Vehicle_Number,
+                    weekStart: ws,
+                    weekEnd: String(r.Week_End||'').trim().substring(0,10),
+                    isDraft: false
+                };
+                if (String(r.Is_Draft || '').trim() === 'نعم') {
+                    groups[key].isDraft = true;
+                }
                 const di = String(r.Day_Index);
                 const prev = groups[key].dayMap[di];
                 if (!prev || String(r.Submitted_At || '') >= String(prev.Submitted_At || '')) {
@@ -4827,14 +4853,16 @@
                 const weekStartFmt = fmtDateAr(g.weekStart, { day:'numeric', month:'long' });
                 const weekEndFmt   = fmtDateAr(g.weekEnd,   { day:'numeric', month:'long', year:'numeric' });
 
-                html += `<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
+                const draftBadge = g.isDraft ? '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;background:#fde68a;color:#92400e;">مسودة</span>' : '';
+                html += `<div style="background:${g.isDraft ? '#f8fafc' : 'white'};border:1px solid ${g.isDraft ? '#fde68a' : '#e5e7eb'};border-radius:12px;padding:14px;margin-bottom:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                         <div>
                             <div style="font-size:14px;font-weight:700;color:#1f2937;">${g.driver}</div>
                             <div style="font-size:12px;color:#6b7280;margin-top:2px;">رقم السيارة: ${g.vehicle || '—'} &nbsp;|&nbsp; الرقم الوظيفي: ${g.staff || '—'}</div>
                             <div style="font-size:12px;color:#6b7280;margin-top:2px;">${weekStartFmt} — ${weekEndFmt}</div>
                         </div>
-                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            ${draftBadge}
                             <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#d1fae5;color:#065f46;">${activeDays.length} يوم مرسل</span>
                             ${faultDays    ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fee2e2;color:#991b1b;">${faultDays} يوم فيه عطل</span>` : ''}
                             ${followupDays ? `<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;background:#fef3c7;color:#78350f;">${followupDays} يوم متابعة</span>` : ''}
@@ -4930,10 +4958,18 @@
 
             const modal = document.getElementById('detailModal');
             const content = document.getElementById('detailContent');
+            const editBtn = `<button class="btn btn-primary" style="background:#1e40af;color:white;" onclick="openInspectionEditMode()">تعديل الفحص</button>`;
+            const draftBadge = dayRow.Is_Draft === 'نعم' ? '<span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;background:#fde68a;color:#92400e;">مسودة</span>' : '';
             content.innerHTML = `
-                <div style="margin-bottom:12px;">
-                    <div style="font-size:15px;font-weight:700;color:#1f2937;">${dayRow.Driver_Name}</div>
-                    <div style="font-size:12px;color:#6b7280;">${DAY_NAMES_AR[dayIdx]} — ${dayRow.Week_Start} | رقم السيارة: ${dayRow.Vehicle_Number||'—'}</div>
+                <div style="margin-bottom:12px;display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:#1f2937;">${dayRow.Driver_Name}</div>
+                        <div style="font-size:12px;color:#6b7280;">${DAY_NAMES_AR[dayIdx]} — ${dayRow.Week_Start} | رقم السيارة: ${dayRow.Vehicle_Number||'—'}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        ${draftBadge}
+                        ${editBtn}
+                    </div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                     <div>
@@ -4947,6 +4983,126 @@
                 </div>
                 ${dayRow.Day_Notes ? `<div style="margin-top:10px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">ملاحظات: ${dayRow.Day_Notes}</div>` : ''}`;
             modal.classList.add('active');
+        }
+
+        function openInspectionEditMode() {
+            if (!_currentInspectionDetail) return;
+            _currentInspectionEditSession = 'am';
+            renderInspectionEditForm();
+        }
+
+        function switchInspectionEditSession(session) {
+            _currentInspectionEditSession = session;
+            renderInspectionEditForm();
+        }
+
+        function renderInspectionEditForm() {
+            const detail = _currentInspectionDetail;
+            if (!detail) return;
+            const ITEM_LABELS = {
+                tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
+                no_oil_leak:'تسرب زيت أو ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
+                engine_start:'تشغيل السيارة', gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
+                ac_system:'نظام التكييف', cabin_electric:'أجهزة المقصورة',
+                oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
+                fuel_level:'مستوى الوقود', battery:'البطارية',
+                front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
+                brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
+            };
+            const parseSession = function(jsonStr) {
+                try { return JSON.parse(jsonStr || '{}'); } catch(e) { return {}; }
+            };
+            const session = _currentInspectionEditSession;
+            const sessionData = session === 'am' ? parseSession(detail.AM_Items) : parseSession(detail.PM_Items);
+            const selectedItems = sessionData.items || {};
+            const selectedNotes = sessionData.notes || {};
+            const sessionNote = session === 'am' ? (detail.AM_Notes || '') : (detail.PM_Notes || '');
+
+            let html = `
+                <div style="margin-bottom:12px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:#1f2937;">تحرير فحص ${DAY_NAMES_AR[detail.Day_Index]} — ${detail.Driver_Name}</div>
+                        <div style="font-size:12px;color:#6b7280;">${detail.Week_Start} | رقم السيارة: ${detail.Vehicle_Number || '—'}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;"> 
+                        <button class="btn" style="background:${session==='am' ? '#1e40af' : '#eff6ff'};color:${session==='am' ? 'white' : '#1e40af'};" onclick="switchInspectionEditSession('am')">صباح</button>
+                        <button class="btn" style="background:${session==='pm' ? '#1e40af' : '#eff6ff'};color:${session==='pm' ? 'white' : '#1e40af'};" onclick="switchInspectionEditSession('pm')">مساء</button>
+                    </div>
+                </div>
+                <div style="display:grid;gap:10px;max-height:420px;overflow:auto;padding-right:4px;">
+            `;
+
+            Object.keys(ITEM_LABELS).forEach(function(itemId) {
+                html += `
+                    <div class="insp-edit-row" data-session="${session}" data-item="${itemId}" style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                        <div style="font-size:12px;color:#1f2937;">${ITEM_LABELS[itemId]}</div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <select data-item="${itemId}" data-session="${session}" class="insp-edit-status" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;min-width:110px;">
+                                <option value="" ${selectedItems[itemId] === '' ? 'selected' : ''}>غير محدد</option>
+                                <option value="ok" ${selectedItems[itemId] === 'ok' ? 'selected' : ''}>سليم</option>
+                                <option value="followup" ${selectedItems[itemId] === 'followup' ? 'selected' : ''}>يحتاج متابعة</option>
+                                <option value="fault" ${selectedItems[itemId] === 'fault' ? 'selected' : ''}>عطل</option>
+                            </select>
+                            <input type="text" data-item="${itemId}" data-session="${session}" class="insp-edit-note" value="${(selectedNotes[itemId] || '').replace(/"/g, '&quot;')}" placeholder="ملاحظة" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;flex:1;" />
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <label style="font-size:12px;font-weight:700;color:#1f2937;">ملاحظات الجلسة</label>
+                    <textarea id="inspEditSessionNote" style="width:100%;min-height:72px;padding:8px;border:1px solid #cbd5e1;border-radius:10px;font-size:12px;">${sessionNote}</textarea>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <label style="font-size:12px;font-weight:700;color:#1f2937;">ملاحظات اليوم</label>
+                    <textarea id="inspEditDayNote" style="width:100%;min-height:72px;padding:8px;border:1px solid #cbd5e1;border-radius:10px;font-size:12px;">${detail.Day_Notes || ''}</textarea>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+                    <button class="btn btn-primary" style="background:#047857;color:white;" onclick="saveInspectionEdit()">حفظ التعديلات</button>
+                    <button class="btn" style="background:#eff6ff;color:#1e40af;" onclick="showInspDayDetail('${detail.Staff_Number}','${detail.Week_Start}',${detail.Day_Index})">إلغاء</button>
+                </div>
+            `;
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        async function saveInspectionEdit() {
+            const detail = _currentInspectionDetail;
+            if (!detail) return;
+            const session = _currentInspectionEditSession;
+            const items = {};
+            const notes = {};
+            document.querySelectorAll(`.insp-edit-status[data-session="${session}"]`).forEach(function(select) {
+                const itemId = select.getAttribute('data-item');
+                items[itemId] = select.value || '';
+            });
+            document.querySelectorAll(`.insp-edit-note[data-session="${session}"]`).forEach(function(input) {
+                const itemId = input.getAttribute('data-item');
+                notes[itemId] = input.value || '';
+            });
+            const sessionNote = document.getElementById('inspEditSessionNote')?.value || '';
+            const dayNotes = document.getElementById('inspEditDayNote')?.value || '';
+
+            const payload = {
+                action: 'adminUpdateInspection',
+                staffNumber: detail.Staff_Number,
+                weekStart: detail.Week_Start,
+                dayIndex: detail.Day_Index,
+                session: session,
+                items: items,
+                notes: notes,
+                sessionNote: sessionNote,
+                dayNotes: dayNotes
+            };
+
+            const result = await ReliablePost.send(WEB_APP_URL, payload, { timeout: 60000 });
+            if (result && result.success) {
+                showToast('تم حفظ التعديلات بنجاح', 'success');
+                await loadInspections();
+                showInspDayDetail(detail.Staff_Number, detail.Week_Start, detail.Day_Index);
+            } else {
+                showToast('تعذّر حفظ التعديلات، الرجاء المحاولة مرة أخرى', 'error');
+            }
         }
 
         // ============================================================
@@ -5106,6 +5262,12 @@
                     const weekRows = _allInspections.filter(r =>
                         r.Week_Start === weekStart && r.Staff_Number === driver.staff
                     );
+                    const weekDates = [];
+                    for (let d = 0; d < 7; d++) {
+                        const date = new Date(weekStart + 'T00:00:00');
+                        date.setDate(date.getDate() + d);
+                        weekDates.push(date);
+                    }
 
                     // Build table rows
                     let tableRows = '';
@@ -5116,7 +5278,8 @@
                             tableRows += `<tr class="item-row"><td class="item-label">${item.label}</td>`;
                             for (let d = 0; d < 7; d++) {
                                 const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
-                                if (!dayRow) {
+                                const dayInMonth = weekDates[d].getMonth() + 1 === targetMonth && weekDates[d].getFullYear() === targetYear;
+                                if (!dayRow || !dayInMonth) {
                                     tableRows += '<td class="cell-empty">—</td><td class="cell-empty">—</td>';
                                 } else {
                                     const amObj = parseSession(dayRow.AM_Items);
@@ -5134,7 +5297,8 @@
                     let notesRow = '<tr class="notes-row"><td class="item-label" style="font-weight:600;">ملاحظات اليوم</td>';
                     for (let d = 0; d < 7; d++) {
                         const dayRow = weekRows.find(r => parseInt(r.Day_Index) === d);
-                        const note = dayRow ? (dayRow.Day_Notes || '') : '';
+                        const dayInMonth = weekDates[d].getMonth() + 1 === targetMonth && weekDates[d].getFullYear() === targetYear;
+                        const note = dayInMonth && dayRow ? (dayRow.Day_Notes || '') : '';
                         notesRow += `<td colspan="2" style="font-size:7pt;padding:2px 3px;">${note}</td>`;
                     }
                     notesRow += '</tr>';
@@ -5215,12 +5379,13 @@
 <title>تقرير الفحص الشهري — ${monthLabel}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 9pt; color: #111; background: #fff; }
+  body { font-family: "Arial", "Tahoma", sans-serif; font-size: 8pt; color: #111; background: #fff; }
   .report-page {
-    width: 277mm; min-height: 190mm;
-    padding: 8mm 8mm 6mm;
+    width: 277mm; max-height: 190mm;
+    padding: 6mm 6mm 6mm;
     page-break-after: always;
-    display: flex; flex-direction: column; gap: 4mm;
+    display: flex; flex-direction: column; gap: 3mm;
+    overflow: hidden;
   }
   .report-page:last-child { page-break-after: avoid; }
 
@@ -5249,11 +5414,11 @@
 
   /* ── TABLE ── */
   .insp-table {
-    width: 100%; border-collapse: collapse; font-size: 7.5pt;
+    width: 100%; border-collapse: collapse; font-size: 7pt;
     flex: 1;
   }
   .insp-table th, .insp-table td {
-    border: 0.5pt solid #9ca3af; text-align: center; padding: 1.5pt 2pt;
+    border: 0.5pt solid #9ca3af; text-align: center; padding: 1pt 1.5pt;
   }
   .th-item { background: #1e3a8a; color: #fff; font-weight: 700; font-size: 8pt;
     width: 30mm; text-align: right; padding: 2pt 4pt; }
@@ -5296,7 +5461,7 @@
   .footer-cell { flex: 1; text-align: center; }
   .footer-label { font-size: 8pt; font-weight: 700; color: #1e3a8a; margin-bottom: 1mm; }
   .footer-line  { border-bottom: 1pt solid #6b7280; height: 8mm; }
-  .footer-sig   { border: 1pt solid #9ca3af; height: 14mm; border-radius: 3px; }
+  .footer-sig   { border: 1pt solid #9ca3af; height: 10mm; border-radius: 3px; }
 
   /* ── PRINT ── */
   @media print {

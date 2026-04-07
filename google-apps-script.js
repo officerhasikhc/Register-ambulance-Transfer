@@ -463,6 +463,9 @@ function doGet(e) {
       case 'getWeeklyInspections':
         return getWeeklyInspections(e.parameter);
 
+      case 'getDraftInspection':
+        return getDraftInspection(e.parameter);
+
       case 'checkReminders':
         checkPendingTripsAndSendReminders();
         return ContentService
@@ -492,11 +495,13 @@ function doGet(e) {
         var postAction = postData.action;
         Logger.log('postViaGet routing action: ' + postAction);
         switch (postAction) {
-          case 'submitCase':      return submitCase(postData);
-          case 'driverDeparture':       return recordDriverDeparture(postData);
-          case 'driverReturn':          return recordDriverReturn(postData);
-          case 'updateRecord':          return updateRecord(postData);
-          case 'submitInspectionWeek':  return submitInspectionWeek(postData);
+          case 'submitCase':          return submitCase(postData);
+          case 'driverDeparture':     return recordDriverDeparture(postData);
+          case 'driverReturn':        return recordDriverReturn(postData);
+          case 'updateRecord':        return updateRecord(postData);
+          case 'submitInspectionWeek':return submitInspectionWeek(postData);
+          case 'saveDraftInspection': return saveDraftInspection(postData);
+          case 'adminUpdateInspection': return adminUpdateInspection(postData);
           default:
             return ContentService.createTextOutput(JSON.stringify({
               success: false, error: 'Action not supported via GET: ' + postAction
@@ -576,6 +581,12 @@ function doPost(e) {
 
       case 'submitInspectionWeek':
         return submitInspectionWeek(data);
+
+      case 'saveDraftInspection':
+        return saveDraftInspection(data);
+
+      case 'adminUpdateInspection':
+        return adminUpdateInspection(data);
 
       case 'deleteInspectionWeek':
         return deleteInspectionWeek(data);
@@ -4018,7 +4029,7 @@ function setupInspectionSheet() {
       'Day_Index', 'Day_Name',
       'AM_Time', 'AM_Items', 'AM_Notes',
       'PM_Time', 'PM_Items', 'PM_Notes',
-      'Day_Notes', 'Has_Fault', 'Has_Followup'
+      'Day_Notes', 'Has_Fault', 'Has_Followup', 'Is_Draft'
     ];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length)
@@ -4027,6 +4038,15 @@ function setupInspectionSheet() {
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(11, 300); // AM_Items JSON
     sheet.setColumnWidth(14, 300); // PM_Items JSON
+  } else {
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf('Is_Draft') === -1) {
+      const insertCol = sheet.getLastColumn() + 1;
+      sheet.insertColumnAfter(sheet.getLastColumn());
+      sheet.getRange(1, insertCol).setValue('Is_Draft')
+        .setBackground('#1e40af').setFontColor('#ffffff')
+        .setFontWeight('bold').setHorizontalAlignment('center');
+    }
   }
   return sheet;
 }
@@ -4043,6 +4063,314 @@ function generateInspectionId_(sheet) {
     .map(function(id) { return parseInt(String(id).slice(3)) || 0; });
   var maxNum = ids.length > 0 ? Math.max.apply(null, ids) : 0;
   return 'INS' + String(maxNum + 1).padStart(3, '0');
+}
+
+/**
+ * Save a draft inspection week to the sheet with Is_Draft = 'نعم'.
+ */
+function saveDraftInspection(data) {
+  try {
+    const sheet      = setupInspectionSheet();
+    const tz         = CONFIG.TIME_ZONE;
+    const submittedAt= Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
+    const targetWeek = String(data.weekStart || '').trim();
+    const staffNumber= String(data.staffNumber || '').trim();
+    const dayNames   = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+
+    if (!targetWeek || !staffNumber) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'staffNumber and weekStart are required' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const staffCol = 6;
+      const weekCol  = 3;
+      const statusCol= sheet.getLastColumn();
+      var existing   = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      for (var r = existing.length - 1; r >= 0; r--) {
+        var cellWeek = existing[r][weekCol-1];
+        if (cellWeek instanceof Date) {
+          cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+        }
+        if (String(existing[r][staffCol-1]).trim() === staffNumber &&
+            String(cellWeek).trim() === targetWeek &&
+            String(existing[r][statusCol-1]).trim() === 'نعم') {
+          sheet.deleteRow(r + 2);
+        }
+      }
+    }
+
+    var baseId  = generateInspectionId_(sheet);
+    var baseNum = parseInt(String(baseId).slice(3)) || 1;
+    var rows    = [];
+    var days    = data.days || {};
+
+    for (var d = 0; d < 7; d++) {
+      var dayData = days[d] || {};
+      var am      = dayData['am'] || {};
+      var pm      = dayData['pm'] || {};
+      var amItems = am.items || {};
+      var pmItems = pm.items || {};
+      var allVals = Object.keys(amItems).map(function(k){return amItems[k];})
+        .concat(Object.keys(pmItems).map(function(k){return pmItems[k];}));
+      var hasFault    = allVals.some(function(v){return v==='fault';});
+      var hasFollowup = allVals.some(function(v){return v==='followup';});
+
+      var amObj = { items: amItems, itemsAr: toArItems_(amItems), notes: am.itemNotes || {}, photos: {} };
+      var pmObj = { items: pmItems, itemsAr: toArItems_(pmItems), notes: pm.itemNotes || {}, photos: {} };
+
+      rows.push([
+        'INS' + String(baseNum + d).padStart(3, '0'),
+        submittedAt,
+        targetWeek,
+        String(data.weekEnd || '').trim(),
+        data.driverName    || '',
+        staffNumber,
+        data.vehicleNumber || '',
+        d,
+        dayNames[d],
+        am.time || '',
+        JSON.stringify(amObj),
+        am.notes || '',
+        pm.time || '',
+        JSON.stringify(pmObj),
+        pm.notes || '',
+        dayData.notes || '',
+        hasFault    ? 'نعم' : 'لا',
+        hasFollowup ? 'نعم' : 'لا',
+        'نعم'
+      ]);
+    }
+
+    if (rows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, message: 'تم حفظ المسودة بنجاح', rows: rows.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Retrieve a saved draft inspection for a specific driver/week.
+ */
+function getDraftInspection(params) {
+  try {
+    var staffNumber = String(params.staffNumber || '').trim();
+    var weekStart   = String(params.weekStart || '').trim();
+    var sheet       = setupInspectionSheet();
+    var lastRow     = sheet.getLastRow();
+    var tz          = CONFIG.TIME_ZONE;
+
+    if (!staffNumber || !weekStart) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'staffNumber and weekStart are required' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, draft: null }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var staffIdx = headers.indexOf('Staff_Number');
+    var weekIdx  = headers.indexOf('Week_Start');
+    var dayIdx   = headers.indexOf('Day_Index');
+    var statusIdx= headers.indexOf('Is_Draft');
+    var submittedIdx = headers.indexOf('Submitted_At');
+    var rows = [];
+
+    allData.forEach(function(row) {
+      var cellWeek = row[weekIdx];
+      if (cellWeek instanceof Date) {
+        cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+      }
+      if (String(row[staffIdx]).trim() === staffNumber &&
+          String(cellWeek).trim() === weekStart &&
+          String(row[statusIdx]).trim() === 'نعم') {
+        rows.push(row);
+      }
+    });
+
+    if (rows.length === 0) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, draft: null }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var dedup = {};
+    rows.forEach(function(row) {
+      var key = String(row[dayIdx]);
+      var submittedAt = row[submittedIdx] || '';
+      if (submittedAt instanceof Date) {
+        submittedAt = Utilities.formatDate(submittedAt, tz, 'yyyy-MM-dd HH:mm:ss');
+      }
+      if (!dedup[key] || String(submittedAt) >= String(dedup[key].submittedAt)) {
+        dedup[key] = { row: row, submittedAt: submittedAt };
+      }
+    });
+
+    var draft = { weekStart: weekStart, weekEnd: '', driverName: '', staffNumber: staffNumber, vehicleNumber: '', days: {}, lastUpdatedAt: '' };
+    Object.keys(dedup).forEach(function(dayKey) {
+      var row = dedup[dayKey].row;
+      var rowObj = {};
+      headers.forEach(function(h, i) {
+        var v = row[i];
+        if (v instanceof Date) {
+          v = Utilities.formatDate(v, tz, (h === 'Week_Start' || h === 'Week_End') ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm:ss');
+        }
+        rowObj[h] = v;
+      });
+      draft.weekEnd = draft.weekEnd || rowObj.Week_End || draft.weekEnd;
+      draft.driverName = draft.driverName || rowObj.Driver_Name || draft.driverName;
+      draft.vehicleNumber = draft.vehicleNumber || rowObj.Vehicle_Number || draft.vehicleNumber;
+      var session = {};
+      try { session = JSON.parse(rowObj.AM_Items || '{}'); } catch(e) { session = {}; }
+      draft.days[Number(dayKey)] = draft.days[Number(dayKey)] || {};
+      draft.days[Number(dayKey)].am = {
+        time: rowObj.AM_Time || '',
+        items: (session.items || {}),
+        itemNotes: (session.notes || {}),
+        photos: (session.photos || {})
+      };
+      try { session = JSON.parse(rowObj.PM_Items || '{}'); } catch(e) { session = {}; }
+      draft.days[Number(dayKey)].pm = {
+        time: rowObj.PM_Time || '',
+        items: (session.items || {}),
+        itemNotes: (session.notes || {}),
+        photos: (session.photos || {})
+      };
+      draft.days[Number(dayKey)].notes = rowObj.Day_Notes || '';
+      if (!draft.lastUpdatedAt || String(dedup[dayKey].submittedAt) > String(draft.lastUpdatedAt)) {
+        draft.lastUpdatedAt = dedup[dayKey].submittedAt;
+      }
+    });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, draft: draft }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Admin updates a specific inspection day session.
+ */
+function adminUpdateInspection(data) {
+  try {
+    var sheet       = setupInspectionSheet();
+    var lastRow     = sheet.getLastRow();
+    var tz          = CONFIG.TIME_ZONE;
+    var staffNumber = String(data.staffNumber || '').trim();
+    var weekStart   = String(data.weekStart || '').trim();
+    var dayIndex    = parseInt(data.dayIndex);
+    var session     = String(data.session || '').toLowerCase();
+    var items       = data.items || {};
+    var notes       = data.notes || {};
+
+    if (!staffNumber || !weekStart || isNaN(dayIndex) || (session !== 'am' && session !== 'pm')) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'staffNumber, weekStart, dayIndex and session are required' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var staffIdx = headers.indexOf('Staff_Number');
+    var weekIdx  = headers.indexOf('Week_Start');
+    var dayIdx   = headers.indexOf('Day_Index');
+    var submitIdx= headers.indexOf('Submitted_At');
+
+    var matching = [];
+    allData.forEach(function(row, rowIndex) {
+      var cellWeek = row[weekIdx];
+      if (cellWeek instanceof Date) {
+        cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+      }
+      if (String(row[staffIdx]).trim() === staffNumber &&
+          String(cellWeek).trim() === weekStart &&
+          parseInt(row[dayIdx]) === dayIndex) {
+        matching.push({ row: row, rowIndex: rowIndex + 2, submittedAt: row[submitIdx] || '' });
+      }
+    });
+
+    if (!matching.length) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'Inspection row not found' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    matching.sort(function(a,b) {
+      var aTime = a.submittedAt instanceof Date ? a.submittedAt.getTime() : String(a.submittedAt);
+      var bTime = b.submittedAt instanceof Date ? b.submittedAt.getTime() : String(b.submittedAt);
+      return String(aTime).localeCompare(String(bTime));
+    });
+    var target = matching[matching.length - 1];
+    var rowValues = target.row.slice();
+    var sessionItemsIdx = session === 'am' ? headers.indexOf('AM_Items') : headers.indexOf('PM_Items');
+    var sessionNotesIdx = session === 'am' ? headers.indexOf('AM_Notes') : headers.indexOf('PM_Notes');
+    var amItems = {};
+    var pmItems = {};
+
+    try { amItems = JSON.parse(rowValues[headers.indexOf('AM_Items')] || '{}').items || {}; } catch(e) { amItems = {}; }
+    try { pmItems = JSON.parse(rowValues[headers.indexOf('PM_Items')] || '{}').items || {}; } catch(e) { pmItems = {}; }
+
+    var existingPhotos = {};
+    try {
+      var sessionRaw = JSON.parse(rowValues[sessionItemsIdx] || '{}');
+      existingPhotos = sessionRaw.photos || {};
+    } catch(e) { existingPhotos = {}; }
+
+    var updatedObj = { items: items, itemsAr: toArItems_(items), notes: notes || {}, photos: existingPhotos };
+    rowValues[sessionItemsIdx] = JSON.stringify(updatedObj);
+
+    if (typeof data.sessionNote === 'string') {
+      rowValues[sessionNotesIdx] = data.sessionNote;
+    }
+    if (typeof data.dayNotes === 'string') {
+      rowValues[headers.indexOf('Day_Notes')] = data.dayNotes;
+    }
+    if (typeof data.driverName === 'string' && data.driverName.trim()) {
+      rowValues[headers.indexOf('Driver_Name')] = data.driverName.trim();
+    }
+    if (typeof data.vehicleNumber === 'string' && data.vehicleNumber.trim()) {
+      rowValues[headers.indexOf('Vehicle_Number')] = data.vehicleNumber.trim();
+    }
+
+    try {
+      var parsedAm = JSON.parse(rowValues[headers.indexOf('AM_Items')] || '{}');
+      var parsedPm = JSON.parse(rowValues[headers.indexOf('PM_Items')] || '{}');
+      var allStatuses = Object.values(parsedAm.items || {}).concat(Object.values(parsedPm.items || {}));
+      rowValues[headers.indexOf('Has_Fault')]    = allStatuses.some(function(v){return v==='fault';}) ? 'نعم' : 'لا';
+      rowValues[headers.indexOf('Has_Followup')] = allStatuses.some(function(v){return v==='followup';}) ? 'نعم' : 'لا';
+    } catch(e) {
+      // ignore
+    }
+
+    sheet.getRange(target.rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, message: 'تم تحديث الفحص بنجاح' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 /**
@@ -4181,7 +4509,8 @@ function submitInspectionWeek(data) {
         pm.notes || '',
         dayData.notes || '',
         hasFault    ? 'نعم' : 'لا',
-        hasFollowup ? 'نعم' : 'لا'
+        hasFollowup ? 'نعم' : 'لا',
+        'لا'
       ]);
     }
 
@@ -4270,8 +4599,9 @@ function getWeeklyInspections(params) {
     var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
     var dateOnlyCols = { 'Week_Start':1, 'Week_End':1 };
 
-    var filterWeek  = params.weekStart   || '';
-    var filterStaff = params.staffNumber || '';
+    var filterWeek   = params.weekStart   || '';
+    var filterStaff  = params.staffNumber || '';
+    var filterStatus = String(params.status || 'sent').toLowerCase();
 
     var allRows = [];
     allData.forEach(function(row) {
@@ -4285,6 +4615,9 @@ function getWeeklyInspections(params) {
       });
       if (filterWeek  && String(obj.Week_Start).trim()  !== filterWeek)  return;
       if (filterStaff && String(obj.Staff_Number).trim() !== filterStaff) return;
+      var isDraft = String(obj.Is_Draft || 'لا').trim() === 'نعم';
+      if (filterStatus === 'sent' && isDraft) return;
+      if (filterStatus === 'draft' && !isDraft) return;
       allRows.push(obj);
     });
 

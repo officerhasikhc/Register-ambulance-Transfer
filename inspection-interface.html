@@ -818,6 +818,7 @@
         loadHistory();
         updateWeekSummary();
         setTimeout(checkIncompleteReminder, 400);
+        syncDraftWithServer();
     }
 
     // ============================================================
@@ -1963,12 +1964,51 @@
     // DRAFT
     // ============================================================
     function saveDraft() {
+        draft.updatedAt = Date.now();
         localStorage.setItem(DRAFT_KEY + (loggedInUser?.staffNumber || 'x'), JSON.stringify(draft));
         updateWeekSummary();
         const badge = document.getElementById('savedBadge');
         if (badge) { badge.style.display = 'block'; clearTimeout(window._savedTimer); window._savedTimer = setTimeout(() => { badge.style.display = 'none'; }, 2000); }
         clearTimeout(window._reminderCheckTimer);
         window._reminderCheckTimer = setTimeout(checkIncompleteReminder, 300);
+        scheduleAutoSync();
+    }
+
+    async function syncDraftWithServer() {
+        if (!loggedInUser?.staffNumber || !draft.weekStart) return;
+        try {
+            const url = `${WEB_APP_URL}?action=getDraftInspection&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&weekStart=${encodeURIComponent(draft.weekStart)}&_t=${Date.now()}`;
+            const res = await fetch(url);
+            const payload = await res.json();
+            if (!payload || !payload.success || !payload.draft) {
+                if (draft.updatedAt) {
+                    scheduleAutoSync();
+                }
+                return;
+            }
+
+            const serverDraft = payload.draft;
+            const localTs = Number(draft.updatedAt || 0);
+            const serverTs = Number(new Date(serverDraft.lastUpdatedAt || '').getTime()) || 0;
+            const hint = document.getElementById('sessionHint');
+
+            if (serverTs > localTs) {
+                draft = serverDraft;
+                draft.updatedAt = serverTs;
+                localStorage.setItem(DRAFT_KEY + loggedInUser.staffNumber, JSON.stringify(draft));
+                renderDayTabs();
+                renderForm();
+                updateWeekSummary();
+                if (hint) {
+                    hint.textContent = '☁ تم استعادة أحدث نسخة من الخادم';
+                    hint.style.color = 'var(--success)';
+                }
+            } else if (localTs >= serverTs) {
+                scheduleAutoSync();
+            }
+        } catch (e) {
+            // ignore network errors, local draft still available
+        }
     }
 
     // ============================================================
@@ -1979,7 +2019,7 @@
 
     function scheduleAutoSync() {
         clearTimeout(_autoSyncTimer);
-        _autoSyncTimer = setTimeout(autoSyncDraft, 5000);
+        _autoSyncTimer = setTimeout(autoSyncDraft, 15000);
     }
 
     let _syncPendingRetry = false;
@@ -1991,7 +2031,7 @@
         _syncInProgress = true;
 
         const payload = {
-            action:        'submitInspectionWeek',
+            action:        'saveDraftInspection',
             weekStart:      draft.weekStart,
             weekEnd:        draft.weekEnd,
             driverName:     draft.driverName    || loggedInUser.nameAr        || '',
@@ -2002,20 +2042,19 @@
 
         const syncDot = document.getElementById('sessionHint');
         try {
-            const result = await ReliablePost.send(WEB_APP_URL, payload);
-            if (result.success) {
+            const result = await ReliablePost.send(WEB_APP_URL, payload, { background: true });
+            if (result && result.success) {
                 DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber);
                 if (syncDot) {
                     const prev = syncDot.textContent;
-                    syncDot.textContent = '✓ تم الحفظ في الخادم';
+                    syncDot.textContent = '☁✓ تم المزامنة مع الخادم';
                     syncDot.style.color = 'var(--success)';
                     setTimeout(() => {
-                        syncDot.textContent = prev.startsWith('✓ تم الحفظ') ? '' : prev;
+                        syncDot.textContent = prev.startsWith('☁✓') ? '' : prev;
                     }, 3000);
                 }
             }
         } catch(_) {
-        } finally {
             _syncInProgress = false;
             if (_syncPendingRetry) {
                 _syncPendingRetry = false;
