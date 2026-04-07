@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Record PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v41';
+const CACHE_NAME = 'ambulance-log-v42';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -34,7 +34,7 @@ const urlsToCache = [
 
 // Install event - Skip waiting to activate immediately
 self.addEventListener('install', event => {
-  console.log('[SW] Installing Service Worker v41...');
+  console.log('[SW] Installing Service Worker v42...');
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -213,7 +213,7 @@ function getAllFromStore(store) {
 
 // Activate event - Take control immediately and clean old caches
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating Service Worker v41...');
+  console.log('[SW] Activating Service Worker v42...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
@@ -248,4 +248,22 @@ self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SYNC_NOW') {
     syncOfflineData();
   }
+});
+
+// Handle notification click — focus the nurse page
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (var i = 0; i < windowClients.length; i++) {
+        var client = windowClients[i];
+        if (client.url.indexOf('nurse-interface') !== -1 && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('./nurse-interface.html');
+      }
+    })
+  );
 });

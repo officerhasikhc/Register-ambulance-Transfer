@@ -503,7 +503,6 @@
             color: #166534;
             font-weight: 600;
             font-size: 14px;
->>>>>>> master
         }
 
         /* Form Card */
@@ -1347,10 +1346,78 @@
                 padding: 10px;
             }
         }
+
+        /* ═══ TRIP NOTIFICATION SYSTEM STYLES ═══ */
+        .urgent-trip-banner {
+            display: none;
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: white;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+            animation: banner-pulse 2s ease-in-out infinite;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            border-radius: 0 0 12px 12px;
+        }
+        .urgent-trip-banner.visible { display: flex; }
+        .banner-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 18px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-inline-start: 8px;
+            flex-shrink: 0;
+        }
+        .banner-close:hover { background: rgba(255,255,255,0.35); }
+        @keyframes banner-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        .notif-permission-bar {
+            display: none;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            border-radius: 10px;
+            margin: 8px 0;
+            cursor: pointer;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+        }
+        .notif-permission-bar.visible { display: flex; }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Urgent Trip Notification Banner -->
+        <div class="urgent-trip-banner" id="urgentTripBanner" onclick="scrollToPendingTrips()">
+            ⚠️ <span id="urgentBannerText">0 pending trip(s) need completion</span>
+            <button class="banner-close" onclick="event.stopPropagation(); dismissUrgentBanner()">&times;</button>
+        </div>
+        <!-- Notification Permission Bar -->
+        <div class="notif-permission-bar" id="notifPermissionBar" onclick="askNotifPermission()">
+            🔔 Enable notifications to get alerted when drivers complete trips
+        </div>
         <!-- Header -->
         <div class="header">
             <div class="header-brand">
@@ -2441,11 +2508,13 @@
                 container.innerHTML = wasFilledBefore
                     ? `<div class="all-done-card">&#10003; ${currentLang === 'en' ? 'All trips completed' : 'تم إكمال جميع الرحلات'}</div>`
                     : `<div style="background: white; padding: 14px; border-radius: 10px; text-align: center; color: #6b7280;"><span>${currentLang === 'en' ? 'No pending trips from drivers' : 'لا توجد رحلات قيد الانتظار من السائقين'}</span></div>`;
+                checkAndNotifyNewTrips([]);
                 return;
             }
 
             nursePendingPage = 1;
             renderNursePendingPage();
+            checkAndNotifyNewTrips(currentPendingTrips);
         }
 
         function renderNursePendingPage() {
@@ -4867,9 +4936,142 @@
             }
         });
 
+        // ═══ TRIP NOTIFICATION SYSTEM ═══════════════════════════════
+        var _notifiedTripIds = new Set();
+        var _dismissedReminders = new Map();
+        var _urgentBannerDismissed = false;
+        var _originalPageTitle = document.title;
+        var _alertAudioCtx = null;
+
+        function playAlertSound() {
+            try {
+                if (!_alertAudioCtx) _alertAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                var osc = _alertAudioCtx.createOscillator();
+                var gain = _alertAudioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(_alertAudioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.value = 880;
+                gain.gain.value = 0.3;
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.01, _alertAudioCtx.currentTime + 0.5);
+                osc.stop(_alertAudioCtx.currentTime + 0.5);
+            } catch(e) {}
+        }
+
+        function requestNotifPermission() {
+            if (!('Notification' in window)) return;
+            if (Notification.permission === 'default') {
+                var bar = document.getElementById('notifPermissionBar');
+                if (bar) bar.classList.add('visible');
+            }
+        }
+
+        function askNotifPermission() {
+            if (!('Notification' in window)) return;
+            Notification.requestPermission().then(function(perm) {
+                var bar = document.getElementById('notifPermissionBar');
+                if (bar) bar.classList.remove('visible');
+            });
+        }
+
+        function showTripNotification(trip) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            var title = 'Trip Return Recorded';
+            var body = 'Driver: ' + (trip.driverName || 'Unknown') + ' — Vehicle: ' + (trip.vehicleNumber || '?') + '\nReturn: ' + (trip.returnTime || '') + '. Tap to complete.';
+            var n = new Notification(title, {
+                body: body,
+                icon: './icon-192x192.png',
+                tag: 'trip-' + trip.tripId,
+                requireInteraction: true
+            });
+            n.onclick = function() {
+                window.focus();
+                scrollToPendingTrips();
+                n.close();
+            };
+            n.onclose = function() {
+                _dismissedReminders.set(trip.tripId, Date.now());
+            };
+        }
+
+        function checkAndNotifyNewTrips(trips) {
+            if (!trips || !trips.length) {
+                updatePageTitle(0);
+                updateUrgentBanner(0);
+                return;
+            }
+
+            // Only notify for trips with return recorded (not departure-only)
+            var returnTrips = trips.filter(function(t) {
+                var retDate = t.returnDate && t.returnDate.toString().trim() !== '' && t.returnDate !== 'null' && t.returnDate !== 'undefined';
+                var retTime = t.returnTime && t.returnTime.toString().trim() !== '' && t.returnTime !== 'null' && t.returnTime !== 'undefined';
+                return t.status === 'complete' || (retDate && retTime);
+            });
+
+            var count = returnTrips.length;
+            updatePageTitle(count);
+            updateUrgentBanner(count);
+
+            returnTrips.forEach(function(trip) {
+                var id = trip.tripId;
+                if (!id) return;
+
+                if (_notifiedTripIds.has(id)) {
+                    var dismissTime = _dismissedReminders.get(id);
+                    if (dismissTime && (Date.now() - dismissTime) >= 3600000) {
+                        _dismissedReminders.delete(id);
+                        _notifiedTripIds.delete(id);
+                    } else {
+                        return;
+                    }
+                }
+
+                _notifiedTripIds.add(id);
+                showTripNotification(trip);
+                playAlertSound();
+            });
+        }
+
+        function updatePageTitle(count) {
+            if (count > 0) {
+                document.title = '(' + count + ') Pending Trips — ' + _originalPageTitle;
+            } else {
+                document.title = _originalPageTitle;
+            }
+        }
+
+        function updateUrgentBanner(count) {
+            var banner = document.getElementById('urgentTripBanner');
+            if (!banner) return;
+            if (count > 0) {
+                document.getElementById('urgentBannerText').textContent =
+                    count + ' pending trip' + (count > 1 ? 's' : '') + ' need completion';
+                if (!_urgentBannerDismissed) banner.classList.add('visible');
+            } else {
+                banner.classList.remove('visible');
+                _urgentBannerDismissed = false;
+            }
+        }
+
+        function dismissUrgentBanner() {
+            var el = document.getElementById('urgentTripBanner');
+            if (el) el.classList.remove('visible');
+            _urgentBannerDismissed = true;
+            setTimeout(function() { _urgentBannerDismissed = false; }, 300000);
+        }
+
+        function scrollToPendingTrips() {
+            var el = document.getElementById('pendingTripsAlert');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        requestNotifPermission();
+        // ═══ END TRIP NOTIFICATION SYSTEM ════════════════════════════
+
         // v40: Smart adaptive polling — starts fast, backs off when data unchanged
-        var _nursePollInterval = 5000;
-        var _nursePollMin = 5000;
+        var _nursePollInterval = 3000;
+        var _nursePollMin = 3000;
         var _nursePollMax = 30000;
         var _nursePollTimer = null;
         let isRefreshing = false;

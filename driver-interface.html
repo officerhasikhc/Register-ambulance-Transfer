@@ -987,6 +987,23 @@
             animation: badge-in 0.3s ease;
         }
         .step-done-badge.show { display: flex; }
+        .cancel-departure-btn {
+            display: none;
+            background: none;
+            border: 1px solid #fca5a5;
+            color: #dc2626;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: -8px auto 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .cancel-departure-btn:hover { background: #fef2f2; border-color: #dc2626; }
+        .cancel-departure-btn:active { background: #fee2e2; }
+        .cancel-departure-btn.show { display: block; }
         @keyframes badge-in {
             from { opacity: 0; transform: translateY(-6px); }
             to   { opacity: 1; transform: translateY(0); }
@@ -1170,6 +1187,9 @@
                 </div>
                 <span>تم تسجيل الذهاب — الساعة <span id="depBadgeTime">-</span></span>
             </div>
+
+            <!-- Cancel Departure Button (shows after departure, before return) -->
+            <button class="cancel-departure-btn" id="cancelDepartureBtn" onclick="cancelDeparture()">إلغاء الذهاب ✕</button>
 
             <!-- Departure Button (Step 1) -->
             <button class="btn-main btn-go" id="btnDeparture"
@@ -1837,6 +1857,67 @@
             );
         }
 
+        // ═══ CANCEL DEPARTURE ═══════════════════════════════
+        async function cancelDeparture() {
+            if (!pendingTrip || !selectedDriver) return;
+            if (!confirm('هل أنت متأكد من إلغاء الذهاب؟')) return;
+
+            const staffNumber = selectedDriver.staffNumber;
+            const tripId = pendingTrip.tripId;
+            const syncLocalId = pendingTrip._syncLocalId;
+
+            // 1. Clear local state
+            pendingTrip = null;
+            try { localStorage.removeItem('pending_trip_' + staffNumber); } catch(e) {}
+
+            // 2. Remove from allDriverHistory
+            if (Array.isArray(allDriverHistory)) {
+                const idx = allDriverHistory.findIndex(t => t.tripId === tripId);
+                if (idx !== -1) allDriverHistory.splice(idx, 1);
+                try { localStorage.setItem('trip_history_' + staffNumber, JSON.stringify(allDriverHistory)); } catch(e) {}
+            }
+
+            // 3. Remove from nurse pending trips cache
+            try {
+                const npKey = 'nurse_pending_trips';
+                const npData = localStorage.getItem(npKey);
+                if (npData) {
+                    const arr = JSON.parse(npData);
+                    const filtered = arr.filter(t => t.tripId !== tripId);
+                    localStorage.setItem(npKey, JSON.stringify(filtered));
+                }
+            } catch(e) {}
+
+            // 4. Hide pending trip display
+            const pendingDiv = document.getElementById('pendingTrip');
+            if (pendingDiv) pendingDiv.style.display = 'none';
+
+            // 5. Reset UI
+            updateButtons();
+            const cancelBtn = document.getElementById('cancelDepartureBtn');
+            if (cancelBtn) cancelBtn.classList.remove('show');
+
+            // 6. Cancel queued sync (harmless if already synced)
+            if (syncLocalId && typeof SyncManager !== 'undefined') {
+                try { await SyncManager.remove(syncLocalId); } catch(e) {}
+            }
+
+            // 7. Delete from backend (harmless if trip was never synced)
+            if (tripId) {
+                try {
+                    fetch(WEB_APP_URL + '?action=deletePendingTrip&tripId=' + encodeURIComponent(tripId));
+                } catch(e) {}
+            }
+
+            // 8. Invalidate caches
+            if (typeof DataCache !== 'undefined') {
+                DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
+            }
+
+            clearReturnCompletedFlag(staffNumber);
+            showOfficialToast('تم إلغاء الذهاب', 'يمكنك تسجيل رحلة جديدة');
+        }
+
         function updateButtons() {
             const btnDeparture   = document.getElementById('btnDeparture');
             const btnReturn      = document.getElementById('btnReturn');
@@ -1847,6 +1928,7 @@
             const trackConnector = document.getElementById('trackConnector');
             const doneBadge      = document.getElementById('doneBadge');
             const depBadgeTime   = document.getElementById('depBadgeTime');
+            const cancelBtn      = document.getElementById('cancelDepartureBtn');
 
             if (!selectedDriver) {
                 btnDeparture.style.display = 'flex';
@@ -1859,6 +1941,7 @@
                 if (labelRet) labelRet.className = 'track-label';
                 if (trackConnector) trackConnector.classList.remove('filled');
                 if (doneBadge) doneBadge.classList.remove('show');
+                if (cancelBtn) cancelBtn.classList.remove('show');
                 return;
             }
 
@@ -1885,9 +1968,10 @@
                 if (labelRet) { labelRet.className = 'track-label active'; labelRet.textContent = 'العودة'; }
                 if (trackConnector) trackConnector.classList.add('filled');
 
-                // Done badge
+                // Done badge + cancel button
                 if (doneBadge) doneBadge.classList.add('show');
                 if (depBadgeTime) depBadgeTime.textContent = pendingTrip.departureTime || document.getElementById('pendingTime').textContent || '-';
+                if (cancelBtn) cancelBtn.classList.add('show');
 
             } else {
                 // ── State: ready for departure → show Departure button ────
@@ -1904,6 +1988,7 @@
                 if (labelRet) { labelRet.className = 'track-label'; labelRet.textContent = 'العودة'; }
                 if (trackConnector) trackConnector.classList.remove('filled');
                 if (doneBadge) doneBadge.classList.remove('show');
+                if (cancelBtn) cancelBtn.classList.remove('show');
             }
         }
 
@@ -2175,7 +2260,11 @@
             });
             
             // === SAVE VIA SYNC MANAGER — instant local + background server sync ===
-            SyncManager.save('driverDeparture', tripData).then(() => {
+            SyncManager.save('driverDeparture', tripData).then((result) => {
+                if (result && result.localId) {
+                    pendingTrip._syncLocalId = result.localId;
+                    try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify(pendingTrip)); } catch(e) {}
+                }
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
             }).catch(err => {
                 console.error('SyncManager departure error:', err);
@@ -2216,6 +2305,8 @@
             if (_conn)  _conn.classList.add('filled');
             if (_badge) _badge.classList.add('show');
             if (_bTime) _bTime.textContent = new Date().toTimeString().slice(0,5);
+            const _cancelBtn = document.getElementById('cancelDepartureBtn');
+            if (_cancelBtn) _cancelBtn.classList.add('show');
 
             // Clear flag IMMEDIATELY
             isSubmittingDeparture = false;

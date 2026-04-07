@@ -2204,7 +2204,8 @@ function recordDriverReturn(data) {
           lock.releaseLock();
           invalidatePendingTripsCache();
           
-          // Defer email to background trigger (don't block the response)
+          // Nurse email disabled — replaced by browser notifications
+          /*
           try {
             const tripData = {
               tripId: foundTripId,
@@ -2228,7 +2229,6 @@ function recordDriverReturn(data) {
               .after(1)
               .create();
           } catch (deferErr) {
-            // Fallback: send email inline if trigger fails
             Logger.log('Deferred email trigger failed, sending inline: ' + deferErr.toString());
             try {
               sendTripCompleteEmailToNurse({
@@ -2246,6 +2246,7 @@ function recordDriverReturn(data) {
               Logger.log('Inline email also failed: ' + emailErr.toString());
             }
           }
+          */
           
           return ContentService
             .createTextOutput(JSON.stringify({
