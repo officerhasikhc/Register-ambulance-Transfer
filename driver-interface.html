@@ -621,6 +621,85 @@
             border-radius: 10px;
             padding: 12px;
             margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .trip-item:active {
+            transform: scale(0.98);
+        }
+
+        /* Fade-out animation for removed trips */
+        .trip-item.trip-removing {
+            animation: tripFadeOut 0.35s ease forwards;
+        }
+
+        @keyframes tripFadeOut {
+            0% { opacity: 1; transform: translateX(0); max-height: 200px; margin-bottom: 8px; }
+            60% { opacity: 0; transform: translateX(40px); }
+            100% { opacity: 0; transform: translateX(40px); max-height: 0; margin-bottom: 0; padding: 0 12px; overflow: hidden; }
+        }
+
+        /* Stagger animation for trip cards on load */
+        .trip-item.trip-enter {
+            animation: tripSlideIn 0.3s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes tripSlideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Expandable trip card details */
+        .trip-item-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+            opacity: 0;
+            margin-top: 0;
+        }
+
+        .trip-item.expanded .trip-item-details {
+            max-height: 200px;
+            opacity: 1;
+            margin-top: 10px;
+        }
+
+        .trip-item-details-inner {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 8px;
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .trip-detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .trip-detail-label {
+            color: #9ca3af;
+        }
+
+        .trip-detail-value {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .trip-expand-icon {
+            transition: transform 0.3s ease;
+            font-size: 10px;
+            color: #9ca3af;
+            margin-right: 4px;
+        }
+
+        .trip-item.expanded .trip-expand-icon {
+            transform: rotate(180deg);
         }
 
         .trip-item-header {
@@ -635,6 +714,98 @@
             color: #6b7280;
             font-size: 13px;
             margin-bottom: 4px;
+        }
+
+        .trip-date-relative {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-right: 6px;
+        }
+
+        /* Trip count summary */
+        .trip-count-summary {
+            font-size: 12px;
+            color: #6b7280;
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .trip-count-number {
+            font-weight: 700;
+            color: var(--primary-blue);
+        }
+
+        /* Status filter */
+        .status-filter-bar {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .status-filter-btn {
+            padding: 4px 10px;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 16px;
+            background: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .status-filter-btn.active {
+            border-color: var(--primary-blue);
+            background: #dbeafe;
+            color: var(--primary-blue);
+        }
+
+        /* Trip duration badge */
+        .trip-duration {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11px;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 2px 7px;
+            border-radius: 8px;
+            margin-top: 6px;
+        }
+
+        .trip-duration-icon {
+            font-size: 12px;
+        }
+
+        /* Background refresh indicator */
+        .trip-refresh-indicator {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: #9ca3af;
+            padding: 2px 0;
+        }
+
+        .trip-refresh-indicator.show {
+            display: inline-flex;
+        }
+
+        .trip-refresh-dot {
+            width: 6px;
+            height: 6px;
+            background: #60a5fa;
+            border-radius: 50%;
+            animation: pulse-refresh 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse-refresh {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
         }
         
         .trip-id {
@@ -1223,13 +1394,23 @@
             <div class="trip-history-header">
                 <h4>سجل رحلاتي</h4>
                 <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="trip-refresh-indicator" id="tripRefreshIndicator"><span class="trip-refresh-dot"></span>تحديث</span>
                     <span id="currentMonthBadge" style="background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
                     <select class="month-filter" id="monthFilter" onchange="loadTripHistory()">
                         <!-- Options will be populated dynamically -->
                     </select>
                 </div>
             </div>
-            <div id="tripHistory">
+            <div class="status-filter-bar" id="statusFilterBar">
+                <button class="status-filter-btn active" data-status="all" onclick="filterByStatus('all')">الكل</button>
+                <button class="status-filter-btn" data-status="pending" onclick="filterByStatus('pending')">قيد التنفيذ</button>
+                <button class="status-filter-btn" data-status="complete" onclick="filterByStatus('complete')">مكتملة</button>
+                <button class="status-filter-btn" data-status="submitted" onclick="filterByStatus('submitted')">معتمدة</button>
+            </div>
+            <div class="trip-count-summary" id="tripCountSummary" style="display:none;">
+                عدد الرحلات: <span class="trip-count-number" id="tripCountNumber">0</span>
+            </div>
+            <div id="tripHistory" role="list" aria-live="polite">
                 <div class="empty-state">
                     <div class="empty-state-icon">📭</div>
                     <p>لا توجد رحلات مسجلة</p>
@@ -1268,6 +1449,7 @@
         let driverHistoryPage = 1;
         const DRIVER_TRIPS_PER_PAGE = 5;
         let allDriverHistory = [];
+        let currentStatusFilter = 'all'; // Status filter state: all | pending | complete | submitted
         
         // Submission flags - must be defined early for updateButtons()
         let isSubmittingDeparture = false;
@@ -1870,11 +2052,33 @@
             pendingTrip = null;
             try { localStorage.removeItem('pending_trip_' + staffNumber); } catch(e) {}
 
-            // 2. Remove from allDriverHistory
+            // 2. Remove from allDriverHistory and re-render immediately
             if (Array.isArray(allDriverHistory)) {
+                // Animate the trip card out before removing from data
+                const tripCard = document.querySelector(`.trip-item[data-trip-id="${tripId}"]`);
+                if (tripCard) {
+                    tripCard.classList.add('trip-removing');
+                }
+
                 const idx = allDriverHistory.findIndex(t => t.tripId === tripId);
                 if (idx !== -1) allDriverHistory.splice(idx, 1);
                 try { localStorage.setItem('trip_history_' + staffNumber, JSON.stringify(allDriverHistory)); } catch(e) {}
+                // Fix pagination if current page is now empty
+                const totalPages = Math.ceil(allDriverHistory.length / DRIVER_TRIPS_PER_PAGE);
+                if (driverHistoryPage > totalPages && totalPages > 0) driverHistoryPage = totalPages;
+                if (driverHistoryPage < 1) driverHistoryPage = 1;
+                // Re-render after animation completes (or immediately if no card found)
+                const renderDelay = tripCard ? 350 : 0;
+                setTimeout(() => {
+                    renderDriverHistoryPage();
+                    // Update trip count
+                    const countSummary = document.getElementById('tripCountSummary');
+                    const countNumber = document.getElementById('tripCountNumber');
+                    if (countSummary && countNumber) {
+                        countNumber.textContent = allDriverHistory.length;
+                        countSummary.style.display = allDriverHistory.length > 0 ? 'flex' : 'none';
+                    }
+                }, renderDelay);
             }
 
             // 3. Remove from nurse pending trips cache
@@ -2058,6 +2262,20 @@
                     toast.remove();
                 }, 400);
             }, duration);
+        }
+
+        function showSyncErrorToast(message, retryFn) {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;z-index:10001;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);transition:transform 0.3s ease,opacity 0.3s ease;opacity:0;font-family:inherit;max-width:90vw;';
+            const retryBtn = retryFn ? `<button onclick="this.parentElement._retry();this.parentElement.remove();" style="background:#dc2626;color:#fff;border:none;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;">إعادة المحاولة</button>` : '';
+            toast.innerHTML = `<span>⚠️ ${message}</span>${retryBtn}`;
+            if (retryFn) toast._retry = retryFn;
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => { toast.style.transform = 'translateX(-50%) translateY(0)'; toast.style.opacity = '1'; });
+            setTimeout(() => {
+                toast.style.transform = 'translateX(-50%) translateY(80px)'; toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 400);
+            }, 5000);
         }
         
         /**
@@ -2268,6 +2486,9 @@
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
             }).catch(err => {
                 console.error('SyncManager departure error:', err);
+                showSyncErrorToast('فشلت مزامنة الذهاب', () => {
+                    SyncManager.save('driverDeparture', tripData).catch(() => {});
+                });
                 // Fallback
                 if (isOnline) {
                     ReliablePost.send(WEB_APP_URL, tripData, { background: true, timeout: 30000 }).catch(() => {});
@@ -2457,6 +2678,9 @@
             };
             SyncManager.save('driverReturn', returnData).catch(err => {
                 console.error('SyncManager return error:', err);
+                showSyncErrorToast('فشلت مزامنة العودة', () => {
+                    SyncManager.save('driverReturn', returnData).catch(() => {});
+                });
                 if (isOnline) {
                     ReliablePost.send(WEB_APP_URL, returnData, { background: true, timeout: 30000 }).catch(() => {});
                 } else {
@@ -2710,11 +2934,31 @@
                 });
             }
 
+            // Filter by status if selected
+            if (currentStatusFilter !== 'all') {
+                history = history.filter(trip => {
+                    if (currentStatusFilter === 'pending') return !trip.status || trip.status === 'pending';
+                    if (currentStatusFilter === 'complete') return trip.status === 'complete';
+                    if (currentStatusFilter === 'submitted') return trip.status === 'submitted';
+                    return true;
+                });
+            }
+
+            // Update trip count summary
+            const countSummary = document.getElementById('tripCountSummary');
+            const countNumber = document.getElementById('tripCountNumber');
+            if (countSummary && countNumber) {
+                countNumber.textContent = history.length;
+                countSummary.style.display = history.length > 0 ? 'flex' : 'none';
+            }
+
             if (history.length === 0) {
+                let emptyMsg = monthFilter === 'all' ? 'لا توجد رحلات مسجلة' : 'لا توجد رحلات في هذا الشهر';
+                if (currentStatusFilter !== 'all') emptyMsg = 'لا توجد رحلات بهذه الحالة';
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📭</div>
-                        <p>${monthFilter === 'all' ? 'لا توجد رحلات مسجلة' : 'لا توجد رحلات في هذا الشهر'}</p>
+                        <p>${emptyMsg}</p>
                     </div>
                 `;
                 return;
@@ -2748,11 +2992,22 @@
 
         function renderDriverHistoryPage() {
             const container = document.getElementById('tripHistory');
+
+            if (allDriverHistory.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>لا توجد رحلات مسجلة</p>
+                    </div>
+                `;
+                return;
+            }
+
             const totalPages = Math.ceil(allDriverHistory.length / DRIVER_TRIPS_PER_PAGE);
             const startIndex = (driverHistoryPage - 1) * DRIVER_TRIPS_PER_PAGE;
             const pageTrips = allDriverHistory.slice(startIndex, startIndex + DRIVER_TRIPS_PER_PAGE);
 
-            let html = pageTrips.map(trip => {
+            let html = pageTrips.map((trip, idx) => {
                 const isComplete = trip.status === 'complete' || trip.status === 'submitted';
                 const isApproved = trip.status === 'submitted';
                 const isOffline = !trip.tripId && trip.offlineSaved !== false;
@@ -2790,14 +3045,43 @@
                 } else {
                     tripIdDisplay = '';
                 }
+
+                // Trip duration
+                const duration = isComplete ? calcTripDuration(trip.departureTime, trip.returnTime) : '';
+                const durationHtml = duration ? `<div class="trip-duration"><span class="trip-duration-icon">⏱</span>${duration}</div>` : '';
+
+                // Relative date
+                const dateStr = (trip.departureDate || '').toString().split('T')[0];
+                const relDate = getRelativeDate(dateStr);
+                const relDateHtml = relDate ? `<span class="trip-date-relative">(${relDate})</span>` : '';
+
+                // Expandable details
+                const vehicleNum = trip.vehicleNumber || '';
+                const detailsHtml = `
+                    <div class="trip-item-details">
+                        <div class="trip-item-details-inner">
+                            ${vehicleNum ? `<div class="trip-detail-row"><span class="trip-detail-label">رقم المركبة:</span><span class="trip-detail-value">${vehicleNum}</span></div>` : ''}
+                            ${trip.departureDate ? `<div class="trip-detail-row"><span class="trip-detail-label">تاريخ الذهاب:</span><span class="trip-detail-value">${dateStr}</span></div>` : ''}
+                            ${trip.returnDate ? `<div class="trip-detail-row"><span class="trip-detail-label">تاريخ العودة:</span><span class="trip-detail-value">${(trip.returnDate || '').toString().split('T')[0]}</span></div>` : ''}
+                            ${duration ? `<div class="trip-detail-row"><span class="trip-detail-label">المدة:</span><span class="trip-detail-value">${duration}</span></div>` : ''}
+                            <div class="trip-detail-row"><span class="trip-detail-label">الحالة:</span><span class="trip-detail-value">${statusText}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                // Stagger animation delay
+                const staggerDelay = idx * 0.06;
                 
                 return `
-                    <div class="trip-item ${isApproved ? 'trip-approved' : ''} ${isOffline ? 'trip-offline' : ''} ${isSyncing ? 'trip-syncing' : ''}">
+                    <div class="trip-item trip-enter ${isApproved ? 'trip-approved' : ''} ${isOffline ? 'trip-offline' : ''} ${isSyncing ? 'trip-syncing' : ''}" role="listitem" onclick="toggleTripExpand(this)" style="animation-delay:${staggerDelay}s" data-trip-id="${trip.tripId || ''}">
                         <div class="trip-item-header">
-                            ${tripIdDisplay}
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                ${tripIdDisplay}
+                                <span class="trip-expand-icon">▼</span>
+                            </div>
                             <span class="trip-item-status ${statusClass}">${syncIndicator}${statusText}</span>
                         </div>
-                        <div class="trip-item-date">${(trip.departureDate || '').toString().split('T')[0]}</div>
+                        <div class="trip-item-date">${dateStr} ${relDateHtml}</div>
                         <div class="trip-item-times">
                             <div class="time-row">
                                 <span class="time-label">الذهاب:</span>
@@ -2808,6 +3092,8 @@
                                 <span class="time-value">${trip.returnTime || '-'}</span>
                             </div>
                         </div>
+                        ${durationHtml}
+                        ${detailsHtml}
                     </div>
                 `;
             }).join('');
@@ -2833,6 +3119,65 @@
                 driverHistoryPage = newPage;
                 renderDriverHistory();
             }
+        }
+
+        // ============================================
+        // STATUS FILTER
+        // ============================================
+        function filterByStatus(status) {
+            currentStatusFilter = status;
+            // Update active button
+            document.querySelectorAll('.status-filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.status === status);
+            });
+            driverHistoryPage = 1;
+            loadTripHistory();
+        }
+
+        // ============================================
+        // RELATIVE DATE HELPER
+        // ============================================
+        function getRelativeDate(dateStr) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const tripDate = new Date(dateStr);
+            tripDate.setHours(0,0,0,0);
+            const diffDays = Math.round((today - tripDate) / (1000 * 60 * 60 * 24));
+            if (diffDays === 0) return 'اليوم';
+            if (diffDays === 1) return 'أمس';
+            if (diffDays >= 2 && diffDays <= 6) return 'منذ ' + diffDays + ' أيام';
+            if (diffDays === 7) return 'منذ أسبوع';
+            return '';
+        }
+
+        // ============================================
+        // TRIP DURATION HELPER
+        // ============================================
+        function calcTripDuration(departureTime, returnTime) {
+            if (!departureTime || !returnTime || returnTime === '-') return '';
+            try {
+                const depParts = departureTime.replace(/\s*(AM|PM|ص|م)\s*/i, ' $1').trim();
+                const retParts = returnTime.replace(/\s*(AM|PM|ص|م)\s*/i, ' $1').trim();
+                const today = new Date().toISOString().split('T')[0];
+                const dep = new Date(today + ' ' + depParts);
+                const ret = new Date(today + ' ' + retParts);
+                if (isNaN(dep) || isNaN(ret)) return '';
+                let diffMs = ret - dep;
+                if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // handle midnight crossing
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                if (hours === 0 && minutes === 0) return '';
+                if (hours === 0) return minutes + ' دقيقة';
+                if (minutes === 0) return hours + ' ساعة';
+                return hours + ':' + String(minutes).padStart(2, '0') + ' ساعة';
+            } catch(e) { return ''; }
+        }
+
+        // ============================================
+        // TOGGLE TRIP CARD EXPANSION
+        // ============================================
+        function toggleTripExpand(el) {
+            el.classList.toggle('expanded');
         }
 
         function showSuccess(title, text) {
@@ -2939,8 +3284,11 @@
             }
             
             // Invalidate cache to force fresh fetch
+            const refreshInd = document.getElementById('tripRefreshIndicator');
+            if (refreshInd) refreshInd.classList.add('show');
             DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
-            loadPendingTrip();
+            await loadPendingTrip();
+            if (refreshInd) refreshInd.classList.remove('show');
         }
         
         // Check for updates every 12 seconds (skip if page is hidden to save bandwidth)
