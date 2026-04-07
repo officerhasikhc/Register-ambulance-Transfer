@@ -565,6 +565,21 @@
         // PWA Install prompt
         let deferredPrompt;
 
+        // Capture beforeinstallprompt early — it can fire before DOMContentLoaded
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const container = document.getElementById('installContainer');
+            if (container) container.classList.add('visible');
+        });
+
+        // Fired after user installs via the prompt — hide button immediately
+        window.addEventListener('appinstalled', () => {
+            const container = document.getElementById('installContainer');
+            if (container) container.classList.remove('visible');
+            deferredPrompt = null;
+        });
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             setLanguage(currentLang);
@@ -782,18 +797,10 @@
             // Update device icon based on platform
             updateDeviceIcon();
 
-            // Chrome / Edge / Android: fires when app is installable
-            window.addEventListener('beforeinstallprompt', (e) => {
-                e.preventDefault();
-                deferredPrompt = e;
+            // If beforeinstallprompt already fired before DOMContentLoaded, show the button
+            if (deferredPrompt) {
                 container.classList.add('visible');
-            });
-
-            // Fired after user installs via the prompt — hide button immediately
-            window.addEventListener('appinstalled', () => {
-                container.classList.remove('visible');
-                deferredPrompt = null;
-            });
+            }
 
             // iOS Safari: beforeinstallprompt never fires, but if not in standalone mode
             // show a subtle hint so the user knows they can add to home screen

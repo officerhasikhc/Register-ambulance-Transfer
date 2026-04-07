@@ -1869,22 +1869,13 @@
         const submitSec = document.querySelector('.submit-section');
         if (!submitSec) return;
 
-        // Check if Saturday PM is done
+        // Check if Saturday (day 6) PM is done — this is the final requirement
         const satData   = draft.days[6] || {};
         const satPmDone = Object.values((satData.pm||{}).items||{}).filter(Boolean).length >= TOTAL_ITEMS;
+        const satAmDone = Object.values((satData.am||{}).items||{}).filter(Boolean).length >= TOTAL_ITEMS;
 
-        // Check if ALL available (non-future) days have both AM+PM complete
-        let allAvailDone = true;
-        for (let d = 0; d < 7; d++) {
-            if (isFutureDay(d)) continue;
-            const dd = draft.days[d] || {};
-            const amF = Object.values((dd.am||{}).items||{}).filter(Boolean).length;
-            const pmF = Object.values((dd.pm||{}).items||{}).filter(Boolean).length;
-            if (amF < TOTAL_ITEMS || pmF < TOTAL_ITEMS) { allAvailDone = false; break; }
-        }
-
-        // Show submit when: viewing Saturday + Saturday PM done, OR all days complete
-        if ((currentDayIdx === 6 && satPmDone) || allAvailDone) {
+        // Submit button only appears when Saturday's both AM and PM are complete
+        if (satAmDone && satPmDone) {
             submitSec.style.display = '';
         } else {
             submitSec.style.display = 'none';
@@ -2555,6 +2546,33 @@
     }
 
     window.addEventListener('DOMContentLoaded', init);
+
+    // Register Service Worker for PWA with aggressive auto-update
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+                reg.update().catch(() => {});
+                setInterval(() => { reg.update(); }, 60000);
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            setTimeout(() => window.location.reload(), 1000);
+                        }
+                    });
+                });
+            })
+            .catch(err => console.error('[App] SW registration failed:', err));
+        var _reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!_reloading) { _reloading = true; window.location.reload(); }
+        });
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data && event.data.type === 'SW_UPDATED') {
+                if (!_reloading) { _reloading = true; window.location.reload(); }
+            }
+        });
+    }
     </script>
 </body>
 </html>
