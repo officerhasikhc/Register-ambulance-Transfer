@@ -4802,17 +4802,22 @@ function reportFaultAlert(data) {
     var status          = String(data.status || '').trim();
     var note            = String(data.note || '').trim();
     var photo           = String(data.photo || '').trim();
+    var alertType       = String(data.alertType || 'fault').trim(); // 'fault' or 'followup'
 
     var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
     var dayName  = dayNames[dayIndex] || ('يوم ' + dayIndex);
     var sessionAr = session === 'AM' ? 'صباحي' : 'مسائي';
     var now = Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm');
 
-    var subject = '🚨 بلاغ عطل فوري - ' + itemLabel + ' - سيارة ' + ambulanceNumber;
+    var isFault = (alertType === 'fault');
+    var headerColor = isFault ? '#dc2626' : '#f59e0b';
+    var headerIcon  = isFault ? '🚨' : '📋';
+    var headerTitle = isFault ? 'بلاغ عطل فوري' : 'طلب متابعة';
+    var subject = headerIcon + ' ' + headerTitle + ' - ' + itemLabel + ' - سيارة ' + ambulanceNumber;
 
     var body = '<div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto;">'
-      + '<div style="background:#dc2626;color:#fff;padding:16px 20px;border-radius:8px 8px 0 0;">'
-      + '<h2 style="margin:0;">🚨 بلاغ عطل فوري</h2></div>'
+      + '<div style="background:' + headerColor + ';color:#fff;padding:16px 20px;border-radius:8px 8px 0 0;">'
+      + '<h2 style="margin:0;">' + headerIcon + ' ' + headerTitle + '</h2></div>'
       + '<div style="background:#fff;border:1px solid #e5e7eb;padding:20px;border-radius:0 0 8px 8px;">'
       + '<table style="width:100%;border-collapse:collapse;font-size:14px;">'
       + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">السائق</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + driverName + '</td></tr>'
@@ -4820,8 +4825,8 @@ function reportFaultAlert(data) {
       + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">أسبوع المناوبة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + weekStart + '</td></tr>'
       + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">اليوم / الفترة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + dayName + ' - ' + sessionAr + '</td></tr>'
       + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">القسم</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + sectionLabel + '</td></tr>'
-      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">البند</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;color:#dc2626;font-weight:bold;">' + itemLabel + '</td></tr>'
-      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">الحالة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + status + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">البند</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;color:' + headerColor + ';font-weight:bold;">' + itemLabel + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">الحالة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + (isFault ? 'عطل' : 'يحتاج متابعة') + '</td></tr>'
       + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">ملاحظة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + (note || '—') + '</td></tr>'
       + '<tr><td style="padding:8px;font-weight:bold;">وقت البلاغ</td><td style="padding:8px;">' + now + '</td></tr>'
       + '</table>';

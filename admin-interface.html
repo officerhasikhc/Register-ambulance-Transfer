@@ -4950,11 +4950,11 @@
             const DAY_NAMES_AR = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
             const ITEM_LABELS  = {
                 tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
-                no_oil_leak:'تسرب زيت أو ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
-                engine_start:'تشغيل السيارة', gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
-                ac_system:'نظام التكييف', cabin_electric:'أجهزة المقصورة',
-                oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
-                fuel_level:'مستوى الوقود', battery:'البطارية',
+                side_mirrors:'المرايا الجانبية', doors:'الأبواب', body_exterior:'الهيكل الخارجي',
+                gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
+                ac_system:'نظام التكييف', front_wipers:'المساحات الأمامية', cabin_electric:'أجهزة المقصورة',
+                engine_start:'تشغيل السيارة', oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر',
+                no_oil_leak:'تسرب زيت أو ماء', fuel_level:'مستوى الوقود', battery:'البطارية', brakes:'الفرامل',
                 front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
                 brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
             };
@@ -5033,11 +5033,11 @@
             if (!detail) return;
             const ITEM_LABELS = {
                 tires_front:'الإطارات الأمامية', tires_rear:'الإطارات الخلفية',
-                no_oil_leak:'تسرب زيت أو ماء', side_mirrors:'المرايا الجانبية', doors:'الأبواب',
-                engine_start:'تشغيل السيارة', gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
-                ac_system:'نظام التكييف', cabin_electric:'أجهزة المقصورة',
-                oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر', front_wipers:'المساحات',
-                fuel_level:'مستوى الوقود', battery:'البطارية',
+                side_mirrors:'المرايا الجانبية', doors:'الأبواب', body_exterior:'الهيكل الخارجي',
+                gauges:'لوحة العدادات', no_warnings:'مصابيح التحذير',
+                ac_system:'نظام التكييف', front_wipers:'المساحات الأمامية', cabin_electric:'أجهزة المقصورة',
+                engine_start:'تشغيل السيارة', oil_level:'مستوى الزيت', radiator_water:'ماء الراديتر',
+                no_oil_leak:'تسرب زيت أو ماء', fuel_level:'مستوى الوقود', battery:'البطارية', brakes:'الفرامل',
                 front_lights:'الأنوار الأمامية', rear_lights:'الأنوار الخلفية',
                 brake_lights:'أنوار الفرامل', turn_signals:'إشارات الانعطاف', hazard_lights:'أنوار الطوارئ'
             };
@@ -5215,23 +5215,25 @@
                 { title: 'أولاً: الهيكل الخارجي والإطارات', items: [
                     { id: 'tires_front',   label: 'الإطارات الأمامية'   },
                     { id: 'tires_rear',    label: 'الإطارات الخلفية'    },
-                    { id: 'no_oil_leak',   label: 'تسرب زيت أو ماء'     },
                     { id: 'side_mirrors',  label: 'المرايا الجانبية'     },
-                    { id: 'doors',         label: 'الأبواب'              }
+                    { id: 'doors',         label: 'الأبواب'              },
+                    { id: 'body_exterior', label: 'الهيكل الخارجي'       }
                 ]},
                 { title: 'ثانياً: النظام الكهربائي الأساسي', items: [
-                    { id: 'engine_start',  label: 'تشغيل السيارة'       },
                     { id: 'gauges',        label: 'لوحة العدادات'        },
                     { id: 'no_warnings',   label: 'مصابيح التحذير'       },
                     { id: 'ac_system',     label: 'نظام التكييف'         },
+                    { id: 'front_wipers',  label: 'المساحات الأمامية'    },
                     { id: 'cabin_electric',label: 'أجهزة المقصورة'       }
                 ]},
-                { title: 'ثالثاً: المحرك والسوائل', items: [
+                { title: 'ثالثاً: المحرك وتشغيله والسوائل', items: [
+                    { id: 'engine_start',  label: 'تشغيل السيارة'       },
                     { id: 'oil_level',     label: 'مستوى الزيت'          },
                     { id: 'radiator_water',label: 'ماء الراديتر'          },
-                    { id: 'front_wipers',  label: 'المساحات الأمامية'    },
+                    { id: 'no_oil_leak',   label: 'تسرب زيت أو ماء'     },
                     { id: 'fuel_level',    label: 'مستوى الوقود'          },
-                    { id: 'battery',       label: 'البطارية'              }
+                    { id: 'battery',       label: 'البطارية'              },
+                    { id: 'brakes',        label: 'الفرامل'               }
                 ]},
                 { title: 'رابعاً: الأنوار والإشارات', items: [
                     { id: 'front_lights',  label: 'الأنوار الأمامية'     },
