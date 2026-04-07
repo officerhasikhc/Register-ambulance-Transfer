@@ -1829,6 +1829,8 @@
         // ============================================
         let _returnCompletedAt = 0; // timestamp when return was last recorded
         let _departureRecordedAt = 0; // timestamp when departure was last recorded
+        let _cancelledAt = 0; // timestamp when cancellation was last performed
+        const _recentlyDeletedTripIds = new Set(); // trip IDs deleted locally, suppress from server data
         
         function processPendingTripsData(trips) {
             if (!selectedDriver) return;
@@ -1849,7 +1851,13 @@
 
             // Guard: don't touch UI for 10s after departure was recorded
             // (server may not have the trip yet — keep our local pending card as-is)
-            if (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) {
+            if (_departureRecordedAt && (Date.now() - _departureRecordedAt < 15000)) {
+                return;
+            }
+
+            // Guard: don't touch UI for 15s after cancellation
+            // (server may still return the trip before the delete propagates)
+            if (_cancelledAt && (Date.now() - _cancelledAt < 15000)) {
                 return;
             }
             
@@ -1922,12 +1930,13 @@
         async function loadPendingTrip() {
             if (!selectedDriver) return;
             
-            // Guard: skip if return or departure was just recorded (server hasn't caught up yet)
-            // 120s for return (SyncManager may be slow), 10s for departure
+            // Guard: skip if return, departure or cancel was just recorded (server hasn't caught up yet)
+            // 120s for return (SyncManager may be slow), 15s for departure, 15s for cancel
             const _rcFlagLoad = selectedDriver ? getReturnCompletedFlag(selectedDriver.staffNumber) : null;
             const _guardActive = (_rcFlagLoad) ||
                                  (_returnCompletedAt && (Date.now() - _returnCompletedAt < 120000)) ||
-                                 (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000));
+                                 (_departureRecordedAt && (Date.now() - _departureRecordedAt < 15000)) ||
+                                 (_cancelledAt && (Date.now() - _cancelledAt < 15000));
             if (_guardActive) {
                 // Still load history from localStorage but don't touch pending card or server data
                 const historyKey = `trip_history_${selectedDriver.staffNumber}`;
@@ -1996,11 +2005,12 @@
                     if (meta?.fromCache) return;
                     if (isSubmittingDeparture || isSubmittingReturn) return;
                     
-                    // Guard: don't overwrite local data while departure/return is settling
+                    // Guard: don't overwrite local data while departure/return/cancel is settling
                     const _rcFlagBg = selectedDriver ? getReturnCompletedFlag(selectedDriver.staffNumber) : null;
                     if (_rcFlagBg ||
-                        (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000)) ||
-                        (_returnCompletedAt && (Date.now() - _returnCompletedAt < 120000))) {
+                        (_departureRecordedAt && (Date.now() - _departureRecordedAt < 15000)) ||
+                        (_returnCompletedAt && (Date.now() - _returnCompletedAt < 120000)) ||
+                        (_cancelledAt && (Date.now() - _cancelledAt < 15000))) {
                         return;
                     }
                     
@@ -2047,6 +2057,10 @@
             const staffNumber = selectedDriver.staffNumber;
             const tripId = pendingTrip.tripId;
             const syncLocalId = pendingTrip._syncLocalId;
+
+            // 0. Set cancel guard — prevents autoRefresh from re-adding this trip
+            _cancelledAt = Date.now();
+            if (tripId) _recentlyDeletedTripIds.add(String(tripId));
 
             // 1. Clear local state
             pendingTrip = null;
@@ -2109,8 +2123,10 @@
             // 7. Delete from backend (harmless if trip was never synced)
             if (tripId) {
                 try {
-                    fetch(WEB_APP_URL + '?action=deletePendingTrip&tripId=' + encodeURIComponent(tripId));
+                    await fetch(WEB_APP_URL + '?action=deletePendingTrip&tripId=' + encodeURIComponent(tripId));
                 } catch(e) {}
+                // Server confirmed deletion — safe to remove from suppression set after a short delay
+                setTimeout(() => _recentlyDeletedTripIds.delete(String(tripId)), 30000);
             }
 
             // 8. Invalidate caches
@@ -2874,7 +2890,14 @@
             if (trips && trips.length > 0) {
                 history = trips.filter(t => 
                     t.staffNumber && t.staffNumber.toString() === selectedDriver.staffNumber.toString()
-                ).map(trip => ({
+                ).filter(t => {
+                    // Suppress trips that were recently deleted locally (cancel guard)
+                    if (t.tripId && _recentlyDeletedTripIds.has(String(t.tripId))) {
+                        // Clear from set after 30s (server should have caught up by then)
+                        return false;
+                    }
+                    return true;
+                }).map(trip => ({
                     ...trip,
                     approved: trip.status === 'submitted'
                 }));
@@ -3260,11 +3283,12 @@
                 return;
             }
             
-            // Don't refresh if departure or return was just recorded (server hasn't caught up)
+            // Don't refresh if departure, return or cancel was just recorded (server hasn't caught up)
             const _rcFlagAuto = selectedDriver ? getReturnCompletedFlag(selectedDriver.staffNumber) : null;
             if (_rcFlagAuto ||
                 (_returnCompletedAt && (Date.now() - _returnCompletedAt < 120000)) ||
-                (_departureRecordedAt && (Date.now() - _departureRecordedAt < 10000))) {
+                (_departureRecordedAt && (Date.now() - _departureRecordedAt < 15000)) ||
+                (_cancelledAt && (Date.now() - _cancelledAt < 15000))) {
                 return;
             }
             
