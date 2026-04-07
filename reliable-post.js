@@ -19,7 +19,7 @@ const ReliablePost = {
     OFFLINE_QUEUE_KEY: 'reliable_post_queue',
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000,
-    _GET_SUPPORTED_ACTIONS: ['submitCase', 'driverDeparture', 'driverReturn', 'updateRecord', 'saveDraftInspection', 'submitInspectionWeek', 'adminUpdateInspection'],
+    _GET_SUPPORTED_ACTIONS: ['submitCase', 'driverDeparture', 'driverReturn', 'updateRecord', 'saveDraftInspection', 'submitInspectionWeek', 'adminUpdateInspection', 'reportFaultAlert'],
 
     /**
      * Send POST data reliably to Google Apps Script

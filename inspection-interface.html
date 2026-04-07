@@ -292,12 +292,29 @@
         }
         .followup-chip:hover { background: #fffbeb; border-color: #f59e0b; }
         .followup-chip.sel   { background: #fef3c7; border-color: #f59e0b; box-shadow: 0 0 0 1.5px #f59e0b; }
+        .followup-chip.chip-fault { border-color: #fca5a5; color: #991b1b; }
+        .followup-chip.chip-fault:hover { background: #fef2f2; border-color: #ef4444; }
+        .followup-chip.chip-fault.sel { background: #fee2e2; border-color: #ef4444; box-shadow: 0 0 0 1.5px #ef4444; }
         .followup-custom-input {
             width: 100%; margin-top: 6px; padding: 5px 10px;
             border: 1px solid #fde68a; border-radius: 7px;
             font-family: inherit; font-size: 12px; background: #fffbeb; color: var(--text-primary);
         }
         .followup-custom-input:focus { outline: none; border-color: #f59e0b; }
+
+        /* ── Fault Alert Button ── */
+        .fault-alert-wrap { margin-top: 6px; text-align: center; }
+        .btn-fault-alert {
+            background: #dc2626; color: #fff; border: none; border-radius: 8px;
+            padding: 7px 16px; font-size: .85rem; font-weight: 600; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-fault-alert:active { background: #b91c1c; }
+        .btn-fault-alert:disabled { opacity: .5; cursor: not-allowed; }
+        .fault-reported-badge {
+            display: inline-block; background: #dcfce7; color: #166534; border-radius: 8px;
+            padding: 5px 14px; font-size: .82rem; font-weight: 600;
+        }
 
         /* ── Item Photo Attachment ── */
         .item-photo-section { padding: 4px 4px 7px; }
@@ -634,19 +651,32 @@
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwDUAGlnGBKZMhq8UbzEYBUaP3UNi49Be5PdwqQfnyIiB1HomgXVLrmUTrgeLKhyb-j/exec';
     const DRAFT_KEY   = 'inspection_draft_';
 
-    // Preset reasons for "⚠ بحاجة للمتابعة" — generic enough to apply to all 20 items
-    const FOLLOWUP_CHIPS = [
-        'يحتاج تنظيف',
-        'يحتاج ضبط',
-        'يحتاج تشحيم',
-        'ضعيف الأداء',
-        'يتذبذب / يومض',
-        'يحتاج استبدال',
-        'خدش أو كسر',
-        'صوت غير طبيعي',
-        'يتسرب',
-        'أخرى...'
+    // Unique device identifier for smart restore messages
+    const DEVICE_ID_KEY = 'inspection_device_id';
+    function getDeviceId() {
+        let id = localStorage.getItem(DEVICE_ID_KEY);
+        if (!id) {
+            id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+            localStorage.setItem(DEVICE_ID_KEY, id);
+        }
+        return id;
+    }
+
+    // Section-specific reasons for ⚠ followup and ✗ fault
+    const SECTION_CHIPS = [
+        // 0: الهيكل الخارجي والإطارات
+        ['ضغط ناقص', 'تآكل الإطار', 'رجّة أثناء القيادة', 'خدش أو كسر', 'باب لا يغلق جيداً', 'يحتاج تغيير', 'أخرى...'],
+        // 1: النظام الكهربائي
+        ['لا يعمل', 'يعمل ويتوقف', 'لمبة تحذير مضاءة', 'ضعيف الأداء', 'يومض', 'يحتاج صيانة', 'أخرى...'],
+        // 2: المحرك والسوائل
+        ['مستوى منخفض', 'تسريب زيت', 'تسريب ماء', 'يحتاج تعبئة', 'البطارية ضعيفة', 'يحتاج تغيير', 'أخرى...'],
+        // 3: الأنوار والإشارات
+        ['لا تعمل', 'ضعيفة', 'تومض', 'مكسورة', 'يحتاج تغيير', 'أخرى...']
     ];
+
+    function getChipsForSection(secIdx) {
+        return SECTION_CHIPS[secIdx] || SECTION_CHIPS[0];
+    }
 
     // ============================================================
     // SECTIONS DATA
@@ -1213,29 +1243,30 @@
                     </div>`;
                 secEl.appendChild(row);
 
-                // Fault note
+                // Fault note (hidden — replaced by unified chips, kept for structure)
+                const noteVal = ((sessData.itemNotes||{})[item.id]) || '';
                 const noteWrap = document.createElement('div');
                 noteWrap.className  = 'fault-note-wrap';
                 noteWrap.id         = 'fnw_' + item.id;
-                noteWrap.style.display = (status === 'fault') ? 'block' : 'none';
-                const noteVal = ((sessData.itemNotes||{})[item.id]) || '';
-                noteWrap.innerHTML = `<input class="fault-note-input" type="text" placeholder="اذكر تفاصيل العطل..." value="${noteVal.replace(/"/g,'&quot;')}" oninput="setItemNote('${item.id}',this.value)">`;
+                noteWrap.style.display = 'none';
+                noteWrap.innerHTML = '';
                 secEl.appendChild(noteWrap);
 
-                // Followup chips
+                // Fault/Followup reason chips (unified — shown for both fault and followup)
                 const chipWrap = document.createElement('div');
                 chipWrap.className = 'followup-chips-wrap';
                 chipWrap.id = 'fcw_' + item.id;
-                chipWrap.style.display = (status === 'followup') ? 'block' : 'none';
-                const savedChip = (status === 'followup') ? (noteVal || '') : '';
-                const isCustom  = savedChip && !FOLLOWUP_CHIPS.slice(0,-1).includes(savedChip);
+                chipWrap.style.display = (status === 'fault' || status === 'followup') ? 'block' : 'none';
+                const savedChip = (status === 'fault' || status === 'followup') ? (noteVal || '') : '';
+                const secChips = getChipsForSection(si);
+                const isCustom  = savedChip && !secChips.slice(0,-1).includes(savedChip);
                 chipWrap.innerHTML = `
-                    <div class="followup-chips-label">سبب المتابعة (اختياري)</div>
+                    <div class="followup-chips-label">${status === 'fault' ? 'وصف العطل' : 'سبب المتابعة'} (اختياري)</div>
                     <div class="followup-chips">${
-                        FOLLOWUP_CHIPS.map(c => {
+                        secChips.map(c => {
                             const isOther = c === 'أخرى...';
                             const isSel   = isOther ? isCustom : (savedChip === c);
-                            return `<button class="followup-chip${isSel ? ' sel' : ''}" onclick="selectFollowupChip('${item.id}',${JSON.stringify(c)},this)">${c}</button>`;
+                            return `<button class="followup-chip${isSel ? ' sel' : ''}${status === 'fault' ? ' chip-fault' : ''}" onclick="selectFollowupChip('${item.id}',${JSON.stringify(c)},this,${si})">${c}</button>`;
                         }).join('')
                     }</div>
                     <input class="followup-custom-input" id="fci_${item.id}" type="text"
@@ -1244,6 +1275,17 @@
                         value="${isCustom ? savedChip.replace(/"/g,'&quot;') : ''}"
                         oninput="setItemNote('${item.id}',this.value)">`;
                 secEl.appendChild(chipWrap);
+
+                // Instant fault report button (shown only for fault status)
+                const faultAlertWrap = document.createElement('div');
+                faultAlertWrap.className = 'fault-alert-wrap';
+                faultAlertWrap.id = 'faw_' + item.id;
+                const wasReported = ((draft.days[currentDayIdx]?.[currentSession]?.faultReported||{})[item.id]);
+                faultAlertWrap.style.display = (status === 'fault') ? 'block' : 'none';
+                faultAlertWrap.innerHTML = wasReported
+                    ? `<span class="fault-reported-badge">✓ تم إبلاغ الإدارة</span>`
+                    : `<button class="btn-fault-alert" onclick="reportFaultInstant('${item.id}',${si})">🚨 إبلاغ فوري عن العطل</button>`;
+                secEl.appendChild(faultAlertWrap);
 
                 // Photo attachment section (shown for fault and followup)
                 const photoSec = document.createElement('div');
@@ -1393,17 +1435,30 @@
         if (sg) sg.querySelectorAll('.status-btn').forEach(b => b.classList.remove('sel-ok','sel-followup','sel-fault'));
         if (next) btn.classList.add('sel-' + next);
 
-        // Show/hide fault notes
+        // Show/hide fault notes (legacy, hidden)
         const fnw = document.getElementById('fnw_' + itemId);
-        if (fnw) fnw.style.display = (next === 'fault') ? 'block' : 'none';
+        if (fnw) fnw.style.display = 'none';
 
-        // Show/hide followup chips
+        // Show/hide reason chips (unified — for both fault and followup)
         const fcw = document.getElementById('fcw_' + itemId);
-        if (fcw) fcw.style.display = (next === 'followup') ? 'block' : 'none';
+        if (fcw) {
+            fcw.style.display = (next === 'followup' || next === 'fault') ? 'block' : 'none';
+            // Update chip label text
+            const lbl = fcw.querySelector('.followup-chips-label');
+            if (lbl) lbl.textContent = (next === 'fault' ? 'وصف العطل' : 'سبب المتابعة') + ' (اختياري)';
+            // Update chip style for fault vs followup
+            fcw.querySelectorAll('.followup-chip').forEach(c => {
+                c.classList.toggle('chip-fault', next === 'fault');
+            });
+        }
 
         // Show/hide photo section
         const phs = document.getElementById('phs_' + itemId);
         if (phs) phs.style.display = (next === 'fault' || next === 'followup') ? 'block' : 'none';
+
+        // Show/hide instant fault alert button
+        const faw = document.getElementById('faw_' + itemId);
+        if (faw) faw.style.display = (next === 'fault') ? 'block' : 'none';
 
         // When deselecting or switching away from followup/fault, clear the note (and photo if going to ok/none)
         if (prev && prev !== next) {
@@ -1510,7 +1565,7 @@
      * - "أخرى..." chip: shows a free-text input instead.
      * - Tapping an already-selected chip de-selects it (clears the note).
      */
-    function selectFollowupChip(itemId, chipText, btnEl) {
+    function selectFollowupChip(itemId, chipText, btnEl, secIdx) {
         if (isFutureDay(currentDayIdx)) return;
 
         const isOther    = chipText === 'أخرى...';
@@ -1550,6 +1605,61 @@
                 btnEl.classList.add('sel');
                 setItemNote(itemId, chipText);
             }
+        }
+    }
+
+    // ── Instant Fault Alert ──────────────────────────────────────────────
+    async function reportFaultInstant(itemId, secIdx) {
+        if (!confirm('هل تريد إرسال بلاغ فوري للإدارة عن هذا العطل؟')) return;
+
+        const sess = draft.days?.[currentDayIdx]?.[currentSession];
+        if (!sess) return;
+
+        const status = sess.statuses?.[itemId] || '';
+        const note   = sess.notes?.[itemId] || '';
+        const photo  = sess.itemPhotos?.[itemId]?.data || '';
+
+        // Find item label
+        const section = SECTIONS[secIdx];
+        const itemObj = section?.items?.find(it => it.id === itemId);
+        const itemLabel = itemObj ? itemObj.label : itemId;
+        const sectionLabel = section ? section.title : '';
+
+        const btn = document.querySelector(`#faw_${itemId} .btn-fault-alert`);
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+
+        try {
+            const payload = {
+                action: 'reportFaultAlert',
+                driverName: draft.driverName || '',
+                ambulanceNumber: draft.ambulanceNumber || '',
+                weekStart: draft.weekStart || '',
+                dayIndex: currentDayIdx,
+                session: currentSession,
+                sectionLabel: sectionLabel,
+                itemId: itemId,
+                itemLabel: itemLabel,
+                status: status,
+                note: note,
+                photo: photo
+            };
+
+            await ReliablePost.send(CONFIG.WEB_APP_URL, payload);
+
+            // Mark as reported locally
+            if (!sess.faultReported) sess.faultReported = {};
+            sess.faultReported[itemId] = true;
+            saveDraft();
+
+            // Update UI
+            const wrap = document.getElementById('faw_' + itemId);
+            if (wrap) wrap.innerHTML = '<span class="fault-reported-badge">✓ تم إبلاغ الإدارة</span>';
+
+            showToast('تم إرسال البلاغ للإدارة بنجاح', 'success');
+        } catch (e) {
+            console.error('reportFaultInstant error:', e);
+            showToast('فشل إرسال البلاغ، حاول مرة أخرى', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = '🚨 إبلاغ فوري عن العطل'; }
         }
     }
 
@@ -2001,8 +2111,10 @@
                 renderDayTabs();
                 renderForm();
                 updateWeekSummary();
-                if (hint) {
-                    hint.textContent = '☁ تم استعادة أحدث نسخة من الخادم';
+                // Only show restore message if data came from a different device
+                const serverDevice = serverDraft.deviceId || '';
+                if (hint && serverDevice && serverDevice !== getDeviceId()) {
+                    hint.textContent = '☁ تم استعادة أحدث نسخة من جهاز آخر';
                     hint.style.color = 'var(--success)';
                 }
             } else if (localTs >= serverTs) {
@@ -2059,6 +2171,7 @@
             driverName:     draft.driverName    || loggedInUser.nameAr        || '',
             staffNumber:    draft.staffNumber   || loggedInUser.staffNumber   || '',
             vehicleNumber:  draft.vehicleNumber || loggedInUser.vehicleNumber || '',
+            deviceId:       getDeviceId(),
             days:           draft.days
         };
 

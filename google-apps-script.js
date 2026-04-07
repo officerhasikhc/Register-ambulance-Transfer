@@ -505,6 +505,7 @@ function doGet(e) {
           case 'submitInspectionWeek':return submitInspectionWeek(postData);
           case 'saveDraftInspection': return saveDraftInspection(postData);
           case 'adminUpdateInspection': return adminUpdateInspection(postData);
+          case 'reportFaultAlert': return reportFaultAlert(postData);
           default:
             return ContentService.createTextOutput(JSON.stringify({
               success: false, error: 'Action not supported via GET: ' + postAction
@@ -590,6 +591,9 @@ function doPost(e) {
 
       case 'adminUpdateInspection':
         return adminUpdateInspection(data);
+
+      case 'reportFaultAlert':
+        return reportFaultAlert(data);
 
       case 'deleteInspectionWeek':
         return deleteInspectionWeek(data);
@@ -4121,7 +4125,7 @@ function saveDraftInspection(data) {
       var hasFault    = allVals.some(function(v){return v==='fault';});
       var hasFollowup = allVals.some(function(v){return v==='followup';});
 
-      var amObj = { items: amItems, itemsAr: toArItems_(amItems), notes: am.itemNotes || {}, photos: {} };
+      var amObj = { items: amItems, itemsAr: toArItems_(amItems), notes: am.itemNotes || {}, photos: {}, deviceId: String(data.deviceId || '') };
       var pmObj = { items: pmItems, itemsAr: toArItems_(pmItems), notes: pm.itemNotes || {}, photos: {} };
 
       rows.push([
@@ -4240,6 +4244,8 @@ function getDraftInspection(params) {
       draft.vehicleNumber = draft.vehicleNumber || rowObj.Vehicle_Number || draft.vehicleNumber;
       var session = {};
       try { session = JSON.parse(rowObj.AM_Items || '{}'); } catch(e) { session = {}; }
+      // Extract deviceId from the most recent AM session
+      if (session.deviceId) draft.deviceId = session.deviceId;
       draft.days[Number(dayKey)] = draft.days[Number(dayKey)] || {};
       draft.days[Number(dayKey)].am = {
         time: rowObj.AM_Time || '',
@@ -4775,6 +4781,72 @@ function deleteInspectionWeek(data) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ── Instant Fault Alert (email to admin) ──────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+function reportFaultAlert(data) {
+  try {
+    var driverName      = String(data.driverName || '').trim();
+    var ambulanceNumber = String(data.ambulanceNumber || '').trim();
+    var weekStart       = String(data.weekStart || '').trim();
+    var dayIndex        = parseInt(data.dayIndex, 10) || 0;
+    var session         = String(data.session || '').trim();
+    var sectionLabel    = String(data.sectionLabel || '').trim();
+    var itemLabel       = String(data.itemLabel || '').trim();
+    var status          = String(data.status || '').trim();
+    var note            = String(data.note || '').trim();
+    var photo           = String(data.photo || '').trim();
+
+    var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+    var dayName  = dayNames[dayIndex] || ('يوم ' + dayIndex);
+    var sessionAr = session === 'AM' ? 'صباحي' : 'مسائي';
+    var now = Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm');
+
+    var subject = '🚨 بلاغ عطل فوري - ' + itemLabel + ' - سيارة ' + ambulanceNumber;
+
+    var body = '<div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto;">'
+      + '<div style="background:#dc2626;color:#fff;padding:16px 20px;border-radius:8px 8px 0 0;">'
+      + '<h2 style="margin:0;">🚨 بلاغ عطل فوري</h2></div>'
+      + '<div style="background:#fff;border:1px solid #e5e7eb;padding:20px;border-radius:0 0 8px 8px;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:14px;">'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">السائق</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + driverName + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">رقم السيارة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + ambulanceNumber + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">أسبوع المناوبة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + weekStart + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">اليوم / الفترة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + dayName + ' - ' + sessionAr + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">القسم</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + sectionLabel + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">البند</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;color:#dc2626;font-weight:bold;">' + itemLabel + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">الحالة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + status + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;border-bottom:1px solid #f3f4f6;">ملاحظة</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;">' + (note || '—') + '</td></tr>'
+      + '<tr><td style="padding:8px;font-weight:bold;">وقت البلاغ</td><td style="padding:8px;">' + now + '</td></tr>'
+      + '</table>';
+
+    if (photo && photo.indexOf('data:') === 0) {
+      body += '<div style="margin-top:16px;"><strong>صورة مرفقة:</strong><br>'
+        + '<img src="' + photo + '" style="max-width:100%;border-radius:8px;margin-top:8px;" alt="صورة العطل"></div>';
+    }
+
+    body += '</div></div>';
+
+    MailApp.sendEmail({
+      to: CONFIG.ADMIN_EMAIL,
+      subject: subject,
+      htmlBody: body
+    });
+
+    Logger.log('Fault alert email sent for item: ' + itemLabel + ' by ' + driverName);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, message: 'تم إرسال البلاغ' }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log('reportFaultAlert error: ' + err.toString());
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
