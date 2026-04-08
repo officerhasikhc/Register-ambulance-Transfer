@@ -4077,7 +4077,13 @@ function generateInspectionId_(sheet) {
  * Save a draft inspection week to the sheet with Is_Draft = 'نعم'.
  */
 function saveDraftInspection(data) {
+  var lock = LockService.getScriptLock();
   try {
+    if (!lock.tryLock(10000)) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'Server busy, please retry' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     const sheet      = setupInspectionSheet();
     const tz         = CONFIG.TIME_ZONE;
     const submittedAt= Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
@@ -4156,11 +4162,13 @@ function saveDraftInspection(data) {
       sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
     }
 
+    lock.releaseLock();
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, message: 'تم حفظ المسودة بنجاح', rows: rows.length }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
+    if (lock) try { lock.releaseLock(); } catch(_) {}
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);

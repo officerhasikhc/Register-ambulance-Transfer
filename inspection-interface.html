@@ -1942,9 +1942,16 @@
             const sub     = document.getElementById('dayCompleteSubText');
             if (btn) {
                 if (nextIdx !== null) {
+                    const isIncomplete = !isDayComplete(nextIdx);
                     btn.textContent = 'حفظ والانتقال لـ ' + DAY_NAMES_AR[nextIdx];
                     btn.disabled    = false;
-                    if (sub) sub.textContent = 'الصباح والمساء مسجّلان • يوجد ' + (6 - currentDayIdx) + ' يوم متبقٍ';
+                    if (sub) {
+                        let remaining = 0;
+                        for (let ri = 0; ri < 7; ri++) { if (ri !== currentDayIdx && !isFutureDay(ri) && !isDayComplete(ri)) remaining++; }
+                        sub.textContent = remaining > 0
+                            ? 'الصباح والمساء مسجّلان • يوجد ' + remaining + ' يوم ناقص'
+                            : 'الصباح والمساء مسجّلان • جميع الأيام مكتملة';
+                    }
                 } else {
                     btn.textContent = 'حفظ (آخر يوم متاح)';
                     btn.disabled    = false;
@@ -1960,7 +1967,23 @@
         document.getElementById('dayCompleteBar')?.classList.remove('show');
     }
 
+    function isDayComplete(dayIdx) {
+        const d = draft.days[dayIdx] || {};
+        const amF = Object.values((d.am||{}).items||{}).filter(Boolean).length;
+        const pmF = Object.values((d.pm||{}).items||{}).filter(Boolean).length;
+        return amF >= TOTAL_ITEMS && pmF >= TOTAL_ITEMS;
+    }
+
     function findNextAvailableDay() {
+        // First: find next INCOMPLETE non-future day after current
+        for (let i = currentDayIdx + 1; i < 7; i++) {
+            if (!isFutureDay(i) && !isDayComplete(i)) return i;
+        }
+        // Also check earlier incomplete days (wrap-around)
+        for (let i = 0; i < currentDayIdx; i++) {
+            if (!isFutureDay(i) && !isDayComplete(i)) return i;
+        }
+        // All days complete or future — find next non-future day (even complete)
         for (let i = currentDayIdx + 1; i < 7; i++) {
             if (!isFutureDay(i)) return i;
         }
@@ -1973,8 +1996,9 @@
         hideDayCompleteBar();
 
         if (nextIdx !== null) {
-            // Navigate to next day, prefer AM if not done, else PM
-            goToDay(nextIdx, 'right');
+            // Navigate to next day (skips completed days), prefer AM if not done, else PM
+            const dir = nextIdx > currentDayIdx ? 'right' : 'left';
+            goToDay(nextIdx, dir);
             setTimeout(() => {
                 const nd      = draft.days[nextIdx] || {};
                 const amFilled = Object.values((nd.am||{}).items||{}).filter(Boolean).length;
@@ -2095,6 +2119,12 @@
         scheduleAutoSync();
     }
 
+    function _countDayItems(dayData) {
+        const amF = Object.values((dayData?.am||{}).items||{}).filter(Boolean).length;
+        const pmF = Object.values((dayData?.pm||{}).items||{}).filter(Boolean).length;
+        return amF + pmF;
+    }
+
     async function syncDraftWithServer() {
         if (!loggedInUser?.staffNumber || !draft.weekStart) return;
         try {
@@ -2113,14 +2143,37 @@
             const serverTs = Number(new Date(serverDraft.lastUpdatedAt || '').getTime()) || 0;
             const hint = document.getElementById('sessionHint');
 
+            // Smart per-day merge: keep the richer version of each day
+            let merged = false;
+            for (let d = 0; d < 7; d++) {
+                const localDay  = draft.days[d];
+                const serverDay = serverDraft.days?.[d];
+                const localCount  = _countDayItems(localDay);
+                const serverCount = _countDayItems(serverDay);
+
+                if (serverCount > localCount) {
+                    // Server has more data for this day — adopt server version
+                    if (!draft.days) draft.days = {};
+                    draft.days[d] = serverDay;
+                    merged = true;
+                }
+                // Otherwise keep local version (has equal or more data)
+            }
+
+            // Adopt server metadata if server is newer overall
             if (serverTs > localTs) {
-                draft = serverDraft;
-                draft.updatedAt = serverTs;
+                draft.weekEnd       = serverDraft.weekEnd       || draft.weekEnd;
+                draft.driverName    = serverDraft.driverName    || draft.driverName;
+                draft.staffNumber   = serverDraft.staffNumber   || draft.staffNumber;
+                draft.vehicleNumber = serverDraft.vehicleNumber || draft.vehicleNumber;
+                draft.updatedAt     = serverTs;
+            }
+
+            if (merged) {
                 localStorage.setItem(DRAFT_KEY + loggedInUser.staffNumber, JSON.stringify(draft));
                 renderDayTabs();
                 renderForm();
                 updateWeekSummary();
-                // Only show restore message if data came from a different device
                 const serverDevice = serverDraft.deviceId || '';
                 if (hint && serverDevice && serverDevice !== getDeviceId()) {
                     hint.textContent = '☁ تم استعادة أحدث نسخة من جهاز آخر';
@@ -2173,6 +2226,29 @@
         if (_syncInProgress) { _syncPendingRetry = true; return; }
         _syncInProgress = true;
 
+        // Merge with server before sending to avoid overwriting richer server data
+        let mergedDays = {};
+        try {
+            const chkUrl = `${WEB_APP_URL}?action=getDraftInspection&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&weekStart=${encodeURIComponent(draft.weekStart)}&_t=${Date.now()}`;
+            const chkRes = await fetch(chkUrl);
+            const chkPayload = await chkRes.json();
+            if (chkPayload?.success && chkPayload.draft?.days) {
+                const serverDays = chkPayload.draft.days;
+                for (let d = 0; d < 7; d++) {
+                    const localDay  = draft.days[d];
+                    const serverDay = serverDays[d];
+                    const localCount  = _countDayItems(localDay);
+                    const serverCount = _countDayItems(serverDay);
+                    mergedDays[d] = (localCount >= serverCount) ? (localDay || {}) : serverDay;
+                }
+            } else {
+                for (let d = 0; d < 7; d++) mergedDays[d] = draft.days[d] || {};
+            }
+        } catch(_e) {
+            // Network error on pre-check — send local data as-is
+            for (let d = 0; d < 7; d++) mergedDays[d] = draft.days[d] || {};
+        }
+
         const payload = {
             action:        'saveDraftInspection',
             weekStart:      draft.weekStart,
@@ -2181,7 +2257,7 @@
             staffNumber:    draft.staffNumber   || loggedInUser.staffNumber   || '',
             vehicleNumber:  draft.vehicleNumber || loggedInUser.vehicleNumber || '',
             deviceId:       getDeviceId(),
-            days:           draft.days
+            days:           mergedDays
         };
 
         const syncDot = document.getElementById('sessionHint');
