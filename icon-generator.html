@@ -5,214 +5,500 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مولّد أيقونات PWA - نظام سجل الإسعاف</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; min-height: 100vh; padding: 32px 16px; color: #1e293b; }
-  h1 { text-align: center; font-size: 22px; font-weight: 700; color: #1e40af; margin-bottom: 6px; }
-  .subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 32px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; max-width: 960px; margin: 0 auto; }
-  .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); text-align: center; }
-  .card h2 { font-size: 15px; font-weight: 700; color: #1e40af; margin-bottom: 4px; }
-  .card p { font-size: 12px; color: #64748b; margin-bottom: 16px; line-height: 1.6; }
-  canvas { border: 2px solid #e2e8f0; border-radius: 12px; display: block; margin: 0 auto 16px; max-width: 100%; }
-  .btn { display: inline-block; background: #1e40af; color: white; border: none; border-radius: 8px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .2s; }
-  .btn:hover { background: #1d3a9e; }
-  .btn:disabled { background: #94a3b8; cursor: not-allowed; }
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-bottom: 12px; }
-  .badge-any { background: #dbeafe; color: #1d4ed8; }
-  .badge-maskable { background: #dcfce7; color: #15803d; }
-  .status { font-size: 12px; color: #64748b; margin-top: 8px; min-height: 18px; }
-  .divider { border: none; border-top: 2px dashed #e2e8f0; margin: 32px auto; max-width: 960px; }
-  .info-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 16px 20px; max-width: 960px; margin: 0 auto 28px; font-size: 13px; line-height: 1.8; color: #92400e; }
-  .info-box strong { color: #78350f; }
-  .steps { background: white; border-radius: 16px; padding: 20px 24px; max-width: 960px; margin: 0 auto 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-  .steps h3 { font-size: 15px; font-weight: 700; color: #1e40af; margin-bottom: 12px; }
-  .steps ol { padding-right: 20px; font-size: 13px; line-height: 2.2; color: #374151; }
-  .steps ol li::marker { color: #1e40af; font-weight: 700; }
-  .preview-row { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-  .preview-shape { text-align: center; }
-  .preview-shape span { font-size: 10px; color: #94a3b8; display: block; margin-top: 4px; }
-  canvas.preview-circle { border-radius: 50%; }
-  canvas.preview-squircle { border-radius: 25%; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; min-height: 100vh; padding: 32px 16px; color: #1e293b; }
+h1 { text-align: center; font-size: 22px; font-weight: 700; color: #1e40af; margin-bottom: 6px; }
+.subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 32px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; max-width: 960px; margin: 0 auto 28px; border-radius: 12px; overflow: hidden; border: 2px solid #e2e8f0; }
+.tab-btn { flex: 1; padding: 14px 12px; border: none; background: white; cursor: pointer; font-size: 14px; font-weight: 600; color: #64748b; transition: all .2s; font-family: inherit; border-left: 1px solid #e2e8f0; }
+.tab-btn:first-child { border-left: none; }
+.tab-btn.active { background: #1e40af; color: white; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* Cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 960px; margin: 0 auto; }
+.card { background: white; border-radius: 16px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); text-align: center; }
+.card h2 { font-size: 14px; font-weight: 700; color: #1e40af; margin-bottom: 4px; direction: ltr; }
+.card p { font-size: 12px; color: #64748b; margin-bottom: 14px; line-height: 1.6; }
+canvas { border: 2px solid #e2e8f0; border-radius: 10px; display: block; margin: 0 auto 12px; max-width: 100%; }
+
+/* Buttons */
+.btn { display: inline-block; background: #1e40af; color: white; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .2s; font-family: inherit; }
+.btn:hover { background: #1d3a9e; }
+.btn-green { background: #15803d; }
+.btn-green:hover { background: #166534; }
+.btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Badges */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-bottom: 10px; }
+.badge-maskable { background: #dcfce7; color: #15803d; }
+.badge-apple { background: #f3e8ff; color: #7e22ce; }
+.badge-android { background: #dbeafe; color: #1d4ed8; }
+
+.status { font-size: 12px; color: #64748b; margin-top: 8px; min-height: 18px; }
+.divider { border: none; border-top: 2px dashed #e2e8f0; margin: 28px auto; max-width: 960px; }
+.info-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px 18px; max-width: 960px; margin: 0 auto 22px; font-size: 13px; line-height: 1.8; color: #92400e; }
+.info-box strong { color: #78350f; }
+.success-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 14px 18px; max-width: 960px; margin: 0 auto 22px; font-size: 13px; line-height: 1.8; color: #14532d; }
+.steps-card { background: white; border-radius: 16px; padding: 18px 22px; max-width: 960px; margin: 0 auto 22px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.steps-card h3 { font-size: 14px; font-weight: 700; color: #1e40af; margin-bottom: 10px; }
+.steps-card ol { padding-right: 20px; font-size: 13px; line-height: 2.2; color: #374151; }
+.steps-card ol li::marker { color: #1e40af; font-weight: 700; }
+
+/* Preview shapes */
+.preview-row { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.preview-shape { text-align: center; }
+.preview-shape span { font-size: 10px; color: #94a3b8; display: block; margin-top: 4px; }
+canvas.preview-circle { border-radius: 50%; }
+canvas.preview-squircle { border-radius: 22%; }
+
+/* Upload zone */
+.upload-zone { border: 3px dashed #93c5fd; border-radius: 16px; padding: 36px 24px; text-align: center; cursor: pointer; background: #eff6ff; transition: all .2s; max-width: 960px; margin: 0 auto 24px; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #1e40af; background: #dbeafe; }
+.upload-zone .upload-icon { font-size: 48px; margin-bottom: 12px; }
+.upload-zone h3 { color: #1e40af; font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.upload-zone p { color: #64748b; font-size: 13px; }
+#fileInput { display: none; }
+
+/* Uploaded preview */
+.uploaded-preview { background: white; border-radius: 16px; padding: 22px; max-width: 960px; margin: 0 auto 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); display: none; }
+.uploaded-preview h3 { font-size: 14px; font-weight: 700; color: #15803d; margin-bottom: 14px; }
+.uploaded-preview img { width: 120px; height: 120px; object-fit: contain; border: 2px solid #e2e8f0; border-radius: 12px; }
+.uploaded-info { font-size: 12px; color: #64748b; margin-top: 8px; }
+
+/* Sizes table */
+.sizes-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sizes-table th { background: #f8fafc; color: #475569; font-weight: 600; padding: 10px 12px; text-align: right; border-bottom: 2px solid #e2e8f0; }
+.sizes-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.sizes-table tr:last-child td { border-bottom: none; }
+.filename { font-family: 'Courier New', monospace; font-size: 12px; color: #1e40af; font-weight: 600; direction: ltr; }
+.usage-tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.tag-android { background: #dbeafe; color: #1d4ed8; }
+.tag-ios { background: #f3e8ff; color: #7e22ce; }
+.tag-browser { background: #f0fdf4; color: #15803d; }
 </style>
 </head>
 <body>
 
 <h1>🎨 مولّد أيقونات PWA</h1>
-<p class="subtitle">أداة لتوليد أيقونات التطبيق الصحيحة لنظام سجل الإسعاف</p>
+<p class="subtitle">نظام سجل الإسعاف — أداة توليد جميع أحجام الأيقونة</p>
 
-<div class="info-box">
-  <strong>⚠️ لماذا تحتاج أيقونة Maskable منفصلة؟</strong><br>
-  أندرويد يقتطع الأيقونة المكيّفة (Maskable) بأشكال مختلفة (دائرة، مربع مدوّر...) ويحذف حتى 20% من كل حافة.
-  لذلك يجب أن يكون الشعار في مركز الأيقونة بحجم لا يتجاوز 75% من الإجمالي، مع خلفية بيضاء لملء الهوامش.
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('upload')">📤 رفع أيقونتك وتوليد الأحجام</button>
+  <button class="tab-btn" onclick="switchTab('generate')">⚙️ توليد من الملف الأصلي</button>
+  <button class="tab-btn" onclick="switchTab('guide')">📖 دليل الاستخدام</button>
 </div>
 
-<div class="steps">
-  <h3>📋 خطوات الاستخدام</h3>
-  <ol>
-    <li>اضغط زر <strong>"توليد"</strong> لكل حجم أدناه</li>
-    <li>اضغط زر <strong>"تحميل"</strong> لحفظ الملف</li>
-    <li>احفظ الملفات في مجلد المشروع مباشرة (بجانب <code>manifest.json</code>)</li>
-    <li>تحقق من النتيجة على <a href="https://maskable.app" target="_blank" style="color:#1e40af">maskable.app</a></li>
-  </ol>
-</div>
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 1: UPLOAD & RESIZE                            -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="tab-pane active" id="tab-upload">
 
-<div class="grid">
-
-  <!-- 512x512 Maskable -->
-  <div class="card">
-    <span class="badge badge-maskable">maskable</span>
-    <h2>icon-512x512-maskable.png</h2>
-    <p>الأيقونة الرئيسية للهاتف<br>خلفية بيضاء · شعار بحجم 75% في المركز</p>
-    <div class="preview-row">
-      <div class="preview-shape">
-        <canvas id="c512" width="150" height="150" class="preview-circle"></canvas>
-        <span>دائرة</span>
-      </div>
-      <div class="preview-shape">
-        <canvas id="c512sq" width="150" height="150" class="preview-squircle"></canvas>
-        <span>مربع مدوّر</span>
-      </div>
-    </div>
-    <button class="btn" id="btn512" onclick="generate(512)">توليد الأيقونة</button>
-    <a class="btn" id="dl512" style="display:none;margin-top:8px" download="icon-512x512-maskable.png">⬇ تحميل 512×512</a>
-    <p class="status" id="st512">جاهز للتوليد</p>
+  <div class="success-box">
+    <strong>✅ لديك الأيقونة الجاهزة (512×512 Rounded Rectangle)؟</strong><br>
+    ارفعها هنا وسيتم توليد جميع الأحجام المطلوبة تلقائياً — <strong>3 ملفات فقط</strong> تحتاجها.
   </div>
 
-  <!-- 192x192 Maskable -->
-  <div class="card">
-    <span class="badge badge-maskable">maskable</span>
-    <h2>icon-192x192-maskable.png</h2>
-    <p>أيقونة الإضافة للشاشة الرئيسية<br>خلفية بيضاء · شعار بحجم 75% في المركز</p>
-    <div class="preview-row">
-      <div class="preview-shape">
-        <canvas id="c192" width="150" height="150" class="preview-circle"></canvas>
-        <span>دائرة</span>
-      </div>
-      <div class="preview-shape">
-        <canvas id="c192sq" width="150" height="150" class="preview-squircle"></canvas>
-        <span>مربع مدوّر</span>
-      </div>
-    </div>
-    <button class="btn" id="btn192" onclick="generate(192)">توليد الأيقونة</button>
-    <a class="btn" id="dl192" style="display:none;margin-top:8px" download="icon-192x192-maskable.png">⬇ تحميل 192×192</a>
-    <p class="status" id="st192">جاهز للتوليد</p>
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" 
+       ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+    <div class="upload-icon">🖼️</div>
+    <h3>اسحب الأيقونة هنا أو اضغط للاختيار</h3>
+    <p>PNG أو JPG · يُفضّل 512×512 أو أكبر</p>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
   </div>
 
-  <!-- 180x180 Apple Touch -->
-  <div class="card">
-    <span class="badge badge-any">apple-touch</span>
-    <h2>icon-180x180-apple.png</h2>
-    <p>أيقونة iPhone/iPad (apple-touch-icon)<br>خلفية بيضاء · شعار بحجم 70%</p>
-    <div class="preview-row">
-      <div class="preview-shape">
-        <canvas id="c180" width="150" height="150" class="preview-squircle"></canvas>
-        <span>iOS squircle</span>
+  <!-- Uploaded image preview -->
+  <div class="uploaded-preview" id="uploadedPreview">
+    <h3>✓ تم رفع الأيقونة بنجاح</h3>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div>
+        <img id="uploadedImg" src="" alt="uploaded">
+        <p class="uploaded-info" id="uploadedInfo"></p>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <p style="font-size:13px;color:#374151;line-height:1.8">
+          الآن اضغط <strong>"توليد الجميع"</strong> لتوليد الأحجام الثلاثة مرة واحدة، أو اضغط كل زر على حدة.
+        </p>
+        <br>
+        <button class="btn btn-green" onclick="generateAllFromUpload()" style="margin-top:4px">
+          ⚡ توليد الجميع دفعة واحدة
+        </button>
       </div>
     </div>
-    <button class="btn" id="btn180" onclick="generate(180)">توليد الأيقونة</button>
-    <a class="btn" id="dl180" style="display:none;margin-top:8px" download="icon-180x180-apple.png">⬇ تحميل 180×180</a>
-    <p class="status" id="st180">جاهز للتوليد</p>
   </div>
 
+  <!-- Output cards -->
+  <div class="grid" id="outputGrid" style="display:none">
+
+    <!-- 512x512 maskable -->
+    <div class="card">
+      <span class="badge badge-maskable">maskable · Android</span>
+      <h2>icon-512x512-maskable.png</h2>
+      <p>الأيقونة الرئيسية على شاشة الهاتف<br>512 × 512 بكسل</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="up512c" width="120" height="120" class="preview-circle"></canvas>
+          <span>دائرة</span>
+        </div>
+        <div class="preview-shape">
+          <canvas id="up512s" width="120" height="120" class="preview-squircle"></canvas>
+          <span>مربع مدوّر</span>
+        </div>
+      </div>
+      <button class="btn" onclick="resizeAndDownload(512,'icon-512x512-maskable.png','up512c','up512s','st_up512')">توليد وتحميل</button>
+      <a id="dl_up512" style="display:none" download="icon-512x512-maskable.png"></a>
+      <p class="status" id="st_up512"></p>
+    </div>
+
+    <!-- 192x192 maskable -->
+    <div class="card">
+      <span class="badge badge-maskable">maskable · Android</span>
+      <h2>icon-192x192-maskable.png</h2>
+      <p>أيقونة الإضافة للشاشة الرئيسية<br>192 × 192 بكسل</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="up192c" width="120" height="120" class="preview-circle"></canvas>
+          <span>دائرة</span>
+        </div>
+        <div class="preview-shape">
+          <canvas id="up192s" width="120" height="120" class="preview-squircle"></canvas>
+          <span>مربع مدوّر</span>
+        </div>
+      </div>
+      <button class="btn" onclick="resizeAndDownload(192,'icon-192x192-maskable.png','up192c','up192s','st_up192')">توليد وتحميل</button>
+      <a id="dl_up192" style="display:none" download="icon-192x192-maskable.png"></a>
+      <p class="status" id="st_up192"></p>
+    </div>
+
+    <!-- 180x180 apple -->
+    <div class="card">
+      <span class="badge badge-apple">apple-touch · iOS</span>
+      <h2>icon-180x180-apple.png</h2>
+      <p>أيقونة iPhone وiPad<br>180 × 180 بكسل</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="up180s" width="120" height="120" class="preview-squircle"></canvas>
+          <span>iOS squircle</span>
+        </div>
+      </div>
+      <button class="btn" onclick="resizeAndDownload(180,'icon-180x180-apple.png',null,'up180s','st_up180')">توليد وتحميل</button>
+      <a id="dl_up180" style="display:none" download="icon-180x180-apple.png"></a>
+      <p class="status" id="st_up180"></p>
+    </div>
+
+  </div>
+
+  <!-- After download guide -->
+  <div class="steps-card" id="afterDownloadGuide" style="display:none;margin-top:20px">
+    <h3>✅ بعد تحميل الملفات الثلاثة — ضعها في المشروع</h3>
+    <ol>
+      <li>انسخ الملفات الثلاثة إلى مجلد <code>ambulance-log-system\</code> (نفس مجلد <code>manifest.json</code>)</li>
+      <li>تحقق أن <code>manifest.json</code> يشير إليها (تم تحديثه مسبقاً ✓)</li>
+      <li>تحقق من النتيجة على <a href="https://maskable.app/editor" target="_blank" style="color:#1e40af">maskable.app/editor</a></li>
+      <li>أعد تثبيت التطبيق على الهاتف لرؤية الأيقونة الجديدة</li>
+    </ol>
+  </div>
 </div>
 
-<hr class="divider">
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 2: GENERATE FROM ORIGINAL                     -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-generate">
 
-<div class="steps">
-  <h3>✅ بعد التحميل</h3>
-  <ol>
-    <li>تحقق من الأيقونات على <a href="https://maskable.app/editor" target="_blank" style="color:#1e40af">maskable.app/editor</a> — الشعار يجب أن يظهر كاملاً في كل الأشكال</li>
-    <li>تحقق من <code>manifest.json</code> — تأكد أن <code>icon-512x512-maskable.png</code> و <code>icon-192x192-maskable.png</code> موجودان في قسم <code>maskable</code></li>
-    <li>أعد تثبيت التطبيق على الجهاز للرؤية الفورية للتغيير</li>
-  </ol>
+  <div class="info-box">
+    <strong>ℹ️ هذا القسم</strong> يولّد الأيقونات مباشرةً من <code>icon-512x512.png</code> الموجود في المشروع.<br>
+    يضيف خلفية بيضاء ويُصغّر الشعار إلى 75% في المركز (المنطقة الآمنة).
+    <br><strong>⚠️ يتطلب تشغيل الصفحة عبر Live Server</strong> (لا يعمل بفتح الملف مباشرة بسبب قيود CORS).
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <span class="badge badge-maskable">maskable</span>
+      <h2>icon-512x512-maskable.png</h2>
+      <p>خلفية بيضاء · شعار 75% في المركز</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="c512" width="120" height="120" class="preview-circle"></canvas><span>دائرة</span>
+        </div>
+        <div class="preview-shape">
+          <canvas id="c512sq" width="120" height="120" class="preview-squircle"></canvas><span>مربع مدوّر</span>
+        </div>
+      </div>
+      <button class="btn" onclick="generateFromOriginal(512)">توليد</button>
+      <a class="btn" id="dl512" style="display:none;margin-top:8px" download="icon-512x512-maskable.png">⬇ تحميل</a>
+      <p class="status" id="st512">جاهز للتوليد</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-maskable">maskable</span>
+      <h2>icon-192x192-maskable.png</h2>
+      <p>خلفية بيضاء · شعار 75% في المركز</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="c192" width="120" height="120" class="preview-circle"></canvas><span>دائرة</span>
+        </div>
+        <div class="preview-shape">
+          <canvas id="c192sq" width="120" height="120" class="preview-squircle"></canvas><span>مربع مدوّر</span>
+        </div>
+      </div>
+      <button class="btn" onclick="generateFromOriginal(192)">توليد</button>
+      <a class="btn" id="dl192" style="display:none;margin-top:8px" download="icon-192x192-maskable.png">⬇ تحميل</a>
+      <p class="status" id="st192">جاهز للتوليد</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-apple">apple-touch</span>
+      <h2>icon-180x180-apple.png</h2>
+      <p>خلفية بيضاء · شعار 70% في المركز</p>
+      <div class="preview-row">
+        <div class="preview-shape">
+          <canvas id="c180" width="120" height="120" class="preview-squircle"></canvas><span>iOS squircle</span>
+        </div>
+      </div>
+      <button class="btn" onclick="generateFromOriginal(180)">توليد</button>
+      <a class="btn" id="dl180" style="display:none;margin-top:8px" download="icon-180x180-apple.png">⬇ تحميل</a>
+      <p class="status" id="st180">جاهز للتوليد</p>
+    </div>
+  </div>
 </div>
 
-<!-- Hidden full-size canvases for actual generation -->
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 3: GUIDE                                       -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-guide">
+
+  <div class="steps-card">
+    <h3>📋 الأحجام المطلوبة وما يستخدم كل منها</h3>
+    <table class="sizes-table">
+      <thead>
+        <tr>
+          <th>اسم الملف</th>
+          <th>الحجم</th>
+          <th>النوع</th>
+          <th>يُستخدم في</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="filename">icon-512x512-maskable.png</td>
+          <td>512×512</td>
+          <td><span class="usage-tag tag-android">maskable</span></td>
+          <td>أيقونة الشاشة الرئيسية Android · أندرويد يقطعها بشكل دائرة أو مربع مدوّر</td>
+        </tr>
+        <tr>
+          <td class="filename">icon-192x192-maskable.png</td>
+          <td>192×192</td>
+          <td><span class="usage-tag tag-android">maskable</span></td>
+          <td>أيقونة الإضافة للشاشة Android (قديم / نسخة خفيفة)</td>
+        </tr>
+        <tr>
+          <td class="filename">icon-180x180-apple.png</td>
+          <td>180×180</td>
+          <td><span class="usage-tag tag-ios">apple-touch</span></td>
+          <td>iPhone وiPad — apple-touch-icon · iOS يطبّق شكل squircle (مربع مدوّر)</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-512x512.png</td>
+          <td>512×512</td>
+          <td><span class="usage-tag tag-browser">any</span></td>
+          <td>الأيقونة العامة في manifest — تستخدمها المتصفحات وقوائم التطبيقات بدون قطع</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-192x192.png</td>
+          <td>192×192</td>
+          <td><span class="usage-tag tag-browser">any</span></td>
+          <td>manifest العام (any) — مستعرضات قديمة</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-144x144.png</td>
+          <td>144×144</td>
+          <td><span class="usage-tag tag-browser">any</span></td>
+          <td>Windows tile · apple-touch-icon 152px</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-96x96.png</td>
+          <td>96×96</td>
+          <td><span class="usage-tag tag-browser">any</span></td>
+          <td>أيقونة Android MDPI (قديم)</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-72x72.png</td>
+          <td>72×72</td>
+          <td><span class="usage-tag tag-browser">any</span></td>
+          <td>Windows Start tile صغير</td>
+        </tr>
+        <tr style="background:#fafafa">
+          <td class="filename">icon-48x48.png</td>
+          <td>48×48</td>
+          <td><span class="usage-tag tag-browser">browser</span></td>
+          <td>Favicon المتصفح (تبويب الصفحة)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="steps-card">
+    <h3>🔑 الفرق بين "any" و "maskable"</h3>
+    <ol>
+      <li><strong>any</strong>: الأيقونة تُعرض كما هي بدون قطع — تستخدمها المتصفحات وقوائم التطبيقات</li>
+      <li><strong>maskable</strong>: أندرويد يقطعها بشكل (دائرة أو مربع مدوّر) — يجب أن يكون الشعار في 80% المركزية فقط، والباقي خلفية لون صريح</li>
+      <li>لهذا نحتاج ملفين منفصلين للحجم 512: واحد كـ "any" وآخر كـ "maskable"</li>
+    </ol>
+  </div>
+
+  <div class="steps-card">
+    <h3>📱 أيقونة الهاتف (Android) — خطوات الرؤية الفورية</h3>
+    <ol>
+      <li>ضع الملفات الثلاثة (<code>icon-512x512-maskable.png</code>, <code>icon-192x192-maskable.png</code>, <code>icon-180x180-apple.png</code>) في مجلد المشروع</li>
+      <li>ادفع التغييرات إلى GitHub (<code>git push</code>)</li>
+      <li>على هاتف أندرويد: افتح Chrome → ثلاث نقاط → "إضافة إلى الشاشة الرئيسية"</li>
+      <li>إذا كان التطبيق مثبتاً بالفعل: احذفه وأعد تثبيته لرؤية الأيقونة الجديدة</li>
+      <li>تحقق من النتيجة على <a href="https://maskable.app/editor" target="_blank" style="color:#1e40af">maskable.app/editor</a></li>
+    </ol>
+  </div>
+</div>
+
+<!-- Hidden canvases for generation from original -->
 <canvas id="gen512" width="512" height="512" style="display:none"></canvas>
 <canvas id="gen192" width="192" height="192" style="display:none"></canvas>
 <canvas id="gen180" width="180" height="180" style="display:none"></canvas>
+<!-- Hidden canvases for upload resize -->
+<canvas id="resCanvas" style="display:none"></canvas>
 
 <script>
-const SOURCE_IMG = 'icon-512x512.png'; // source icon with transparent/white background
+// ─── Tab switching ────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['upload','generate','guide'][i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
 
-const CONFIGS = {
-  512:  { canvas: 'gen512', preview: 'c512',  previewSq: 'c512sq',  dl: 'dl512',  status: 'st512',  scale: 0.75, bg: '#ffffff' },
-  192:  { canvas: 'gen192', preview: 'c192',  previewSq: 'c192sq',  dl: 'dl192',  status: 'st192',  scale: 0.75, bg: '#ffffff' },
-  180:  { canvas: 'gen180', preview: 'c180',  previewSq: null,       dl: 'dl180',  status: 'st180',  scale: 0.70, bg: '#ffffff' }
+// ─── Upload & Resize ──────────────────────────────────────
+let uploadedImage = null;
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('dragover');
+}
+function handleDragLeave(e) {
+  document.getElementById('uploadZone').classList.remove('dragover');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadUploadedFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) loadUploadedFile(file);
+}
+
+function loadUploadedFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      uploadedImage = img;
+      document.getElementById('uploadedImg').src = e.target.result;
+      document.getElementById('uploadedInfo').textContent = `${file.name} — ${img.width}×${img.height} بكسل`;
+      document.getElementById('uploadedPreview').style.display = 'block';
+      document.getElementById('outputGrid').style.display = 'grid';
+      document.getElementById('uploadZone').style.display = 'none';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function resizeAndDownload(size, filename, circleCanvasId, squircleCanvasId, statusId) {
+  if (!uploadedImage) { alert('الرجاء رفع صورة أولاً'); return; }
+
+  const canvas = document.getElementById('resCanvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(uploadedImage, 0, 0, size, size);
+  const dataUrl = canvas.toDataURL('image/png');
+
+  // Update previews
+  [circleCanvasId, squircleCanvasId].forEach(id => {
+    if (!id) return;
+    const pc = document.getElementById(id);
+    const pctx = pc.getContext('2d');
+    const pi = new Image();
+    pi.onload = () => { pctx.clearRect(0,0,120,120); pctx.drawImage(pi,0,0,120,120); };
+    pi.src = dataUrl;
+  });
+
+  // Trigger download
+  const dlId = 'dl_' + statusId.replace('st_','');
+  const link = document.getElementById(dlId);
+  link.href = dataUrl;
+  link.download = filename;
+  link.click();
+
+  document.getElementById(statusId).textContent = '✓ تم التحميل — ' + filename;
+  document.getElementById(statusId).style.color = '#15803d';
+  document.getElementById('afterDownloadGuide').style.display = 'block';
+}
+
+function generateAllFromUpload() {
+  if (!uploadedImage) { alert('الرجاء رفع صورة أولاً'); return; }
+  // Small delay between downloads so browser doesn't block
+  resizeAndDownload(512, 'icon-512x512-maskable.png', 'up512c', 'up512s', 'st_up512');
+  setTimeout(() => resizeAndDownload(192, 'icon-192x192-maskable.png', 'up192c', 'up192s', 'st_up192'), 600);
+  setTimeout(() => resizeAndDownload(180, 'icon-180x180-apple.png', null, 'up180s', 'st_up180'), 1200);
+}
+
+// ─── Generate from original icon-512x512.png ─────────────
+const ORIG_CONFIGS = {
+  512: { canvas:'gen512', preview:'c512',  previewSq:'c512sq', dl:'dl512', status:'st512', scale:0.75 },
+  192: { canvas:'gen192', preview:'c192',  previewSq:'c192sq', dl:'dl192', status:'st192', scale:0.75 },
+  180: { canvas:'gen180', preview:'c180',  previewSq:null,     dl:'dl180', status:'st180', scale:0.70 }
 };
 
-function generate(size) {
-  const cfg = CONFIGS[size];
-  const status = document.getElementById(cfg.status);
-  status.textContent = 'جارٍ التوليد...';
-
+function generateFromOriginal(size) {
+  const cfg = ORIG_CONFIGS[size];
+  document.getElementById(cfg.status).textContent = 'جارٍ التوليد...';
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.onload = function() {
-    const genCanvas = document.getElementById(cfg.canvas);
-    const ctx = genCanvas.getContext('2d');
+    const gc = document.getElementById(cfg.canvas);
+    const ctx = gc.getContext('2d');
     ctx.clearRect(0, 0, size, size);
-
-    // White background
-    ctx.fillStyle = cfg.bg;
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, size, size);
-
-    // Draw logo centered at scale% of canvas
-    const logoSize = Math.round(size * cfg.scale);
-    const offset = Math.round((size - logoSize) / 2);
-    ctx.drawImage(img, offset, offset, logoSize, logoSize);
-
-    const dataUrl = genCanvas.toDataURL('image/png');
-
-    // Update preview canvases (scaled down to 150px)
+    const ls = Math.round(size * cfg.scale);
+    const off = Math.round((size - ls) / 2);
+    ctx.drawImage(img, off, off, ls, ls);
+    const dataUrl = gc.toDataURL('image/png');
     [cfg.preview, cfg.previewSq].forEach(id => {
       if (!id) return;
       const pc = document.getElementById(id);
       const pctx = pc.getContext('2d');
-      const previewImg = new Image();
-      previewImg.onload = () => {
-        pctx.clearRect(0, 0, 150, 150);
-        pctx.drawImage(previewImg, 0, 0, 150, 150);
-      };
-      previewImg.src = dataUrl;
+      const pi = new Image();
+      pi.onload = () => { pctx.clearRect(0,0,120,120); pctx.drawImage(pi,0,0,120,120); };
+      pi.src = dataUrl;
     });
-
-    // Set download link
-    const dlLink = document.getElementById(cfg.dl);
-    dlLink.href = dataUrl;
-    dlLink.style.display = 'inline-block';
-
-    status.textContent = '✓ تم التوليد — اضغط تحميل لحفظ الملف';
-    document.getElementById('btn' + size).textContent = '🔄 إعادة التوليد';
+    const dl = document.getElementById(cfg.dl);
+    dl.href = dataUrl;
+    dl.style.display = 'inline-block';
+    document.getElementById(cfg.status).textContent = '✓ تم — اضغط تحميل';
+    document.getElementById(cfg.status).style.color = '#15803d';
   };
-
-  img.onerror = function() {
-    status.textContent = '❌ خطأ: تعذّر تحميل icon-512x512.png — تأكد من تشغيل الصفحة من مجلد المشروع (localhost أو live server)';
-    document.getElementById('btn' + size).disabled = false;
+  img.onerror = () => {
+    document.getElementById(cfg.status).textContent = '❌ شغّل عبر Live Server';
+    document.getElementById(cfg.status).style.color = '#dc2626';
   };
-
-  img.src = SOURCE_IMG + '?t=' + Date.now();
+  img.src = 'icon-512x512.png?t=' + Date.now();
 }
-
-// Auto-check if source file is accessible
-window.addEventListener('load', () => {
-  const testImg = new Image();
-  testImg.onload = () => {
-    document.querySelectorAll('.status').forEach(el => {
-      if (el.textContent === 'جاهز للتوليد') {
-        el.textContent = '✓ الملف المصدر جاهز — اضغط توليد';
-        el.style.color = '#15803d';
-      }
-    });
-  };
-  testImg.onerror = () => {
-    document.querySelectorAll('.status').forEach(el => {
-      el.textContent = '⚠️ شغّل من خلال Live Server أو localhost';
-      el.style.color = '#b45309';
-    });
-  };
-  testImg.src = SOURCE_IMG + '?t=' + Date.now();
-});
 </script>
 </body>
 </html>
