@@ -395,12 +395,36 @@ p {
 
 /* ============================================
    SAFE AREA INSETS - مناطق الأمان
+   للهواتف ذات الشق (iPhone X وما بعده) وأندرويد المشابه
    ============================================ */
 @supports (padding: max(0px)) {
     .responsive-container {
+        padding-top: max(var(--spacing-lg), env(safe-area-inset-top));
         padding-left: max(var(--spacing-lg), env(safe-area-inset-left));
         padding-right: max(var(--spacing-lg), env(safe-area-inset-right));
         padding-bottom: max(var(--spacing-lg), env(safe-area-inset-bottom));
+    }
+
+    /* Fixed/sticky headers — prevent overlap with status bar notch */
+    .sticky-header,
+    .fixed-header,
+    [data-safe-top] {
+        padding-top: max(0px, env(safe-area-inset-top));
+    }
+
+    /* Bottom navigation bars / floating action buttons */
+    .sticky-footer,
+    .fixed-footer,
+    [data-safe-bottom] {
+        padding-bottom: max(0px, env(safe-area-inset-bottom));
+    }
+
+    /* Standalone PWA mode: apply top inset to body */
+    @media (display-mode: standalone) {
+        body {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
     }
 }
 
