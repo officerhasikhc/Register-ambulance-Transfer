@@ -401,6 +401,90 @@
             50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.2), 0 2px 6px rgba(217, 119, 6, 0.4); }
         }
 
+        .btn-lock-icon {
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 0;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .btn-use-trip:not([disabled]) .btn-lock-icon {
+            animation: lockWobble 3s ease-in-out infinite;
+        }
+
+        .btn-use-trip.departure-only-pulse:not([disabled]) .btn-lock-icon {
+            animation: lockWobbleStrong 2s ease-in-out infinite;
+        }
+
+        @keyframes lockWobble {
+            0%, 60%, 100% { transform: rotate(0deg); }
+            70% { transform: rotate(-12deg); }
+            80% { transform: rotate(10deg); }
+            90% { transform: rotate(-6deg); }
+        }
+
+        @keyframes lockWobbleStrong {
+            0%, 50%, 100% { transform: rotate(0deg); }
+            55% { transform: rotate(-16deg); }
+            65% { transform: rotate(14deg); }
+            75% { transform: rotate(-10deg); }
+            85% { transform: rotate(7deg); }
+        }
+
+        /* Pending field warning banner */
+        .pending-field-warning {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: #fffbeb;
+            border: 1.5px solid #f59e0b;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            color: #92400e;
+            animation: slideDownFade 0.3s ease;
+        }
+
+        @keyframes slideDownFade {
+            from { opacity: 0; transform: translateY(-8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .pfw-icon { font-size: 16px; flex-shrink: 0; }
+
+        .pfw-text { flex: 1; font-weight: 500; line-height: 1.4; }
+
+        .pfw-link {
+            background: none;
+            border: none;
+            color: #d97706;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 13px;
+            padding: 0;
+            font-family: inherit;
+        }
+
+        .pfw-link:hover { color: #b45309; }
+
+        .pfw-close {
+            background: none;
+            border: none;
+            color: #b45309;
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0 4px;
+            flex-shrink: 0;
+            line-height: 1;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+
+        .pfw-close:hover { opacity: 1; }
+
         .pending-trip-card.active-editing {
             border-color: #3b82f6 !important;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
@@ -1470,6 +1554,12 @@
                 <span id="tripLinkText"></span>
                 <button class="cancel-link" onclick="cancelPendingTripLink()" data-en="Cancel / New record" data-ar="إلغاء / سجل جديد">Cancel / New record</button>
             </div>
+            <!-- Pending field warning: shown on form focus when pending trips exist -->
+            <div class="pending-field-warning" id="pendingFieldWarning">
+                <span class="pfw-icon">⚠</span>
+                <span class="pfw-text">Complete pending trip(s) before submitting a new record. <button class="pfw-link" onclick="scrollToPendingAndDismiss()">View Pending ↑</button></span>
+                <button class="pfw-close" onclick="hidePendingFieldWarning()">&#215;</button>
+            </div>
             <div class="form-header">
                 <div class="form-header-icon" style="display:flex;align-items:center;justify-content:center;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
                 <h2 data-en="Register New Ambulance Case" data-ar="تسجيل حالة إسعاف جديدة">Register New Ambulance Case</h2>
@@ -2445,18 +2535,40 @@
             document.querySelectorAll('.btn-use-trip').forEach(b => {
                 if (b.disabled) {
                     b.disabled = false;
-                    b.innerHTML = '&#9998; ' + (currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات');
+                    b.innerHTML = '<span class="btn-lock-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span> ' + (currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات');
                     b.style.background = '';
                     b.style.cursor = '';
                     b.style.opacity = '';
                 }
             });
+            hidePendingFieldWarning();
+            _pendingWarnShownAt = 0;
         }
 
         // Store trips globally for usePendingTrip function
         let currentPendingTrips = [];
         let nursePendingPage = 1;
         const NURSE_PENDING_PER_PAGE = 5;
+        let _pendingWarnShownAt = 0;
+
+        function showPendingFieldWarning() {
+            const w = document.getElementById('pendingFieldWarning');
+            if (!w) return;
+            w.style.display = 'flex';
+            clearTimeout(w._autoHide);
+            w._autoHide = setTimeout(hidePendingFieldWarning, 6000);
+        }
+
+        function hidePendingFieldWarning() {
+            const w = document.getElementById('pendingFieldWarning');
+            if (w) w.style.display = 'none';
+        }
+
+        function scrollToPendingAndDismiss() {
+            hidePendingFieldWarning();
+            const s = document.getElementById('pendingTripsAlert');
+            if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
         // Returns a Set of tripIds deleted by admin (from admin_deleted_trips, 24h TTL)
         function getAdminDeletedTripIds() {
@@ -2566,7 +2678,8 @@
                         </div>
                     </div>
                     <button class="btn-use-trip${!hasReturn ? ' departure-only-pulse' : ''}" onclick="usePendingTrip(${index})" style="align-self: stretch; margin-top: 8px;">
-                        &#9998; ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
+                        <span class="btn-lock-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span>
+                        ${currentLang === 'en' ? 'Complete Data' : 'إكمال البيانات'}
                     </button>
                 </div>`;
             }).join('');
@@ -2680,7 +2793,7 @@
             const clickedBtn = document.getElementById(`trip-card-${index}`)?.querySelector('.btn-use-trip');
             if (clickedBtn) {
                 clickedBtn.disabled = true;
-                clickedBtn.innerHTML = currentLang === 'en' ? '&#10003; Editing...' : '&#10003; جاري التعديل...';
+                clickedBtn.innerHTML = `<span class="btn-lock-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> ${currentLang === 'en' ? 'Completing...' : 'جاري الإكمال...'}`;
                 clickedBtn.style.background = '#6b7280';
                 clickedBtn.style.cursor = 'not-allowed';
                 clickedBtn.style.opacity = '0.75';
@@ -2915,6 +3028,13 @@
             if (!form) return;
             form.addEventListener('input', updateSubmitBtnColor);
             form.addEventListener('change', updateSubmitBtnColor);
+            form.addEventListener('focusin', function() {
+                const now = Date.now();
+                if (currentPendingTrips.length > 0 && !selectedTripId && !editingRecordId && (now - _pendingWarnShownAt) > 10000) {
+                    _pendingWarnShownAt = now;
+                    showPendingFieldWarning();
+                }
+            });
         }
 
         function updateStaffNumber() {
@@ -3263,6 +3383,8 @@
                     document.getElementById('successModalMessage').textContent = 'The ambulance case has been registered and notification sent to the administration.';
                     document.getElementById('successModal').classList.add('active');
                 }
+                hidePendingFieldWarning();
+                _pendingWarnShownAt = 0;
             }
             
             resetForm();
