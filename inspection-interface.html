@@ -358,6 +358,10 @@
         .btn-submit-week:hover:not(:disabled) { background: var(--dark-blue); }
         .btn-submit-week:disabled { background: #9ca3af; cursor: not-allowed; }
         .saved-badge { display: none; text-align: center; font-size: 11px; color: var(--success); margin-top: 6px; }
+        .sync-status { text-align: center; font-size: 11px; color: var(--text-secondary); padding: 2px 0 4px; min-height: 18px; transition: opacity 0.3s; }
+        .sync-status.syncing { color: var(--light-blue); }
+        .sync-status.synced { color: var(--success); }
+        .sync-status.sync-error { color: var(--warning); }
         .alert-msg { display: none; padding: 10px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: center; }
         .alert-msg.success { background: var(--success-light); color: #065f46; border: 1px solid #6ee7b7; }
         .alert-msg.error   { background: var(--error-light);   color: #991b1b;   border: 1px solid #fca5a5; }
@@ -624,7 +628,8 @@
         </div>
 
         <!-- Always visible feedback -->
-        <div class="saved-badge" id="savedBadge">✓ تم الحفظ محلياً</div>
+        <div class="saved-badge" id="savedBadge">✓ محفوظ</div>
+        <div class="sync-status" id="syncStatus"></div>
         <div class="alert-msg" id="alertMsg"></div>
     </div>
 
@@ -789,19 +794,37 @@
 
         const today    = new Date();
         const todayStr = toISO(today);
-        document.getElementById('weekDateInput').value = todayStr;
 
+        // ALWAYS compute current week (Sunday–Saturday) — server is source of truth
+        const currentWeekStart = toISO(buildWeek(todayStr)[0]);
+
+        // Prefetch server draft for current week (parallel with history fetch)
+        const _earlyDraftUrl = loggedInUser?.staffNumber
+            ? `${WEB_APP_URL}?action=getDraftInspection&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&weekStart=${encodeURIComponent(currentWeekStart)}&_t=${Date.now()}`
+            : null;
+        if (_earlyDraftUrl && !DataCache._inflight[_earlyDraftUrl]) {
+            DataCache._inflight[_earlyDraftUrl] = fetch(_earlyDraftUrl).then(r => r.json()).catch(() => null);
+        }
+
+        // Check if localStorage has a draft for the CURRENT week (instant cache)
         const saved = localStorage.getItem(DRAFT_KEY + loggedInUser.staffNumber);
+        let usedLocalCache = false;
         if (saved) {
             try {
-                draft = JSON.parse(saved);
-                if (draft.weekStart) {
+                const localDraft = JSON.parse(saved);
+                if (localDraft.weekStart === currentWeekStart) {
+                    draft = localDraft;
                     weekDates = buildWeekFromStart(draft.weekStart);
                     updateWeekRangeDisplay();
-                    document.getElementById('weekDateInput').value = draft.weekStart;
-                } else { initWeek(todayStr); }
-            } catch(e) { initWeek(todayStr); }
-        } else { initWeek(todayStr); }
+                    usedLocalCache = true;
+                }
+            } catch(e) {}
+        }
+        // If no matching local cache, initialize fresh current week
+        if (!usedLocalCache) {
+            initWeek(todayStr);
+        }
+        document.getElementById('weekDateInput').value = draft.weekStart || todayStr;
 
         // Smart resume: navigate to last saved day/session, or today if no data
         if (weekDates.length === 7) {
@@ -1046,6 +1069,7 @@
             renderForm();
             updateWeekSummary();
             saveDraft();
+            syncDraftWithServer(); // pull server data for the new week
             checkInspectionLock();
         } else {
             // Not Sunday → navigate to that day within current week (if it falls in it)
@@ -2116,6 +2140,7 @@
         clearTimeout(window._reminderCheckTimer);
         window._reminderCheckTimer = setTimeout(checkIncompleteReminder, 300);
         scheduleAutoSync();
+        updateSyncStatus('pending');
     }
 
     function _countDayItems(dayData) {
@@ -2192,11 +2217,40 @@
     let _syncInProgress = false;
     let _autoSyncTimer  = null;
     let _syncRetryCount = 0;
+    let _lastSyncOk     = 0;
     const _SYNC_MAX_RETRY_DELAY = 300000; // 5 minutes max
+
+    function updateSyncStatus(state) {
+        const el = document.getElementById('syncStatus');
+        if (!el) return;
+        el.classList.remove('syncing','synced','sync-error');
+        switch(state) {
+            case 'pending':
+                el.textContent = '☁ في انتظار الحفظ...';
+                el.classList.add('syncing');
+                break;
+            case 'syncing':
+                el.textContent = '☁⟳ جاري الحفظ بالسيرفر...';
+                el.classList.add('syncing');
+                break;
+            case 'synced':
+                el.textContent = '☁✓ محفوظ بالسيرفر';
+                el.classList.add('synced');
+                clearTimeout(window._syncStatusTimer);
+                window._syncStatusTimer = setTimeout(() => { el.textContent = ''; }, 5000);
+                break;
+            case 'error':
+                el.textContent = '☁↻ سيُعاد المحاولة';
+                el.classList.add('sync-error');
+                break;
+            default:
+                el.textContent = '';
+        }
+    }
 
     function scheduleAutoSync(delaySec) {
         clearTimeout(_autoSyncTimer);
-        const ms = delaySec ? delaySec * 1000 : 15000;
+        const ms = delaySec ? delaySec * 1000 : 3000;
         _autoSyncTimer = setTimeout(autoSyncDraft, ms);
     }
 
@@ -2216,6 +2270,46 @@
             scheduleAutoSync(2);
         }
     });
+
+    // Sync immediately when tab is hidden (tab switch / minimize)
+    window.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && hasDraftData() && !_syncInProgress) {
+            clearTimeout(_autoSyncTimer);
+            autoSyncDraft();
+        }
+    });
+
+    // Emergency fire-and-forget sync on page unload (close / navigate away)
+    window.addEventListener('pagehide', function() {
+        if (hasDraftData()) _emergencySync();
+    });
+
+    function _emergencySync() {
+        if (!loggedInUser?.staffNumber || !draft.weekStart || !hasDraftData()) return;
+        try {
+            const payload = JSON.stringify({
+                action:        'saveDraftInspection',
+                weekStart:      draft.weekStart,
+                weekEnd:        draft.weekEnd,
+                driverName:     draft.driverName    || loggedInUser.nameAr        || '',
+                staffNumber:    draft.staffNumber   || loggedInUser.staffNumber   || '',
+                vehicleNumber:  draft.vehicleNumber || loggedInUser.vehicleNumber || '',
+                deviceId:       getDeviceId(),
+                days:           draft.days
+            });
+            // keepalive: true allows the request to outlive the page
+            fetch(WEB_APP_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                keepalive: true,
+                headers: { 'Content-Type': 'text/plain' },
+                body: payload
+            }).catch(() => {});
+            console.log('[Sync] Emergency sync fired on pagehide');
+        } catch(e) {
+            console.warn('[Sync] Emergency sync failed:', e);
+        }
+    }
 
     let _syncPendingRetry = false;
 
@@ -2259,32 +2353,20 @@
             days:           mergedDays
         };
 
-        const syncDot = document.getElementById('sessionHint');
+        updateSyncStatus('syncing');
         try {
             const result = await ReliablePost.send(WEB_APP_URL, payload, { background: true });
             if (result && result.success) {
                 _syncRetryCount = 0;
+                _lastSyncOk = Date.now();
                 DataCache.invalidate('cache_insp_hist_' + loggedInUser.staffNumber);
-                if (syncDot) {
-                    const prev = syncDot.textContent;
-                    syncDot.textContent = '☁✓ تم المزامنة مع الخادم';
-                    syncDot.style.color = 'var(--success)';
-                    setTimeout(() => {
-                        syncDot.textContent = prev.startsWith('☁✓') ? '' : prev;
-                    }, 3000);
-                }
+                updateSyncStatus('synced');
             } else {
-                if (syncDot) {
-                    syncDot.textContent = '☁↻ سيُعاد المحاولة';
-                    syncDot.style.color = 'var(--warning, #f59e0b)';
-                }
+                updateSyncStatus('error');
                 scheduleRetrySync();
             }
         } catch(_) {
-            if (syncDot) {
-                syncDot.textContent = '☁↻ سيُعاد المحاولة';
-                syncDot.style.color = 'var(--warning, #f59e0b)';
-            }
+            updateSyncStatus('error');
             scheduleRetrySync();
         } finally {
             _syncInProgress = false;
