@@ -58,7 +58,7 @@
             border-radius: 12px; padding: 12px 14px; text-align: center;
             cursor: pointer; transition: all 0.2s; text-decoration: none; color: rgba(255,255,255,0.85);
         }
-        .module-card.active { background: rgba(255,255,255,0.95); border-color: white; color: var(--primary-blue); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .module-card.active { background: rgba(255,255,255,0.97); border-color: white; color: var(--primary-blue); box-shadow: 0 4px 14px rgba(0,0,0,0.18); transform: scale(1.03); font-weight: 800; }
         .module-card:hover:not(.active) { background: rgba(255,255,255,0.25); }
         .module-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
         .module-sub { font-size: 11px; opacity: 0.8; }
@@ -507,14 +507,14 @@
 
     <!-- Module Navigation -->
     <div class="module-nav">
-        <a href="driver-interface.html" class="module-card">
-            <div class="module-title">تسجيل رحلة</div>
-            <div class="module-sub">ذهاب وعودة</div>
-        </a>
         <div class="module-card active">
             <div class="module-title">فحص السيارة</div>
             <div class="module-sub">الفحص اليومي</div>
         </div>
+        <a href="driver-interface.html" class="module-card">
+            <div class="module-title">تسجيل رحلة</div>
+            <div class="module-sub">ذهاب وعودة</div>
+        </a>
     </div>
 
     <!-- Main Card -->
