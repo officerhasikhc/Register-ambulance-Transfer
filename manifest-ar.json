@@ -1,4 +1,5 @@
 {
+  "id": "/login.html",
   "name": "نظام سجل نشاط الإسعاف - مركز حاسك الصحي",
   "short_name": "إدارة الإسعاف",
   "description": "نظام تسجيل رحلات الإسعاف - المديرية العامة للخدمات الصحية بمحافظة ظفار - مركز حاسك الصحي",
@@ -8,6 +9,8 @@
   "background_color": "#1e40af",
   "theme_color": "#1e40af",
   "orientation": "portrait",
+  "prefer_related_applications": false,
+  "categories": ["medical", "productivity"],
   "icons": [
     {
       "src": "./icon-512x512.png",
@@ -38,6 +41,46 @@
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "./icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "نظام سجل نشاط الإسعاف"
+    },
+    {
+      "src": "./icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "نظام سجل الإسعاف - تسجيل الدخول"
     }
   ],
   "lang": "ar",

@@ -43,7 +43,7 @@
     <meta name="twitter:title" content="Ambulance Reg System | نظام سجل الإسعاف - Ministry of Health">
     <meta name="twitter:description" content="Ministry of Health - Hasik Health Center | Ambulance Activity Record System | وزارة الصحة - مركز حاسك الصحي | نظام سجل رحلات الإسعاف">
     <meta name="twitter:image" content="https://officerhasikhc.github.io/Register-ambulance-Transfer/og-image.png">
-    <link rel="manifest" href="manifest-ar.json?v=2" id="app-manifest">
+    <link rel="manifest" href="manifest.json" id="app-manifest">
     
     <!-- Favicon for browsers -->
     <link rel="icon" type="image/png" sizes="48x48" href="icon-48x48.png">
@@ -782,7 +782,7 @@
             }
         }
 
-        // Smart PWA install detection
+        // Smart PWA install detection — works on ALL browsers
         function checkInstallPrompt() {
             const container = document.getElementById('installContainer');
 
@@ -797,22 +797,51 @@
             // Update device icon based on platform
             updateDeviceIcon();
 
-            // If beforeinstallprompt already fired before DOMContentLoaded, show the button
+            // If beforeinstallprompt already fired (Chrome/Edge/Samsung Internet 14+), show native install
             if (deferredPrompt) {
                 container.classList.add('visible');
+                return;
             }
 
-            // iOS Safari: beforeinstallprompt never fires, but if not in standalone mode
-            // show a subtle hint so the user knows they can add to home screen
-            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-            const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|chrome/i.test(navigator.userAgent);
-            if (isIOS && isSafari && !isStandalone) {
-                document.getElementById('deviceIcon').textContent = '🍏';
-                document.getElementById('installText').setAttribute('data-ar', 'أضف للشاشة الرئيسية');
-                document.getElementById('installText').setAttribute('data-en', 'Add to Home Screen');
-                document.getElementById('installText').textContent = currentLang === 'ar' ? 'أضف للشاشة الرئيسية' : 'Add to Home Screen';
-                container.classList.add('visible');
+            // For ALL other browsers: show install button with manual instructions
+            // This covers: Huawei Browser, Firefox, Opera, Samsung Internet (old), UC Browser, etc.
+            const textEl = document.getElementById('installText');
+            const iconEl = document.getElementById('deviceIcon');
+            const browserInfo = detectBrowser();
+
+            if (browserInfo.name === 'ios-safari') {
+                iconEl.textContent = '🍏';
+                textEl.setAttribute('data-ar', 'أضف للشاشة الرئيسية');
+                textEl.setAttribute('data-en', 'Add to Home Screen');
+                textEl.textContent = currentLang === 'ar' ? 'أضف للشاشة الرئيسية' : 'Add to Home Screen';
+            } else {
+                textEl.setAttribute('data-ar', 'تثبيت التطبيق');
+                textEl.setAttribute('data-en', 'Install App');
+                textEl.textContent = currentLang === 'ar' ? 'تثبيت التطبيق' : 'Install App';
             }
+            container.classList.add('visible');
+        }
+
+        // Detect browser engine for install instructions
+        function detectBrowser() {
+            const ua = navigator.userAgent;
+            if (/iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|chrome/i.test(ua))
+                return { name: 'ios-safari' };
+            if (/HuaweiBrowser/i.test(ua) || /HUAWEI/i.test(ua) && !/Chrome/i.test(ua))
+                return { name: 'huawei' };
+            if (/Firefox/i.test(ua) && !/Seamonkey/i.test(ua))
+                return { name: 'firefox' };
+            if (/SamsungBrowser/i.test(ua))
+                return { name: 'samsung' };
+            if (/OPR|Opera/i.test(ua))
+                return { name: 'opera' };
+            if (/UCBrowser/i.test(ua))
+                return { name: 'uc' };
+            if (/Edg/i.test(ua))
+                return { name: 'edge' };
+            if (/Chrome/i.test(ua))
+                return { name: 'chrome' };
+            return { name: 'other' };
         }
 
         // Detect device type and update install button icon
@@ -825,23 +854,51 @@
             else                                   deviceIcon.textContent = '📲';
         }
 
-        // Install app
+        // Install app — works on ALL browsers
         async function installApp() {
-            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-            if (!deferredPrompt) {
-                if (isIOS) {
-                    alert(currentLang === 'ar'
-                        ? 'لإضافة التطبيق: اضغط على زر المشاركة ثم اختر "إضافة إلى الشاشة الرئيسية"'
-                        : 'To install: tap the Share button, then "Add to Home Screen"');
+            // If native prompt is available (Chrome/Edge), use it
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    document.getElementById('installContainer').classList.remove('visible');
                 }
+                deferredPrompt = null;
                 return;
             }
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                document.getElementById('installContainer').classList.remove('visible');
+
+            // Otherwise show manual instructions based on browser
+            const browser = detectBrowser();
+            let msgAr, msgEn;
+
+            switch (browser.name) {
+                case 'ios-safari':
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. اضغط على زر المشاركة ⬆️ في الأسفل\n2. اختر "إضافة إلى الشاشة الرئيسية"\n3. اضغط "إضافة"';
+                    msgEn = '📲 To install:\n\n1. Tap the Share button ⬆️ at the bottom\n2. Choose "Add to Home Screen"\n3. Tap "Add"';
+                    break;
+                case 'huawei':
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. اضغط على ⋮ (ثلاث نقاط) أعلى المتصفح\n2. اختر "إضافة إلى الشاشة الرئيسية"\n3. اضغط "إضافة"';
+                    msgEn = '📲 To install:\n\n1. Tap ⋮ (three dots) at the top\n2. Choose "Add to Home Screen"\n3. Tap "Add"';
+                    break;
+                case 'firefox':
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. اضغط على ⋮ (ثلاث نقاط) أعلى المتصفح\n2. اختر "تثبيت" أو "إضافة إلى الشاشة الرئيسية"';
+                    msgEn = '📲 To install:\n\n1. Tap ⋮ (three dots) at the top\n2. Choose "Install" or "Add to Home Screen"';
+                    break;
+                case 'samsung':
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. اضغط على ☰ (ثلاثة خطوط) أسفل المتصفح\n2. اختر "إضافة الصفحة إلى"\n3. اختر "الشاشة الرئيسية"';
+                    msgEn = '📲 To install:\n\n1. Tap ☰ (three lines) at the bottom\n2. Choose "Add page to"\n3. Choose "Home screen"';
+                    break;
+                case 'opera':
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. اضغط على ⋮ (ثلاث نقاط) أسفل المتصفح\n2. اختر "الشاشة الرئيسية" أو "Add to Home Screen"';
+                    msgEn = '📲 To install:\n\n1. Tap ⋮ at the bottom\n2. Choose "Home screen" or "Add to Home Screen"';
+                    break;
+                default:
+                    msgAr = '📲 لتثبيت التطبيق:\n\n1. افتح قائمة المتصفح ⋮\n2. اختر "إضافة إلى الشاشة الرئيسية" أو "تثبيت التطبيق"';
+                    msgEn = '📲 To install:\n\n1. Open browser menu ⋮\n2. Choose "Add to Home Screen" or "Install App"';
+                    break;
             }
-            deferredPrompt = null;
+
+            alert(currentLang === 'ar' ? msgAr : msgEn);
         }
 
         // Set language
