@@ -363,6 +363,13 @@
         .sync-status.syncing { color: var(--light-blue); }
         .sync-status.synced { color: var(--success); }
         .sync-status.sync-error { color: var(--warning); }
+        .other-week-banner { display: none; background: linear-gradient(135deg,#eff6ff,#dbeafe); border: 1.5px solid #93c5fd; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; text-align: center; font-size: 13px; font-weight: 600; color: var(--primary-blue); }
+        .other-week-banner .btn-back-current { display: inline-block; margin-top: 6px; padding: 5px 16px; background: var(--primary-blue); color: white; border: none; border-radius: 7px; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .other-week-banner .btn-back-current:hover { background: var(--dark-blue); }
+        .readonly-overlay { pointer-events: none; opacity: 0.7; }
+        .readonly-badge { display: none; text-align: center; background: #f0fdf4; border: 1px solid #86efac; border-radius: 9px; padding: 8px 14px; margin-bottom: 10px; font-size: 12px; font-weight: 600; color: #166534; }
+        .week-check-loading { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.25); z-index: 999; justify-content: center; align-items: center; }
+        .week-check-loading .spinner-box { background: white; border-radius: 14px; padding: 24px 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); text-align: center; font-size: 14px; font-weight: 600; color: var(--text-primary); }
         .alert-msg { display: none; padding: 10px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: center; }
         .alert-msg.success { background: var(--success-light); color: #065f46; border: 1px solid #6ee7b7; }
         .alert-msg.error   { background: var(--error-light);   color: #991b1b;   border: 1px solid #fca5a5; }
@@ -552,6 +559,16 @@
             <span class="week-range-text" id="weekRangeDisplay">—</span>
         </div>
 
+        <!-- Other Week Banner (shown when not on current week) -->
+        <div class="other-week-banner" id="otherWeekBanner">
+            <span id="otherWeekMsg"></span>
+            <br>
+            <button class="btn-back-current" onclick="goToCurrentWeek()">📅 العودة للأسبوع الحالي</button>
+        </div>
+
+        <!-- Readonly Badge (shown for submitted weeks) -->
+        <div class="readonly-badge" id="readonlyBadge">🔒 هذا الأسبوع مكتمل — للعرض فقط</div>
+
         <!-- Incomplete Day Reminder Banner -->
         <div class="incomplete-reminder" id="incompleteReminder">
             <span class="reminder-icon">⚠</span>
@@ -639,6 +656,11 @@
 
     <!-- AM→PM Transition Toast -->
     <div class="session-switch-toast" id="sessionSwitchToast">☀ الصباح مكتمل — ينتقل للمساء 🌙</div>
+
+    <!-- Week Check Loading Overlay -->
+    <div class="week-check-loading" id="weekCheckLoading">
+        <div class="spinner-box">⏳ جارٍ التحقق من الأسبوع...</div>
+    </div>
 
     <!-- Inspection History -->
     <div class="history-section">
@@ -772,6 +794,8 @@
     let currentSession = 'am';
     let draft = { weekStart: null, weekEnd: null, driverName: '', staffNumber: '', vehicleNumber: '', days: {} };
     let weekDates = [];
+    let _realCurrentWeekStart = null; // the actual current week (Sunday)
+    let _isReadonly = false; // true when viewing a submitted week
 
     // ============================================================
     // INIT
@@ -798,6 +822,7 @@
 
         // ALWAYS compute current week (Sunday–Saturday) — server is source of truth
         const currentWeekStart = toISO(buildWeek(todayStr)[0]);
+        _realCurrentWeekStart = currentWeekStart;
 
         // Prefetch server draft for current week (parallel with history fetch)
         const _earlyDraftUrl = loggedInUser?.staffNumber
@@ -993,14 +1018,15 @@
             cell.className = cls;
 
             if (iso <= todayISO) {
-                cell.onclick = () => {
+                cell.onclick = async () => {
+                    const oldWeekStart = draft.weekStart;
                     document.getElementById('weekDateInput').value = iso;
-                    onWeekDateChange(iso);
+                    await onWeekDateChange(iso);
                     updateDatepickerLabel();
                     renderCalGrid(); // refresh highlights
-                    // Close popup only when a Sunday is picked (new week set)
+                    // Close popup only when a Sunday is picked AND week actually changed
                     const d2 = new Date(iso + 'T00:00:00');
-                    if (d2.getDay() === 0) {
+                    if (d2.getDay() === 0 && draft.weekStart !== oldWeekStart) {
                         document.getElementById('calPopup').style.display = 'none';
                         _calOpen = false;
                         document.removeEventListener('click', closeCalOutside);
@@ -1041,37 +1067,77 @@
         return dayDate > today;
     }
 
-    function onWeekDateChange(val) {
+    async function onWeekDateChange(val) {
         if (!val) return;
         const d   = new Date(val + 'T00:00:00');
         const dow = d.getDay(); // 0 = Sunday
 
         if (dow === 0) {
             // Sunday → set new week
-            const newStart = val; // Sunday IS the week start
+            const newStart = val;
             if (newStart === draft.weekStart) return;
-            const newDates = buildWeekFromStart(newStart);
-            const hasData  = hasDraftData();
-            if (hasData && !confirm('تغيير الأسبوع سيبدأ مسودة جديدة. هل تريد المتابعة؟')) {
+
+            // Show loading overlay
+            const loader = document.getElementById('weekCheckLoading');
+            if (loader) loader.style.display = 'flex';
+
+            // Step 1: Sync current week to server BEFORE switching (don't lose data)
+            if (hasDraftData() && !_isReadonly) {
+                try { await autoSyncDraft(); } catch(_e) {}
+            }
+
+            // Step 2: Check target week status on server
+            let weekStatus = { status: 'empty', isOwn: false };
+            try {
+                const url = `${WEB_APP_URL}?action=getWeekInspectionStatus&weekStart=${encodeURIComponent(newStart)}&staffNumber=${encodeURIComponent(loggedInUser.staffNumber)}&_t=${Date.now()}`;
+                const res = await fetch(url);
+                weekStatus = await res.json();
+            } catch(_e) {
+                // Network error — allow optimistic switch
+            }
+
+            if (loader) loader.style.display = 'none';
+
+            // Step 3: Apply rules
+            if (weekStatus.status === 'submitted') {
+                if (weekStatus.isOwn) {
+                    // Own submitted week — view readonly
+                    switchToWeek(newStart, null);
+                    syncDraftWithServer();
+                    setReadonlyMode(true, '🔒 هذا الأسبوع مُرسل ومكتمل — للعرض فقط');
+                    showOtherWeekBanner('أنت تشاهد أسبوع ' + newStart + ' (مكتمل)');
+                } else {
+                    // Another driver's submitted week — block
+                    showAlert('هذا الأسبوع مكتمل ومسجّل بواسطة ' + (weekStatus.ownerName || weekStatus.ownerStaff) + ' — لا يمكن التعديل', 'error');
+                    document.getElementById('weekDateInput').value = draft.weekStart || val;
+                }
+                return;
+            }
+
+            if (weekStatus.status === 'drafted' && !weekStatus.isOwn) {
+                // Another driver's draft — block
+                showAlert('هذا الأسبوع مسجّل جزئياً بواسطة ' + (weekStatus.ownerName || weekStatus.ownerStaff) + ' — فقط هو يمكنه إكماله', 'error');
                 document.getElementById('weekDateInput').value = draft.weekStart || val;
                 return;
             }
-            weekDates = newDates;
-            draft.weekStart     = newStart;
-            draft.weekEnd       = toISO(newDates[6]);
-            draft.driverName    = loggedInUser.nameAr        || '';
-            draft.staffNumber   = loggedInUser.staffNumber   || '';
-            draft.vehicleNumber = loggedInUser.vehicleNumber || '';
-            draft.days = {};
-            currentDayIdx = 0;
-            updateWeekRangeDisplay();
-            updateDatepickerLabel();
-            renderDayTabs();
-            renderForm();
-            updateWeekSummary();
-            saveDraft();
-            syncDraftWithServer(); // pull server data for the new week
-            checkInspectionLock();
+
+            if (weekStatus.status === 'drafted' && weekStatus.isOwn) {
+                // Own draft — resume it
+                switchToWeek(newStart, null);
+                syncDraftWithServer();
+                setReadonlyMode(false);
+                showOtherWeekBanner('استكمال مسودتك لأسبوع ' + newStart);
+                return;
+            }
+
+            // Empty week — allow fresh start
+            switchToWeek(newStart, null);
+            setReadonlyMode(false);
+            if (newStart !== _realCurrentWeekStart) {
+                showOtherWeekBanner('تسجيل جديد لأسبوع ' + newStart);
+            } else {
+                hideOtherWeekBanner();
+            }
         } else {
             // Not Sunday → navigate to that day within current week (if it falls in it)
             const pickedISO = toISO(d);
@@ -1086,10 +1152,77 @@
                 }
             }
             if (!found) {
-                // Restore input to week start and inform user
                 document.getElementById('weekDateInput').value = draft.weekStart || val;
                 showAlert('لتحديد أسبوع جديد اختر يوم الأحد (بداية المناوبة)', 'info');
             }
+        }
+    }
+
+    function switchToWeek(newStart, serverDraft) {
+        const newDates = buildWeekFromStart(newStart);
+        weekDates = newDates;
+        draft.weekStart     = newStart;
+        draft.weekEnd       = toISO(newDates[6]);
+        draft.driverName    = loggedInUser.nameAr        || '';
+        draft.staffNumber   = loggedInUser.staffNumber   || '';
+        draft.vehicleNumber = loggedInUser.vehicleNumber || '';
+        draft.days = {};
+        currentDayIdx = 0;
+        updateWeekRangeDisplay();
+        updateDatepickerLabel();
+        document.getElementById('weekDateInput').value = newStart;
+        renderDayTabs();
+        renderForm();
+        updateWeekSummary();
+        if (!_isReadonly) saveDraft();
+        checkInspectionLock();
+    }
+
+    function setReadonlyMode(on, msg) {
+        _isReadonly = on;
+        const container = document.getElementById('itemsContainer');
+        const badge = document.getElementById('readonlyBadge');
+        if (on) {
+            if (container) container.classList.add('readonly-overlay');
+            if (badge) { badge.textContent = msg || '🔒 هذا الأسبوع مكتمل — للعرض فقط'; badge.style.display = 'block'; }
+        } else {
+            if (container) container.classList.remove('readonly-overlay');
+            if (badge) badge.style.display = 'none';
+        }
+    }
+
+    function showOtherWeekBanner(msg) {
+        const banner = document.getElementById('otherWeekBanner');
+        const msgEl  = document.getElementById('otherWeekMsg');
+        if (banner && msgEl) {
+            msgEl.textContent = msg;
+            banner.style.display = 'block';
+        }
+    }
+
+    function hideOtherWeekBanner() {
+        const banner = document.getElementById('otherWeekBanner');
+        if (banner) banner.style.display = 'none';
+    }
+
+    function goToCurrentWeek() {
+        if (!_realCurrentWeekStart) return;
+        // Sync current data first if editing
+        if (hasDraftData() && !_isReadonly) {
+            autoSyncDraft().catch(() => {});
+        }
+        // Switch to real current week
+        setReadonlyMode(false);
+        hideOtherWeekBanner();
+        switchToWeek(_realCurrentWeekStart, null);
+        syncDraftWithServer();
+        // Navigate to today's day
+        const today = new Date();
+        const diff = Math.floor((today - weekDates[0]) / 86400000);
+        if (diff >= 0 && diff < 7) {
+            currentDayIdx = diff;
+            renderDayTabs();
+            renderForm();
         }
     }
 
@@ -1175,6 +1308,7 @@
     }
 
     function onTimeChange(val) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
         ensureDaySession();
         draft.days[currentDayIdx][currentSession].time = val;
@@ -1450,6 +1584,7 @@
     // STATUS TOGGLE
     // ============================================================
     function setStatus(itemId, secIdx, val, btn) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
         ensureDaySession();
         const sess = draft.days[currentDayIdx][currentSession];
@@ -1579,6 +1714,7 @@
     }
 
     function setItemNote(itemId, val) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
         ensureDaySession();
         const sess = draft.days[currentDayIdx][currentSession];
@@ -1601,6 +1737,7 @@
      * - Tapping an already-selected chip de-selects it (clears the note).
      */
     function selectFollowupChip(itemId, chipText, btnEl, secIdx) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
 
         const isOther    = chipText === 'أخرى...';
@@ -1645,6 +1782,7 @@
 
     // ── Instant Fault Alert ──────────────────────────────────────────────
     async function reportFaultInstant(itemId, secIdx) {
+        if (_isReadonly) return;
         const sess = draft.days?.[currentDayIdx]?.[currentSession];
         if (!sess) return;
 
@@ -1706,6 +1844,7 @@
 
     // ── Photo attachment helpers ──────────────────────────────────────────
     function captureItemPhoto(itemId) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
         document.getElementById('phi_' + itemId)?.click();
     }
@@ -1733,6 +1872,7 @@
     }
 
     function removeItemPhoto(itemId) {
+        if (_isReadonly) return;
         const sess = draft.days?.[currentDayIdx]?.[currentSession];
         if (sess && sess.itemPhotos) delete sess.itemPhotos[itemId];
         saveDraft();
@@ -1767,6 +1907,7 @@
     // ─────────────────────────────────────────────────────────────────────
 
     function onNotesChange(val) {
+        if (_isReadonly) return;
         if (isFutureDay(currentDayIdx)) return;
         if (!draft.days[currentDayIdx]) draft.days[currentDayIdx] = {};
         draft.days[currentDayIdx].notes = val;
@@ -2133,6 +2274,7 @@
     // DRAFT
     // ============================================================
     function saveDraft() {
+        if (_isReadonly) return;
         draft.updatedAt = Date.now();
         localStorage.setItem(DRAFT_KEY + (loggedInUser?.staffNumber || 'x'), JSON.stringify(draft));
         updateWeekSummary();
@@ -2428,6 +2570,11 @@
     // SUBMIT WEEK
     // ============================================================
     async function submitWeek() {
+        // 0. Readonly mode check
+        if (_isReadonly) {
+            showAlert('هذا الأسبوع للعرض فقط — لا يمكن إعادة الإرسال', 'info');
+            return;
+        }
         // 0. Check lock before submission
         if (_weekLocked) {
             showAlert('⚠ هذا الأسبوع مسجّل من قِبل ' + _weekLockedBy + '. لا يمكن الإرسال.', 'error');

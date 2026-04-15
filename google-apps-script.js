@@ -469,6 +469,9 @@ function doGet(e) {
       case 'checkInspectionLock':
         return checkInspectionLock(e.parameter);
 
+      case 'getWeekInspectionStatus':
+        return getWeekInspectionStatus(e.parameter);
+
       case 'checkReminders':
         checkPendingTripsAndSendReminders();
         return ContentService
@@ -4350,6 +4353,130 @@ function checkInspectionLock(params) {
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.toString(), locked: false }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Get comprehensive status of a week for smart week-switching.
+ * Returns: { status: 'submitted'|'drafted'|'empty', isOwn, ownerName, ownerStaff, daysWithData, totalItems }
+ */
+function getWeekInspectionStatus(params) {
+  try {
+    var weekStart   = String(params.weekStart || '').trim();
+    var staffNumber = String(params.staffNumber || '').trim();
+
+    if (!weekStart) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, status: 'empty', isOwn: false }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var sheet   = setupInspectionSheet();
+    var lastRow = sheet.getLastRow();
+    var tz      = CONFIG.TIME_ZONE;
+
+    if (lastRow <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, status: 'empty', isOwn: false }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    var staffIdx  = headers.indexOf('Staff_Number');
+    var weekIdx   = headers.indexOf('Week_Start');
+    var draftIdx  = headers.indexOf('Is_Draft');
+    var nameIdx   = headers.indexOf('Driver_Name');
+    var dayIdx    = headers.indexOf('Day_Index');
+    var amIdx     = headers.indexOf('AM_Items');
+    var pmIdx     = headers.indexOf('PM_Items');
+
+    // Collect all rows for this week
+    var submitted = [];  // Is_Draft = 'لا'
+    var drafts    = [];  // Is_Draft = 'نعم'
+
+    for (var r = 0; r < allData.length; r++) {
+      var row = allData[r];
+      var cellWeek = row[weekIdx];
+      if (cellWeek instanceof Date) {
+        cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+      }
+      if (String(cellWeek).trim() !== weekStart) continue;
+
+      var isDraft = String(row[draftIdx] || '').trim() === 'نعم';
+      var entry = {
+        staffNumber: String(row[staffIdx] || '').trim(),
+        driverName:  String(row[nameIdx]  || '').trim(),
+        dayIndex:    row[dayIdx],
+        amItems:     row[amIdx],
+        pmItems:     row[pmIdx]
+      };
+
+      if (isDraft) {
+        drafts.push(entry);
+      } else {
+        submitted.push(entry);
+      }
+    }
+
+    // Priority: submitted > drafted > empty
+    if (submitted.length > 0) {
+      var ownerStaff = submitted[0].staffNumber;
+      var ownerName  = submitted[0].driverName;
+      var isOwn      = (ownerStaff === staffNumber);
+      var daysSet    = {};
+      var totalItems = 0;
+      submitted.forEach(function(e) {
+        daysSet[e.dayIndex] = true;
+        try {
+          var am = JSON.parse(e.amItems || '{}');
+          var pm = JSON.parse(e.pmItems || '{}');
+          totalItems += Object.values(am.items || {}).filter(Boolean).length;
+          totalItems += Object.values(pm.items || {}).filter(Boolean).length;
+        } catch(_) {}
+      });
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: true, status: 'submitted', isOwn: isOwn,
+          ownerName: ownerName, ownerStaff: ownerStaff,
+          daysWithData: Object.keys(daysSet).length, totalItems: totalItems
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (drafts.length > 0) {
+      var ownerStaff = drafts[0].staffNumber;
+      var ownerName  = drafts[0].driverName;
+      var isOwn      = (ownerStaff === staffNumber);
+      var daysSet    = {};
+      var totalItems = 0;
+      drafts.forEach(function(e) {
+        try {
+          var am = JSON.parse(e.amItems || '{}');
+          var pm = JSON.parse(e.pmItems || '{}');
+          var count = Object.values(am.items || {}).filter(Boolean).length +
+                      Object.values(pm.items || {}).filter(Boolean).length;
+          if (count > 0) daysSet[e.dayIndex] = true;
+          totalItems += count;
+        } catch(_) {}
+      });
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: true, status: 'drafted', isOwn: isOwn,
+          ownerName: ownerName, ownerStaff: ownerStaff,
+          daysWithData: Object.keys(daysSet).length, totalItems: totalItems
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, status: 'empty', isOwn: false }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.toString(), status: 'empty' }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
