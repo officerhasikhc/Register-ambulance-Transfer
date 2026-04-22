@@ -4101,6 +4101,28 @@ function saveDraftInspection(data) {
     }
 
     const lastRow = sheet.getLastRow();
+
+    // Guard: reject if another driver already has data for this week
+    if (lastRow > 1) {
+      var headers_ = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var allCheck = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      var staffIdx_ = headers_.indexOf('Staff_Number');
+      var weekIdx_  = headers_.indexOf('Week_Start');
+      var nameIdx_  = headers_.indexOf('Driver_Name');
+      for (var c = 0; c < allCheck.length; c++) {
+        var cw = allCheck[c][weekIdx_];
+        if (cw instanceof Date) cw = Utilities.formatDate(cw, tz, 'yyyy-MM-dd');
+        if (String(cw).trim() !== targetWeek) continue;
+        var cs = String(allCheck[c][staffIdx_]).trim();
+        if (cs && cs !== staffNumber) {
+          lock.releaseLock();
+          return ContentService
+            .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: String(allCheck[c][nameIdx_] || '').trim(), lockedStaff: cs }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+    }
+
     if (lastRow > 1) {
       const staffCol = 6;
       const weekCol  = 3;
@@ -4322,6 +4344,7 @@ function checkInspectionLock(params) {
 
     var lockedBy = '';
     var lockedStaff = '';
+    var lockedIsDraft = false;
 
     for (var r = 0; r < allData.length; r++) {
       var row = allData[r];
@@ -4333,16 +4356,16 @@ function checkInspectionLock(params) {
       var rowStaff = String(row[staffIdx]).trim();
       if (rowStaff === staffNumber) continue; // same staff, not a conflict
       var isDraft = String(row[draftIdx] || '').trim() === 'نعم';
-      if (isDraft) continue; // drafts don't lock
-      // Found a submitted record by another staff member
+      // Found a record (draft or submitted) by another staff member
       lockedBy = String(row[nameIdx] || '').trim();
       lockedStaff = rowStaff;
-      break;
+      lockedIsDraft = isDraft;
+      if (!isDraft) break; // submitted records take priority — stop immediately
     }
 
     if (lockedStaff) {
       return ContentService
-        .createTextOutput(JSON.stringify({ success: true, locked: true, lockedBy: lockedBy, lockedStaff: lockedStaff }))
+        .createTextOutput(JSON.stringify({ success: true, locked: true, lockedBy: lockedBy, lockedStaff: lockedStaff, isDraft: lockedIsDraft }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -4637,9 +4660,30 @@ function submitInspectionWeek(data) {
     const dayNames   = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 
     var targetWeek = String(data.weekStart || '').trim();
+    var staffNumber = String(data.staffNumber || '').trim();
+
+    // Guard: reject if another driver already has data for this week
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var headers_ = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var allCheck = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      var staffIdx_ = headers_.indexOf('Staff_Number');
+      var weekIdx_  = headers_.indexOf('Week_Start');
+      var nameIdx_  = headers_.indexOf('Driver_Name');
+      for (var c = 0; c < allCheck.length; c++) {
+        var cw = allCheck[c][weekIdx_];
+        if (cw instanceof Date) cw = Utilities.formatDate(cw, tz, 'yyyy-MM-dd');
+        if (String(cw).trim() !== targetWeek) continue;
+        var cs = String(allCheck[c][staffIdx_]).trim();
+        if (cs && cs !== staffNumber) {
+          return ContentService
+            .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: String(allCheck[c][nameIdx_] || '').trim(), lockedStaff: cs }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+    }
 
     // Remove any previous submission for this driver + week (re-submit replaces)
-    const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       const staffCol = 6; // Staff_Number column (1-indexed)
       const weekCol  = 3; // Week_Start column
@@ -4649,7 +4693,7 @@ function submitInspectionWeek(data) {
         if (cellWeek instanceof Date) {
           cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
         }
-        if (String(existing[r][staffCol-1]).trim() === String(data.staffNumber).trim() &&
+        if (String(existing[r][staffCol-1]).trim() === staffNumber &&
             String(cellWeek).trim() === targetWeek) {
           sheet.deleteRow(r + 2);
         }

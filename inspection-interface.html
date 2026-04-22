@@ -2306,7 +2306,7 @@
     // DRAFT
     // ============================================================
     function saveDraft() {
-        if (_isReadonly) return;
+        if (_isReadonly || _weekLocked) return;
         draft.updatedAt = Date.now();
         localStorage.setItem(DRAFT_KEY + (loggedInUser?.staffNumber || 'x'), JSON.stringify(draft));
         updateWeekSummary();
@@ -2490,6 +2490,7 @@
 
     async function autoSyncDraft() {
         if (!loggedInUser?.staffNumber || !draft.weekStart) return;
+        if (_weekLocked) return;
         if (!hasDraftData()) return;
         if (_syncInProgress) { _syncPendingRetry = true; return; }
         _syncInProgress = true;
@@ -2557,6 +2558,7 @@
     // ============================================================
     let _weekLocked = false;
     let _weekLockedBy = '';
+    let _weekLockedIsDraft = false;
 
     async function checkInspectionLock() {
         if (!loggedInUser?.staffNumber || !draft.weekStart) return;
@@ -2567,10 +2569,15 @@
             if (data && data.success && data.locked) {
                 _weekLocked = true;
                 _weekLockedBy = data.lockedBy || data.lockedStaff || '';
+                _weekLockedIsDraft = !!data.isDraft;
                 showLockBanner(true);
+                setReadonlyMode(true, _weekLockedIsDraft
+                    ? '⚠ هذا الأسبوع قيد التسجيل من قبل ' + _weekLockedBy
+                    : '🔒 هذا الأسبوع مكتمل ومسجّل من قبل ' + _weekLockedBy);
             } else {
                 _weekLocked = false;
                 _weekLockedBy = '';
+                _weekLockedIsDraft = false;
                 showLockBanner(false);
             }
         } catch(e) {
@@ -2589,7 +2596,11 @@
             if (form) form.parentNode.insertBefore(banner, form);
         }
         if (locked) {
-            banner.innerHTML = `⚠ هذا الأسبوع مسجّل بالفعل من قِبل <strong>${_weekLockedBy}</strong>. لا يمكن تسجيل فحوصات جديدة لهذا الأسبوع.`;
+            const icon = _weekLockedIsDraft ? '⚠' : '🔒';
+            const msg = _weekLockedIsDraft
+                ? `${icon} هذا الأسبوع قيد التسجيل من قِبل <strong>${_weekLockedBy}</strong>. لا يمكنك إجراء الفحص لأن سائق آخر بدأ به.`
+                : `${icon} هذا الأسبوع مسجّل بالفعل من قِبل <strong>${_weekLockedBy}</strong>. لا يمكن تسجيل فحوصات جديدة لهذا الأسبوع.`;
+            banner.innerHTML = msg;
             banner.style.display = 'block';
             const submitBtn = document.getElementById('btnSubmitWeek');
             if (submitBtn) submitBtn.disabled = true;
