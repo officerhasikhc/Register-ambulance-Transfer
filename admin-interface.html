@@ -2051,9 +2051,10 @@
                             </div>
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;">
-                            <button onclick="showLocalDraftsDetails()" class="btn btn-export" style="background:#f97316;color:white;border:none;padding:8px 12px;font-size:12px;">مسح المسودات المحلية</button>
-                            <button onclick="showServerInspectionsDetails()" class="btn btn-export" style="background:#b91c1c;color:white;border:none;padding:8px 12px;font-size:12px;">مسح الفحوصات المخزنة</button>
+                            <button onclick="toggleInspectionManager()" class="btn btn-export" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;border:none;padding:8px 14px;font-size:12px;font-weight:700;">🛠 إدارة فحوصات السائقين</button>
                         </div>
+                        <!-- Inline inspection manager panel -->
+                        <div id="inspManagerPanel" style="display:none;margin-top:12px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;"></div>
                     </div>
 
                     <!-- Legend -->
@@ -4755,80 +4756,117 @@
             return sunday.toISOString().slice(0, 10);
         }
 
-        function clearLocalInspectionDraftsForSelectedWeek() {
-            const weekStart = getSelectedInspectionWeek();
-            if (!weekStart) { showToast('يرجى تحديد أسبوع أولاً', 'warning'); return; }
+        function toggleInspectionManager() {
+            const panel = document.getElementById('inspManagerPanel');
+            if (panel.style.display !== 'none') {
+                panel.style.display = 'none';
+                return;
+            }
+            panel.style.display = 'block';
+            renderInspectionManager();
+        }
 
-            const draftKeys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('inspection_draft_')) {
-                    draftKeys.push(key);
-                }
+        function renderInspectionManager() {
+            const panel = document.getElementById('inspManagerPanel');
+            const rows = _allInspections || [];
+
+            if (rows.length === 0) {
+                panel.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px;">لا توجد بيانات فحوصات. اضغط "تحديث" أولاً.</div>';
+                return;
             }
 
-            let removed = 0;
-            draftKeys.forEach(key => {
-                try {
-                    const value = localStorage.getItem(key);
-                    if (!value) return;
-                    const draft = JSON.parse(value);
-                    if (String(draft.weekStart || '').trim() === weekStart) {
-                        localStorage.removeItem(key);
-                        removed += 1;
-                    }
-                } catch (_) {}
+            // Group by driver → weeks
+            const drivers = {};
+            rows.forEach(r => {
+                const staff = String(r.Staff_Number || '').trim();
+                const name  = r.Driver_Name || 'غير محدد';
+                const ws    = String(r.Week_Start || '').trim().substring(0, 10);
+                const we    = String(r.Week_End || '').trim().substring(0, 10);
+                if (!staff || !ws) return;
+
+                if (!drivers[staff]) drivers[staff] = { name, staff, weeks: {} };
+                if (!drivers[staff].weeks[ws]) drivers[staff].weeks[ws] = { weekEnd: we, days: 0, items: 0, isDraft: false };
+
+                const wk = drivers[staff].weeks[ws];
+                // Count items
+                let amCount = 0, pmCount = 0;
+                try { amCount = Object.values((JSON.parse(r.AM_Items || '{}').items) || {}).filter(Boolean).length; } catch(_) {}
+                try { pmCount = Object.values((JSON.parse(r.PM_Items || '{}').items) || {}).filter(Boolean).length; } catch(_) {}
+                if (amCount > 0 || pmCount > 0) wk.days++;
+                wk.items += amCount + pmCount;
+                if (String(r.Is_Draft || '').trim() === 'نعم') wk.isDraft = true;
             });
 
-            if (removed > 0) {
-                showToast('تم مسح ' + removed + ' مسودة محلية للأسبوع المحدد', 'success');
-            } else {
-                showToast('لم تُعثر على مسودات محلية للأسبوع المحدد', 'warning');
-            }
+            const INSP_TOTAL = 20;
+            let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+                + '<h3 style="margin:0;font-size:15px;color:#1f2937;">🛠 إدارة فحوصات السائقين</h3>'
+                + '<button onclick="document.getElementById(\'inspManagerPanel\').style.display=\'none\'" style="background:none;border:none;font-size:18px;cursor:pointer;color:#9ca3af;">✕</button>'
+                + '</div>';
+
+            const driverIds = Object.keys(drivers).sort((a, b) => drivers[a].name.localeCompare(drivers[b].name));
+
+            driverIds.forEach(staffId => {
+                const d = drivers[staffId];
+                const weekKeys = Object.keys(d.weeks).sort().reverse();
+
+                html += '<div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:10px;">'
+                    + '<div style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:2px;">' + d.name + '</div>'
+                    + '<div style="font-size:11px;color:#6b7280;margin-bottom:10px;">الرقم الوظيفي: ' + d.staff + ' &nbsp;|&nbsp; ' + weekKeys.length + ' أسبوع</div>';
+
+                weekKeys.forEach(ws => {
+                    const wk = d.weeks[ws];
+                    const weekLabel = fmtDateAr(ws, { day:'numeric', month:'long' }) + ' — ' + fmtDateAr(wk.weekEnd, { day:'numeric', month:'long', year:'numeric' });
+                    const pct = Math.round((wk.items / (INSP_TOTAL * 2 * 7)) * 100);
+                    const statusBadge = wk.isDraft
+                        ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:#fde68a;color:#92400e;">مسودة</span>'
+                        : '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:#d1fae5;color:#065f46;">مرسل</span>';
+
+                    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:4px;background:#f9fafb;border-radius:8px;border:1px solid #f3f4f6;">'
+                        + '<div style="flex:1;">'
+                        + '<div style="font-size:12px;font-weight:600;color:#374151;">' + weekLabel + '</div>'
+                        + '<div style="font-size:11px;color:#6b7280;margin-top:2px;">'
+                        + wk.days + ' يوم &nbsp;|&nbsp; ' + wk.items + ' بند &nbsp;|&nbsp; ' + pct + '% ' + statusBadge
+                        + '</div>'
+                        + '</div>'
+                        + '<button onclick="deleteDriverWeekFromPanel(\'' + staffId + '\',\'' + d.name + '\',\'' + ws + '\')" '
+                        + 'style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🗑 مسح</button>'
+                        + '</div>';
+                });
+
+                html += '</div>';
+            });
+
+            panel.innerHTML = html;
         }
 
-        function clearAllLocalInspectionDrafts() {
-            const draftKeys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('inspection_draft_')) {
-                    draftKeys.push(key);
-                }
-            }
-            draftKeys.forEach(key => localStorage.removeItem(key));
-            showToast('تم مسح جميع المسودات المحلية للفحوصات', 'success');
-        }
-
-        async function deleteInspectionWeekFromServer() {
-            const weekStart = getSelectedInspectionWeek();
-            if (!weekStart) { showToast('يرجى تحديد أسبوع أولاً', 'warning'); return; }
-
-            const driverFilter = document.getElementById('inspDriverFilter').value;
-            const confirmMessage = driverFilter
-                ? 'هل تريد بالتأكيد مسح بيانات الفحوصات المخزنة للأسبوع المحدد للسائق ' + driverFilter + '؟'
-                : 'هل تريد بالتأكيد مسح بيانات الفحوصات المخزنة للأسبوع المحدد لكافة السائقين؟';
-
+        async function deleteDriverWeekFromPanel(staffNumber, driverName, weekStart) {
+            const weekLabel = fmtDateAr(weekStart, { day:'numeric', month:'long', year:'numeric' });
             const confirmed = await sysConfirm({
-                title: 'تأكيد مسح الفحوصات',
-                message: confirmMessage,
+                title: 'مسح فحوصات ' + driverName,
+                message: 'سيتم حذف جميع بيانات فحوصات السائق "' + driverName + '" للأسبوع ' + weekLabel + ' من السيرفر نهائياً.\n\nهل أنت متأكد؟',
                 icon: 'danger',
-                confirmText: 'نعم، امسح',
+                confirmText: 'نعم، امسح نهائياً',
                 cancelText: 'إلغاء'
             });
             if (!confirmed) return;
 
-            const payload = {
-                action: 'deleteInspectionWeek',
-                weekStart: weekStart
-            };
-            if (driverFilter) payload.driverName = driverFilter;
+            showToast('جارٍ المسح...', 'info');
+            try {
+                const result = await ReliablePost.send(WEB_APP_URL, {
+                    action: 'deleteInspectionWeek',
+                    weekStart: weekStart,
+                    staffNumber: staffNumber
+                }, { timeout: 60000 });
 
-            const result = await ReliablePost.send(WEB_APP_URL, payload, { timeout: 60000 });
-            if (result && result.success) {
-                showToast('تم مسح بيانات الفحص المخزنة بنجاح', 'success');
-                loadInspections();
-            } else {
-                showToast('تعذّر مسح بيانات الفحص: ' + (result && result.error ? result.error : 'حدث خطأ'), 'error');
+                if (result && result.success) {
+                    showToast('تم مسح فحوصات ' + driverName + ' للأسبوع المحدد (' + (result.deleted || 0) + ' سجل)', 'success');
+                    await loadInspections();
+                    renderInspectionManager();
+                } else {
+                    showToast('تعذّر المسح: ' + (result?.error || 'خطأ غير معروف'), 'error');
+                }
+            } catch(e) {
+                showToast('خطأ في الاتصال: ' + e.message, 'error');
             }
         }
 
@@ -5576,117 +5614,6 @@
 ${pages}
 </body>
 </html>`;
-        }
-
-        // New functions for showing details before clearing inspections
-        function getLocalDraftsDetails() {
-            const draftKeys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('inspection_draft_')) {
-                    draftKeys.push(key);
-                }
-            }
-
-            const details = [];
-            draftKeys.forEach(key => {
-                try {
-                    const value = localStorage.getItem(key);
-                    if (!value) return;
-                    const draft = JSON.parse(value);
-                    const weekStart = String(draft.weekStart || '').trim();
-                    const driverName = draft.driverName || 'غير محدد';
-                    details.push({ weekStart, driverName, key });
-                } catch (_) {}
-            });
-
-            return details;
-        }
-
-        function getServerInspectionsDetails() {
-            if (!_allInspections || _allInspections.length === 0) return [];
-
-            const weekStart = getSelectedInspectionWeek();
-            const driverFilter = document.getElementById('inspDriverFilter').value;
-
-            const filtered = _allInspections.filter(r =>
-                (!weekStart || String(r.Week_Start||'').trim() === weekStart) &&
-                (!driverFilter || r.Driver_Name === driverFilter)
-            );
-
-            // Group by driver and week
-            const groups = {};
-            filtered.forEach(r => {
-                const ws = String(r.Week_Start || '').trim().substring(0, 10);
-                const key = r.Driver_Name + '|' + ws;
-                if (!groups[key]) {
-                    groups[key] = { driver: r.Driver_Name, weekStart: ws, count: 0 };
-                }
-                groups[key].count++;
-            });
-
-            return Object.values(groups);
-        }
-
-        async function showLocalDraftsDetails() {
-            const details = getLocalDraftsDetails();
-            if (details.length === 0) {
-                showToast('لا توجد مسودات محلية للفحوصات', 'info');
-                return;
-            }
-
-            const weekGroups = {};
-            details.forEach(d => {
-                if (!weekGroups[d.weekStart]) weekGroups[d.weekStart] = [];
-                weekGroups[d.weekStart].push(d.driverName);
-            });
-
-            let message = 'المسودات المحلية الموجودة:\n\n';
-            Object.keys(weekGroups).sort().forEach(week => {
-                const drivers = [...new Set(weekGroups[week])];
-                message += `الأسبوع: ${week}\n`;
-                message += `السائقون: ${drivers.join(', ')}\n`;
-                message += `عدد المسودات: ${weekGroups[week].length}\n\n`;
-            });
-
-            const confirmed = await sysConfirm({
-                title: 'تفاصيل المسودات المحلية',
-                message: message,
-                icon: 'warning',
-                confirmText: 'مسح الكل',
-                cancelText: 'إلغاء'
-            });
-
-            if (confirmed) {
-                clearAllLocalInspectionDrafts();
-            }
-        }
-
-        async function showServerInspectionsDetails() {
-            const details = getServerInspectionsDetails();
-            if (details.length === 0) {
-                showToast('لا توجد بيانات فحوصات مخزنة تطابق الفلاتر المحددة', 'info');
-                return;
-            }
-
-            let message = 'البيانات المخزنة التي سيتم مسحها:\n\n';
-            details.forEach(d => {
-                message += `السائق: ${d.driver}\n`;
-                message += `الأسبوع: ${d.weekStart}\n`;
-                message += `عدد الأيام: ${d.count}\n\n`;
-            });
-
-            const confirmed = await sysConfirm({
-                title: 'تفاصيل الفحوصات المخزنة',
-                message: message,
-                icon: 'danger',
-                confirmText: 'مسح الكل',
-                cancelText: 'إلغاء'
-            });
-
-            if (confirmed) {
-                await deleteInspectionWeekFromServer();
-            }
         }
 
         // Auto-load inspections on page load

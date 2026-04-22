@@ -4102,25 +4102,13 @@ function saveDraftInspection(data) {
 
     const lastRow = sheet.getLastRow();
 
-    // Guard: reject if another driver already has data for this week
-    if (lastRow > 1) {
-      var headers_ = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      var allCheck = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-      var staffIdx_ = headers_.indexOf('Staff_Number');
-      var weekIdx_  = headers_.indexOf('Week_Start');
-      var nameIdx_  = headers_.indexOf('Driver_Name');
-      for (var c = 0; c < allCheck.length; c++) {
-        var cw = allCheck[c][weekIdx_];
-        if (cw instanceof Date) cw = Utilities.formatDate(cw, tz, 'yyyy-MM-dd');
-        if (String(cw).trim() !== targetWeek) continue;
-        var cs = String(allCheck[c][staffIdx_]).trim();
-        if (cs && cs !== staffNumber) {
-          lock.releaseLock();
-          return ContentService
-            .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: String(allCheck[c][nameIdx_] || '').trim(), lockedStaff: cs }))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
+    // Guard: reject if another driver is the rightful owner of this week
+    var owner = getWeekOwner_(sheet, targetWeek, tz);
+    if (owner && owner.ownerStaff !== staffNumber) {
+      lock.releaseLock();
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: owner.ownerName, lockedStaff: owner.ownerStaff }))
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     if (lastRow > 1) {
@@ -4311,8 +4299,82 @@ function getDraftInspection(params) {
 }
 
 /**
- * Check if an inspection week is already submitted by another staff member.
- * Returns { locked: true/false, lockedBy, lockedStaff }
+ * Determine the rightful owner of an inspection week.
+ * Owner = driver with the MOST filled items; tiebreak = earliest Submitted_At.
+ * Returns { ownerStaff, ownerName, ownerItems, isDraft } or null (empty week).
+ */
+function getWeekOwner_(sheet, weekStart, tz) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return null;
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  var staffIdx  = headers.indexOf('Staff_Number');
+  var weekIdx   = headers.indexOf('Week_Start');
+  var nameIdx   = headers.indexOf('Driver_Name');
+  var draftIdx  = headers.indexOf('Is_Draft');
+  var amIdx     = headers.indexOf('AM_Items');
+  var pmIdx     = headers.indexOf('PM_Items');
+  var tsIdx     = headers.indexOf('Submitted_At');
+
+  // Group by staff number
+  var groups = {};
+  for (var r = 0; r < allData.length; r++) {
+    var row = allData[r];
+    var cellWeek = row[weekIdx];
+    if (cellWeek instanceof Date) cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
+    if (String(cellWeek).trim() !== weekStart) continue;
+
+    var staff = String(row[staffIdx] || '').trim();
+    if (!staff) continue;
+
+    if (!groups[staff]) groups[staff] = { name: '', items: 0, earliest: '', isDraft: true };
+    groups[staff].name = String(row[nameIdx] || '').trim() || groups[staff].name;
+
+    // Count filled items in AM and PM
+    try {
+      var am = JSON.parse(row[amIdx] || '{}');
+      groups[staff].items += Object.values(am.items || {}).filter(Boolean).length;
+    } catch(_) {}
+    try {
+      var pm = JSON.parse(row[pmIdx] || '{}');
+      groups[staff].items += Object.values(pm.items || {}).filter(Boolean).length;
+    } catch(_) {}
+
+    // Track earliest timestamp
+    var ts = row[tsIdx];
+    if (ts instanceof Date) ts = Utilities.formatDate(ts, tz, 'yyyy-MM-dd HH:mm:ss');
+    ts = String(ts || '');
+    if (ts && (!groups[staff].earliest || ts < groups[staff].earliest)) {
+      groups[staff].earliest = ts;
+    }
+
+    // If any row is submitted (not draft), mark the group as submitted
+    if (String(row[draftIdx] || '').trim() !== 'نعم') {
+      groups[staff].isDraft = false;
+    }
+  }
+
+  var staffIds = Object.keys(groups);
+  if (staffIds.length === 0) return null;
+  if (staffIds.length === 1) {
+    var s = staffIds[0];
+    return { ownerStaff: s, ownerName: groups[s].name, ownerItems: groups[s].items, isDraft: groups[s].isDraft };
+  }
+
+  // Multiple drivers: owner = most items, tiebreak = earliest timestamp
+  staffIds.sort(function(a, b) {
+    if (groups[b].items !== groups[a].items) return groups[b].items - groups[a].items;
+    return (groups[a].earliest || 'z').localeCompare(groups[b].earliest || 'z');
+  });
+  var winner = staffIds[0];
+  return { ownerStaff: winner, ownerName: groups[winner].name, ownerItems: groups[winner].items, isDraft: groups[winner].isDraft };
+}
+
+/**
+ * Check if an inspection week is locked for the requesting staff member.
+ * Uses ownership logic: owner (most items) is NOT locked; everyone else IS.
+ * Returns { locked: true/false, lockedBy, lockedStaff, isDraft }
  */
 function checkInspectionLock(params) {
   try {
@@ -4325,52 +4387,31 @@ function checkInspectionLock(params) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    var sheet   = setupInspectionSheet();
-    var lastRow = sheet.getLastRow();
-    var tz      = CONFIG.TIME_ZONE;
+    var sheet = setupInspectionSheet();
+    var tz    = CONFIG.TIME_ZONE;
+    var owner = getWeekOwner_(sheet, weekStart, tz);
 
-    if (lastRow <= 1) {
+    // No data for this week — not locked
+    if (!owner) {
       return ContentService
         .createTextOutput(JSON.stringify({ success: true, locked: false }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var allData = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-    var staffIdx  = headers.indexOf('Staff_Number');
-    var weekIdx   = headers.indexOf('Week_Start');
-    var draftIdx  = headers.indexOf('Is_Draft');
-    var nameIdx   = headers.indexOf('Driver_Name');
-
-    var lockedBy = '';
-    var lockedStaff = '';
-    var lockedIsDraft = false;
-
-    for (var r = 0; r < allData.length; r++) {
-      var row = allData[r];
-      var cellWeek = row[weekIdx];
-      if (cellWeek instanceof Date) {
-        cellWeek = Utilities.formatDate(cellWeek, tz, 'yyyy-MM-dd');
-      }
-      if (String(cellWeek).trim() !== weekStart) continue;
-      var rowStaff = String(row[staffIdx]).trim();
-      if (rowStaff === staffNumber) continue; // same staff, not a conflict
-      var isDraft = String(row[draftIdx] || '').trim() === 'نعم';
-      // Found a record (draft or submitted) by another staff member
-      lockedBy = String(row[nameIdx] || '').trim();
-      lockedStaff = rowStaff;
-      lockedIsDraft = isDraft;
-      if (!isDraft) break; // submitted records take priority — stop immediately
-    }
-
-    if (lockedStaff) {
+    // Requesting driver IS the owner — not locked
+    if (owner.ownerStaff === staffNumber) {
       return ContentService
-        .createTextOutput(JSON.stringify({ success: true, locked: true, lockedBy: lockedBy, lockedStaff: lockedStaff, isDraft: lockedIsDraft }))
+        .createTextOutput(JSON.stringify({ success: true, locked: false }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    // Requesting driver is NOT the owner — locked
     return ContentService
-      .createTextOutput(JSON.stringify({ success: true, locked: false }))
+      .createTextOutput(JSON.stringify({
+        success: true, locked: true,
+        lockedBy: owner.ownerName, lockedStaff: owner.ownerStaff,
+        isDraft: owner.isDraft, ownerItems: owner.ownerItems
+      }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -4469,26 +4510,31 @@ function getWeekInspectionStatus(params) {
     }
 
     if (drafts.length > 0) {
-      var ownerStaff = drafts[0].staffNumber;
-      var ownerName  = drafts[0].driverName;
-      var isOwn      = (ownerStaff === staffNumber);
-      var daysSet    = {};
-      var totalItems = 0;
+      // Determine owner using item-count logic (most items = owner)
+      var draftGroups = {};
       drafts.forEach(function(e) {
+        var s = e.staffNumber;
+        if (!draftGroups[s]) draftGroups[s] = { name: e.driverName, items: 0, days: {}, entries: [] };
+        draftGroups[s].entries.push(e);
         try {
           var am = JSON.parse(e.amItems || '{}');
           var pm = JSON.parse(e.pmItems || '{}');
           var count = Object.values(am.items || {}).filter(Boolean).length +
                       Object.values(pm.items || {}).filter(Boolean).length;
-          if (count > 0) daysSet[e.dayIndex] = true;
-          totalItems += count;
+          if (count > 0) draftGroups[s].days[e.dayIndex] = true;
+          draftGroups[s].items += count;
         } catch(_) {}
       });
+      var ownerStaff = Object.keys(draftGroups).sort(function(a,b) {
+        return draftGroups[b].items - draftGroups[a].items;
+      })[0];
+      var ownerGroup = draftGroups[ownerStaff];
+      var isOwn      = (ownerStaff === staffNumber);
       return ContentService
         .createTextOutput(JSON.stringify({
           success: true, status: 'drafted', isOwn: isOwn,
-          ownerName: ownerName, ownerStaff: ownerStaff,
-          daysWithData: Object.keys(daysSet).length, totalItems: totalItems
+          ownerName: ownerGroup.name, ownerStaff: ownerStaff,
+          daysWithData: Object.keys(ownerGroup.days).length, totalItems: ownerGroup.items
         }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -4662,28 +4708,16 @@ function submitInspectionWeek(data) {
     var targetWeek = String(data.weekStart || '').trim();
     var staffNumber = String(data.staffNumber || '').trim();
 
-    // Guard: reject if another driver already has data for this week
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      var headers_ = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      var allCheck = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-      var staffIdx_ = headers_.indexOf('Staff_Number');
-      var weekIdx_  = headers_.indexOf('Week_Start');
-      var nameIdx_  = headers_.indexOf('Driver_Name');
-      for (var c = 0; c < allCheck.length; c++) {
-        var cw = allCheck[c][weekIdx_];
-        if (cw instanceof Date) cw = Utilities.formatDate(cw, tz, 'yyyy-MM-dd');
-        if (String(cw).trim() !== targetWeek) continue;
-        var cs = String(allCheck[c][staffIdx_]).trim();
-        if (cs && cs !== staffNumber) {
-          return ContentService
-            .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: String(allCheck[c][nameIdx_] || '').trim(), lockedStaff: cs }))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
+    // Guard: reject if another driver is the rightful owner of this week
+    var owner = getWeekOwner_(sheet, targetWeek, tz);
+    if (owner && owner.ownerStaff !== staffNumber) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: false, error: 'week_locked', lockedBy: owner.ownerName, lockedStaff: owner.ownerStaff }))
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     // Remove any previous submission for this driver + week (re-submit replaces)
+    const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       const staffCol = 6; // Staff_Number column (1-indexed)
       const weekCol  = 3; // Week_Start column
