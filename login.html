@@ -533,7 +533,7 @@
                 nameEn: 'SAAD ZAID AL-JUNAIBI',
                 redirect: 'inspection-interface.html'
             },
-            '222975657': { 
+            '22975657': { 
                 type: 'driver', 
                 employeeType: 'daily-paid',
                 nameAr: 'حسان ثابت رجب', 
@@ -562,6 +562,58 @@
             }
         };
 
+        // ============================================
+        // SYNC USERS FROM SERVER | مزامنة المستخدمين من الخادم
+        // ============================================
+        
+        /**
+         * Fetch users from server and update local USERS object
+         * This ensures hardcoded users are always up to date
+         */
+        async function syncUsersFromServer() {
+            try {
+                const response = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
+                const result = await response.json();
+                if (result.success && result.users) {
+                    result.users.forEach(function(user) {
+                        if (!user.active) return;
+                        
+                        // Determine login key: staffNumber or civilId
+                        const loginKey = user.staffNumber || user.civilId;
+                        if (!loginKey) return;
+                        
+                        // Determine employee type
+                        const hasStaff = user.staffNumber && user.staffNumber.toString().trim() !== '';
+                        const hasCivil = user.civilId && user.civilId.toString().trim() !== '';
+                        const employeeType = (!hasStaff && hasCivil) ? 'daily-paid' : 'employee';
+                        
+                        // Determine redirect page
+                        let redirect = 'driver-interface.html';
+                        if (user.type === 'admin') redirect = 'admin-interface.html';
+                        else if (user.type === 'nurse') redirect = 'nurse-interface.html';
+                        else if (user.type === 'driver') redirect = 'inspection-interface.html';
+                        
+                        // Update USERS object (overrides hardcoded)
+                        USERS[loginKey] = {
+                            type: user.type,
+                            employeeType: employeeType,
+                            nameAr: user.nameAr,
+                            nameEn: user.nameEn,
+                            redirect: redirect
+                        };
+                        
+                        // Also index by the other number if exists
+                        if (user.staffNumber && user.civilId) {
+                            USERS[user.civilId] = USERS[loginKey];
+                        }
+                    });
+                    console.log('[Login] Users synced from server:', Object.keys(USERS).length);
+                }
+            } catch (error) {
+                console.log('[Login] Server sync failed, using hardcoded users:', error);
+            }
+        }
+
         // PWA Install prompt
         let deferredPrompt;
 
@@ -581,10 +633,14 @@
         });
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             setLanguage(currentLang);
             loadSavedCredentials();
             checkInstallPrompt();
+            
+            // Sync users from server first (before any login attempt)
+            await syncUsersFromServer();
+            
             prefetchOnPageLoad();
 
             // Speculative prefetch: when user types a known staff number, start loading data early
@@ -609,6 +665,14 @@
                     }
                 }, 300);
             });
+        });
+
+        // Listen for cross-tab user updates (when settings page updates a user)
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'users_updated_ts') {
+                console.log('[Login] Users updated in another tab, re-syncing...');
+                syncUsersFromServer();
+            }
         });
 
         /**

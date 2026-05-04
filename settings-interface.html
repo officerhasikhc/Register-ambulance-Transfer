@@ -607,7 +607,7 @@
             {
                 nameAr: 'حسان ثابت رجب',
                 nameEn: 'HASSAN THABIT RAJAB',
-                staffNumber: '222975657',
+                staffNumber: '22975657',
                 type: 'daily-paid'
             },
             {
@@ -705,6 +705,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showStatus('تم حفظ الممرض/ة بنجاح', 'success');
+                        broadcastUserUpdate('add', result.id);
                         await loadNursesFromServer();
                     } else {
                         showStatus('خطأ في حفظ الممرض/ة: ' + (result.error || ''), 'error');
@@ -728,6 +729,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showStatus('تم تحديث بيانات الممرض/ة بنجاح', 'success');
+                        broadcastUserUpdate('update', nurse.id);
                         await loadNursesFromServer();
                     } else {
                         showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
@@ -780,6 +782,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showStatus('تم حفظ السائق بنجاح', 'success');
+                        broadcastUserUpdate('add', result.id);
                         await loadDriversFromServer();
                     } else {
                         showStatus('خطأ في حفظ السائق: ' + (result.error || ''), 'error');
@@ -803,6 +806,7 @@
                     const result = await response.json();
                     if (result.success) {
                         showStatus('تم تحديث بيانات السائق بنجاح', 'success');
+                        broadcastUserUpdate('update', driver.id);
                         await loadDriversFromServer();
                     } else {
                         showStatus('خطأ في تحديث البيانات: ' + (result.error || ''), 'error');
@@ -828,6 +832,25 @@
             } catch (error) {
                 showStatus('خطأ في الاتصال بالسيرفر', 'error');
             }
+        }
+
+        /**
+         * Broadcast user update to all tabs (cross-tab communication)
+         * Signals other tabs to reload user data
+         */
+        function broadcastUserUpdate(action, userId) {
+            try {
+                localStorage.setItem('users_updated_ts', Date.now().toString());
+                localStorage.setItem('users_updated_action', JSON.stringify({
+                    action: action,
+                    userId: userId,
+                    timestamp: Date.now()
+                }));
+                // Cleanup after short delay
+                setTimeout(function() {
+                    localStorage.removeItem('users_updated_action');
+                }, 1000);
+            } catch (e) { /* ignore */ }
         }
 
         // ============================================
@@ -1395,6 +1418,14 @@
         }
 
         initializeSettings();
+
+        // Listen for cross-tab user updates (when login or other tabs update users)
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'users_updated_ts') {
+                console.log('[Settings] Users updated in another tab, refreshing...');
+                loadAllUsersFromServer();
+            }
+        });
 
         // Register Service Worker for PWA with aggressive auto-update
         if ('serviceWorker' in navigator) {
