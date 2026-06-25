@@ -221,7 +221,7 @@ const DataCache = {
                 }
                 const result = await this._inflight[url];
                 delete this._inflight[url];
-                const freshData = extractData ? extractData(result) : result;
+                const freshData = (extractData && result != null) ? extractData(result) : result;
 
                 if (freshData !== null && freshData !== undefined) {
                     const freshHash = this.hash(freshData);

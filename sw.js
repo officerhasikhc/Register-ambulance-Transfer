@@ -1,6 +1,6 @@
 // Service Worker for Ambulance Record PWA
 // نظام سجل الإسعاف - دعم العمل بدون إنترنت
-const CACHE_NAME = 'ambulance-log-v43';
+const CACHE_NAME = 'ambulance-log-v44';
 const OFFLINE_QUEUE_KEY = 'offline_queue';
 
 const urlsToCache = [
@@ -58,14 +58,22 @@ self.addEventListener('install', event => {
 // Fetch event - Network First with Offline Queue for POST requests
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  
+
+  // Only intercept http/https — cache.put() rejects chrome-extension://, blob:, data:, etc.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
   // Let POST requests go directly to network — do NOT intercept.
   // Google Apps Script uses 302 redirects that require full CORS handling;
   // intercepting here caused silent failures on some devices/PWA contexts.
-  if (event.request.method === 'POST') {
-    return; // browser handles natively
-  }
-  
+  if (event.request.method === 'POST') return;
+
+  // Let Google Apps Script API calls bypass SW entirely — they are dynamic,
+  // never cached, and SW interception caused FetchEvent network errors.
+  if (url.hostname === 'script.google.com') return;
+
+  // Let Google Fonts bypass SW — browser has its own font cache.
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') return;
+
   // Handle navigation requests (HTML pages) - Network First with login fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
@@ -74,36 +82,34 @@ self.addEventListener('fetch', event => {
           if (response.status === 200) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
+              cache.put(event.request, responseClone).catch(() => {});
             });
           }
           return response;
         })
-        .catch(() => {
-          return caches.match(event.request)
-            .then(cached => {
-              // If no cached version, fallback to login page
-              return cached || caches.match('./login.html');
-            });
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          return cached || caches.match('./login.html') || new Response('', { status: 503, statusText: 'Offline' });
         })
     );
     return;
   }
-  
-  // Handle GET requests - Network First
+
+  // Handle GET requests for static assets - Network First
   event.respondWith(
     fetch(event.request)
       .then(response => {
         if (response.status === 200) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
+            cache.put(event.request, responseClone).catch(() => {});
           });
         }
         return response;
       })
-      .catch(() => {
-        return caches.match(event.request);
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        return cached || new Response('', { status: 503, statusText: 'Offline' });
       })
   );
 });

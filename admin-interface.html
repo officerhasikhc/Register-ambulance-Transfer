@@ -2306,8 +2306,11 @@
         window._allUsersData = [];
         async function loadNurseNameMap() {
             try {
-                const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
-                const result = await resp.json();
+                const _allUsersUrl = `${WEB_APP_URL}?action=getAllUsers`;
+                if (!DataCache._inflight[_allUsersUrl]) {
+                    DataCache._inflight[_allUsersUrl] = fetch(_allUsersUrl).then(r => r.json());
+                }
+                const result = await DataCache._inflight[_allUsersUrl];
                 if (result.success && (result.users || result.data)) {
                     var users = result.users || result.data;
                     window._allUsersData = users;
@@ -3696,26 +3699,20 @@
         loadPendingTrips();
 
         // Background pre-warming: aggressively prefetch ALL months' records
-        // Priority: adjacent months first, then "all", then the rest
-        // Uses batches of 2 with short delays to avoid network saturation
+        // Priority: current month + adjacent first, history deferred to idle time.
+        // Connection-aware: skip history warm on slow connections (2G/3G).
         setTimeout(function() {
             try {
                 const year = new Date().getFullYear();
                 const currentMonth = new Date().getMonth() + 1;
                 var prevYear = year - 1;
 
+                // Phase 1: critical months only (max 4 requests)
                 var monthsToWarm = [];
-                // "all" for current year (common admin view)
                 monthsToWarm.push({ y: year, m: 'all' });
-                // Adjacent months first
-                if (currentMonth > 1) monthsToWarm.push({ y: year, m: currentMonth - 1 });
+                monthsToWarm.push({ y: year, m: currentMonth });
+                if (currentMonth > 1)  monthsToWarm.push({ y: year, m: currentMonth - 1 });
                 if (currentMonth < 12) monthsToWarm.push({ y: year, m: currentMonth + 1 });
-                // Rest of current year
-                for (var m = currentMonth - 2; m >= 1; m--) monthsToWarm.push({ y: year, m: m });
-                for (var m2 = currentMonth + 2; m2 <= 12; m2++) monthsToWarm.push({ y: year, m: m2 });
-                // Previous year recent months
-                for (var pm = 12; pm >= 1; pm--) monthsToWarm.push({ y: prevYear, m: pm });
-                monthsToWarm.push({ y: prevYear, m: 'all' });
 
                 function fetchAdminRecords(item) {
                     var key = DataCache.KEYS.RECORDS + '_' + item.y + '_' + item.m + '_';
@@ -3736,12 +3733,41 @@
                         batch.push(fetchAdminRecords(monthsToWarm[warmIdx++]));
                     }
                     Promise.allSettled(batch).then(function() {
-                        setTimeout(warmAdminBatch, 500);
+                        setTimeout(warmAdminBatch, 800);
                     });
                 }
                 warmAdminBatch();
+
+                // Phase 2: historical months — deferred 10s, skipped on slow connections
+                setTimeout(function() {
+                    try {
+                        var effectiveType = (navigator.connection && navigator.connection.effectiveType) || '4g';
+                        var isSlowConn = ['slow-2g', '2g', '3g'].includes(effectiveType);
+                        if (isSlowConn) return;
+
+                        var historyMonths = [];
+                        for (var m3 = currentMonth - 2; m3 >= 1; m3--) historyMonths.push({ y: year, m: m3 });
+                        for (var m4 = currentMonth + 2; m4 <= 12; m4++) historyMonths.push({ y: year, m: m4 });
+                        for (var pm = 12; pm >= 10; pm--) historyMonths.push({ y: prevYear, m: pm });
+                        historyMonths.push({ y: prevYear, m: 'all' });
+
+                        var histIdx = 0;
+                        function warmHistoryBatch() {
+                            if (histIdx >= historyMonths.length) return;
+                            var batch = [];
+                            while (batch.length < 2 && histIdx < historyMonths.length) {
+                                batch.push(fetchAdminRecords(historyMonths[histIdx++]));
+                            }
+                            Promise.allSettled(batch).then(function() {
+                                setTimeout(warmHistoryBatch, 1500);
+                            });
+                        }
+                        warmHistoryBatch();
+                    } catch(e) {}
+                }, 10000);
+
             } catch(e) {}
-        }, 2000);
+        }, 4000);
 
         // Initialize SyncManager for admin actions (delete, update)
         SyncManager.init(WEB_APP_URL).then(() => {
@@ -4252,8 +4278,11 @@
         async function loadNursesList() {
             if (nursesList.length > 0) return; // already loaded
             try {
-                const resp = await fetch(`${WEB_APP_URL}?action=getAllUsers`);
-                const result = await resp.json();
+                const _allUsersUrl = `${WEB_APP_URL}?action=getAllUsers`;
+                if (!DataCache._inflight[_allUsersUrl]) {
+                    DataCache._inflight[_allUsersUrl] = fetch(_allUsersUrl).then(r => r.json());
+                }
+                const result = await DataCache._inflight[_allUsersUrl];
                 if (result.success && result.users) {
                     nursesList = result.users.filter(u => u.type === 'nurse' && (u.active === true || u.active === 'true'));
                 }
