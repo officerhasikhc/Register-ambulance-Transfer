@@ -71,8 +71,10 @@
     <script src="date-time-formatter.js"></script>
     
     <!-- Flatpickr - Date picker with yyyy/mm/dd format (native type=date cannot customize display) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"
+          onerror="this.href='https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.css'">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"
+            onerror="(function(){var s=document.createElement('script');s.src='https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.js';s.onload=function(){if(typeof initializeDatePickers==='function')try{initializeDatePickers();}catch(e){}};document.head.appendChild(s);})()"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     
     <script src="session-manager.js"></script>
@@ -801,6 +803,9 @@
         .date-input.flatpickr-input {
             min-width: 160px;
             cursor: pointer;
+        }
+        .flatpickr-calendar {
+            z-index: 99999 !important;
         }
 
         .form-group textarea {
@@ -2271,6 +2276,7 @@
                 dateFormat: 'Y/m/d',
                 allowInput: true,
                 locale: { firstDayOfWeek: 0 },
+                appendTo: document.body,
                 onChange: function() { validateDates(); }
             };
             const depEl = document.getElementById('departureDate');
@@ -2282,6 +2288,9 @@
                 flatpickrReturn = flatpickr(retEl, opts);
             }
         }
+        window.addEventListener('load', function() {
+            try { initializeDatePickers(); } catch(e) {}
+        });
 
         function updateTimeInputs() {
             const depHour = document.getElementById('departureTimeHour').value;
