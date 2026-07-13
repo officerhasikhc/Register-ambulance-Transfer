@@ -2196,6 +2196,27 @@
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم المريض</label>
                         <input type="text" id="editPatientName" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
                     </div>
+                    <!-- Doctor Accompanying -->
+                    <div class="detail-item" style="padding:12px;grid-column:1/-1;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:8px;">هل الطبيب مرافق في الرحلة؟</label>
+                        <div style="display:flex;gap:24px;">
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px;">
+                                <input type="radio" name="editDoctorAccompanying" value="yes" id="editDoctorAccompanyingYes"
+                                       onchange="toggleEditDoctorName()" style="width:16px;height:16px;accent-color:#2563eb;">
+                                نعم
+                            </label>
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px;">
+                                <input type="radio" name="editDoctorAccompanying" value="no" id="editDoctorAccompanyingNo"
+                                       onchange="toggleEditDoctorName()" style="width:16px;height:16px;accent-color:#2563eb;">
+                                لا
+                            </label>
+                        </div>
+                    </div>
+                    <div class="detail-item" id="editDoctorNameGroup" style="padding:12px;display:none;grid-column:1/-1;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم الطبيب (بالإنجليزي)</label>
+                        <input type="text" id="editDoctorName" placeholder="أدخل اسم الطبيب بالإنجليزي"
+                               style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:left;text-transform:uppercase;">
+                    </div>
                     <div class="detail-item" style="padding:12px;">
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجّل</label>
                         <div id="editNurseOriginal" style="font-size:11px;color:#6b7280;margin-bottom:4px;display:none;">المسجّل الأصلي: <span id="editNurseOriginalName"></span></div>
@@ -4318,6 +4339,13 @@
             });
         }
 
+        function toggleEditDoctorName() {
+            const yes = document.getElementById('editDoctorAccompanyingYes').checked;
+            const grp = document.getElementById('editDoctorNameGroup');
+            grp.style.display = yes ? '' : 'none';
+            if (!yes) document.getElementById('editDoctorName').value = '';
+        }
+
         // Toggle free text mode for nurse name in admin edit modal
         function toggleEditNurseFreeText() {
             const checked = document.getElementById('editNurseFreeText').checked;
@@ -4352,6 +4380,13 @@
             document.getElementById('editReturnTime').value = record['Return Time'] || '';
             document.getElementById('editDestination').value = record['Destination'] || '';
             document.getElementById('editPatientName').value = record['Patient Name'] || record['patientName'] || '';
+
+            // Doctor accompanying
+            const docAcc = (record['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+            document.getElementById('editDoctorAccompanyingYes').checked = (docAcc === 'yes');
+            document.getElementById('editDoctorAccompanyingNo').checked  = (docAcc === 'no' || docAcc === '');
+            document.getElementById('editDoctorName').value = (record['Doctor Name'] || '').toString().trim();
+            document.getElementById('editDoctorNameGroup').style.display = (docAcc === 'yes') ? '' : 'none';
 
             // Reset free text mode
             document.getElementById('editNurseFreeText').checked = false;
@@ -4437,7 +4472,11 @@
                 patientName: document.getElementById('editPatientName').value.trim(),
                 nurseName: nurseName,
                 nurseStaffNumber: nurseStaffNumber,
-                extSupport: document.getElementById('editExtSupport').value || undefined
+                extSupport: document.getElementById('editExtSupport').value || undefined,
+                doctorAccompanying: document.getElementById('editDoctorAccompanyingYes').checked ? 'yes' : 'no',
+                doctorName: document.getElementById('editDoctorAccompanyingYes').checked
+                    ? (document.getElementById('editDoctorName').value || '').trim().toUpperCase()
+                    : ''
             };
 
             // === OPTIMISTIC LOCAL UPDATE — update records in memory instantly ===
@@ -4456,7 +4495,9 @@
                             'Patient Name': payload.patientName,
                             'Nurse Name': payload.nurseName || r['Nurse Name'],
                             'Nurse Staff Number': payload.nurseStaffNumber || r['Nurse Staff Number'],
-                            'Ext Support': payload.extSupport || r['Ext Support'] || ''
+                            'Ext Support': payload.extSupport || r['Ext Support'] || '',
+                            'Doctor Accompanying': payload.doctorAccompanying,
+                            'Doctor Name': payload.doctorName
                         };
                         return { ...r, ...updatedFields };
                     }
