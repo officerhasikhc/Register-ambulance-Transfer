@@ -3040,6 +3040,8 @@
                         <div class="item"><div class="label">اسم المريض</div><div class="value">${(currentRecord['Patient Name'] || currentRecord['patientName'] || '').toString().trim() || '-'}</div></div>
                         <div class="item"><div class="label">المسجّل</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
+                        <div class="item full"><div class="label">هل الطبيب مرافق؟</div><div class="value">${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? 'نعم' : 'لا'}</div></div>
+                        ${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? `<div class="item full"><div class="label">اسم الطبيب</div><div class="value" style="font-weight:600;color:#1e40af;">${(currentRecord['Doctor Name'] || '-').toString().trim()}</div></div>` : ''}
                     </div>
                     <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
                 </body>
