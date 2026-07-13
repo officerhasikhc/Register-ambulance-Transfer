@@ -883,6 +883,34 @@
             border-right: 4px solid #22c55e;
         }
 
+        .approved-summary-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #d1fae5;
+            border: 1px solid #6ee7b7;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #065f46;
+        }
+
+        .approved-detail-row {
+            display: flex;
+            gap: 6px;
+            font-size: 13px;
+            padding: 3px 0;
+            border-top: 1px dashed #e5e7eb;
+            margin-top: 4px;
+        }
+
+        .approved-detail-lbl { color: #6b7280; min-width: 55px; }
+        .approved-detail-val { color: #1f2937; font-weight: 500; }
+
+        .status-filter-btn .count-badge { font-size: 11px; opacity: 0.8; }
+
         .trip-item-times {
             display: flex;
             flex-direction: column;
@@ -1399,7 +1427,7 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="trip-refresh-indicator" id="tripRefreshIndicator"><span class="trip-refresh-dot"></span>تحديث</span>
                     <span id="currentMonthBadge" style="background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
-                    <select class="month-filter" id="monthFilter" onchange="loadTripHistory()">
+                    <select class="month-filter" id="monthFilter" onchange="cachedApprovedRecords=null;_approvedFetchTs=0;currentStatusFilter==='submitted'?loadApprovedTrips():loadTripHistory()">
                         <!-- Options will be populated dynamically -->
                     </select>
                 </div>
@@ -1461,6 +1489,11 @@
         // Watchdog: track when each submission STARTED (ms since epoch)
         let _returnSubmitStartedAt = 0;
         let _departureSubmitStartedAt = 0;
+
+        // Approved records cache
+        let cachedApprovedRecords = null;
+        let approvedRecordsLoaded = false;
+        let _approvedFetchTs = 0;
         
         // Debounce tracking
         let lastDepartureClick = 0;
@@ -3152,12 +3185,105 @@
         // ============================================
         function filterByStatus(status) {
             currentStatusFilter = status;
-            // Update active button
             document.querySelectorAll('.status-filter-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.status === status);
             });
             driverHistoryPage = 1;
-            loadTripHistory();
+            if (status === 'submitted') {
+                loadApprovedTrips();
+            } else {
+                loadTripHistory();
+            }
+        }
+
+        async function loadApprovedTrips() {
+            if (!selectedDriver) return;
+            const container = document.getElementById('tripHistory');
+            if (cachedApprovedRecords !== null) {
+                renderApprovedTrips(cachedApprovedRecords);
+            } else {
+                container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>جاري تحميل الرحلات المعتمدة...</p></div>';
+            }
+            const now = Date.now();
+            if (now - _approvedFetchTs < 5000) return;
+            _approvedFetchTs = now;
+            const monthVal = document.getElementById('monthFilter') ? document.getElementById('monthFilter').value : 'all';
+            const year = new Date().getFullYear();
+            const url = `${WEB_APP_URL}?action=getDriverRecords&staffNumber=${encodeURIComponent(selectedDriver.staffNumber)}&year=${year}&month=${encodeURIComponent(monthVal)}`;
+            try {
+                const res  = await fetch(url, { redirect: 'follow' });
+                const data = await res.json();
+                if (data.success) {
+                    cachedApprovedRecords = data.records || [];
+                    approvedRecordsLoaded = true;
+                    renderApprovedTrips(cachedApprovedRecords);
+                    updateApprovedBadge(cachedApprovedRecords.length);
+                }
+            } catch (e) {
+                if (cachedApprovedRecords === null) {
+                    container.innerHTML = '<div class="empty-state"><p>تعذّر تحميل الرحلات المعتمدة</p></div>';
+                }
+            }
+        }
+
+        function renderApprovedTrips(records) {
+            const container = document.getElementById('tripHistory');
+            if (!records || records.length === 0) {
+                container.innerHTML = `
+                  <div class="empty-state">
+                    <div class="empty-state-icon">✅</div>
+                    <p>لا توجد رحلات معتمدة في هذه الفترة</p>
+                  </div>`;
+                return;
+            }
+            const summaryHtml = `
+              <div class="approved-summary-bar">
+                <span>✅</span>
+                <span>${records.length} رحلة معتمدة</span>
+              </div>`;
+            const cardsHtml = records.map((r, idx) => buildApprovedCard(r, idx)).join('');
+            container.innerHTML = summaryHtml + cardsHtml;
+        }
+
+        function buildApprovedCard(r, idx) {
+            const depDate  = r['Departure Date'] ? new Date(r['Departure Date']).toLocaleDateString('en-GB') : '-';
+            const depTime  = r['Departure Time'] || '-';
+            const retDate  = r['Return Date']    ? new Date(r['Return Date']).toLocaleDateString('en-GB')    : '-';
+            const retTime  = r['Return Time']    || '-';
+            const dest     = r['Destination']    || '';
+            const patient  = r['Patient Name']   || '';
+            const nurse    = r['Nurse Name']      || '';
+            const tripId   = r['ID']              || '';
+            const delay    = Math.min(idx * 0.04, 0.4);
+            return `
+              <div class="trip-item trip-approved trip-enter" style="animation-delay:${delay}s">
+                <div class="trip-item-header">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    ${tripId ? `<span class="trip-id-badge">${tripId}</span>` : ''}
+                  </div>
+                  <span class="trip-item-status status-approved">✅ معتمدة</span>
+                </div>
+                <div class="trip-item-date">${depDate}</div>
+                <div class="trip-item-times">
+                  <div class="time-row"><span class="time-label">الذهاب:</span><span class="time-value">${depTime}</span></div>
+                  <div class="time-row"><span class="time-label">العودة:</span><span class="time-value">${retTime}</span></div>
+                </div>
+                ${dest    ? `<div class="approved-detail-row"><span class="approved-detail-lbl">الوجهة:</span><span class="approved-detail-val">${dest}</span></div>`    : ''}
+                ${patient ? `<div class="approved-detail-row"><span class="approved-detail-lbl">المريض:</span><span class="approved-detail-val">${patient}</span></div>` : ''}
+                ${nurse   ? `<div class="approved-detail-row"><span class="approved-detail-lbl">سجّله:</span><span class="approved-detail-val">${nurse}</span></div>`    : ''}
+              </div>`;
+        }
+
+        function updateApprovedBadge(count) {
+            const btn = document.querySelector('.status-filter-btn[data-status="submitted"]');
+            if (!btn) return;
+            let badge = btn.querySelector('.count-badge');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'count-badge';
+                btn.appendChild(badge);
+            }
+            badge.textContent = count > 0 ? ` (${count})` : '';
         }
 
         // ============================================

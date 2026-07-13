@@ -477,6 +477,9 @@ function doGet(e) {
       case 'getDoctors':
         return getDoctors();
 
+      case 'getDriverRecords':
+        return getDriverRecords(e.parameter);
+
       case 'getVehicles':
         return getVehicles();
       
@@ -1903,6 +1906,51 @@ function getNurseData(params) {
         success: false,
         error: error.toString()
       }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ============================================
+// DRIVER RECORDS (from Records sheet)
+// ============================================
+
+function getDriverRecords(params) {
+  try {
+    var staffNumber = (params.staffNumber || '').toString().trim();
+    var year = params.year ? parseInt(params.year) : new Date().getFullYear();
+    var month = params.month || 'all';
+    if (!staffNumber) {
+      return ContentService.createTextOutput(JSON.stringify({ success: true, records: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var sheet = setupSheet(year);
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({ success: true, records: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var headers = data[0];
+    var staffIdx = headers.indexOf('Staff Number');
+    var depDateIdx = headers.indexOf('Departure Date');
+    var records = [];
+    for (var i = 1; i < data.length; i++) {
+      var rowStaff = (data[i][staffIdx] || '').toString().trim();
+      if (rowStaff !== staffNumber) continue;
+      if (month !== 'all') {
+        var d = new Date(data[i][depDateIdx]);
+        if ((d.getMonth() + 1) !== parseInt(month)) continue;
+      }
+      var rec = {};
+      headers.forEach(function(h, ci) { rec[h] = data[i][ci]; });
+      records.push(rec);
+    }
+    records.sort(function(a, b) {
+      return new Date(b['Departure Date']) - new Date(a['Departure Date']);
+    });
+    return ContentService.createTextOutput(JSON.stringify({ success: true, records: records }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
