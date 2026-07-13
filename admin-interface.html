@@ -3297,6 +3297,9 @@
                     var nurseNameArCol = (r['Nurse Name Ar'] || '').trim();
                     var doctorNameAr = (r['Doctor Name Ar'] || '').trim();
                     var doctorNameEn = (r['Doctor Name'] || '').trim();
+                    if (!doctorNameAr && doctorNameEn && doctorNameMap[doctorNameEn.toLowerCase()]) {
+                        doctorNameAr = doctorNameMap[doctorNameEn.toLowerCase()];
+                    }
                     var nurseCell = nurseNameArCol || nurseDisplay || '';
                     var docAcc = (r['Doctor Accompanying'] || '').toString().trim().toLowerCase();
                     if (docAcc === 'yes' || docAcc === 'نعم') {

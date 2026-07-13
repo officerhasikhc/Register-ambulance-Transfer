@@ -4612,8 +4612,21 @@
             } catch(e) { return false; }
         }
 
-        // Load doctors from localStorage (populated by admin page)
-        const DOCTORS_DATA = (() => { try { return JSON.parse(localStorage.getItem('ambulance_doctors') || '[]'); } catch(e) { return []; } })();
+        // Doctors data — loaded from localStorage, refreshed from server in background
+        let DOCTORS_DATA = (() => { try { return JSON.parse(localStorage.getItem('ambulance_doctors') || '[]'); } catch(e) { return []; } })();
+
+        // Background refresh: fetch latest doctors list (including Arabic names) from server
+        (function refreshDoctorsFromServer() {
+            fetch(WEB_APP_URL + '?action=getDoctors', { redirect: 'follow' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && Array.isArray(data.doctors) && data.doctors.length > 0) {
+                        DOCTORS_DATA = data.doctors;
+                        localStorage.setItem('ambulance_doctors', JSON.stringify(data.doctors));
+                    }
+                })
+                .catch(function() {});
+        })();
 
         function initDoctorDropdown() {
             const sel = document.getElementById('doctorSelect');
