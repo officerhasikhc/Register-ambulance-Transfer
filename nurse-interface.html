@@ -4604,7 +4604,7 @@
         }
 
         // Load doctors from localStorage (populated by admin page)
-        const DOCTORS_DATA = JSON.parse(localStorage.getItem('ambulance_doctors') || '[]');
+        const DOCTORS_DATA = (() => { try { return JSON.parse(localStorage.getItem('ambulance_doctors') || '[]'); } catch(e) { return []; } })();
 
         function initDoctorDropdown() {
             const sel = document.getElementById('doctorSelect');
@@ -4732,9 +4732,9 @@
             if (_cachedTotal) document.getElementById('yearlyTotalCount').textContent = _cachedTotal;
         } catch(e) {}
 
-        initializeTimePickers();
-        initializeDatePickers();
-        initializeDropdowns();
+        try { initializeTimePickers(); } catch(e) { console.error('TimePickers:', e); }
+        try { initializeDatePickers(); } catch(e) { console.error('DatePickers:', e); }
+        try { initializeDropdowns(); } catch(e) { console.error('Dropdowns:', e); }
         
         // Force English locale for date and time inputs on page load
         setTimeout(() => {

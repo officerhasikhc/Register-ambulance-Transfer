@@ -91,7 +91,8 @@ function setupSheet(year) {
     'Ext Support',
     'Doctor Accompanying',
     'Doctor Name',
-    'Doctor Name Ar'
+    'Doctor Name Ar',
+    'Nurse Name Ar'
   ];
   
   // Check if headers exist
@@ -154,6 +155,13 @@ function setupSheet(year) {
       const cAr = sheet.getLastColumn();
       sheet.getRange(1, cAr + 1).setValue('Doctor Name Ar');
       sheet.getRange(1, cAr + 1).setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    // Ensure Nurse Name Ar column exists (migration)
+    const hAfterDNAr = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (hAfterDNAr.indexOf('Nurse Name Ar') === -1) {
+      const cNAr = sheet.getLastColumn();
+      sheet.getRange(1, cNAr + 1).setValue('Nurse Name Ar');
+      sheet.getRange(1, cNAr + 1).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
     }
   }
   
@@ -723,7 +731,8 @@ function submitCase(data) {
       'Ext Support': data.extSupport || '',
       'Doctor Accompanying': data.doctorAccompanying || 'no',
       'Doctor Name': data.doctorName || '',
-      'Doctor Name Ar': data.doctorNameAr || ''
+      'Doctor Name Ar': data.doctorNameAr || '',
+      'Nurse Name Ar': data.nurseNameAr || ''
     };
     var sheetHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var rowData = sheetHeaders.map(function(h) {
@@ -1239,7 +1248,9 @@ function updateRecord(data) {
         'Doctor Name': (data.doctorName !== undefined) ? data.doctorName
           : (headers.indexOf('Doctor Name') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name')] || '') : ''),
         'Doctor Name Ar': (data.doctorNameAr !== undefined) ? data.doctorNameAr
-          : (headers.indexOf('Doctor Name Ar') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name Ar')] || '') : '')
+          : (headers.indexOf('Doctor Name Ar') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name Ar')] || '') : ''),
+        'Nurse Name Ar': (data.nurseNameAr !== undefined) ? data.nurseNameAr
+          : (headers.indexOf('Nurse Name Ar') >= 0 ? (sheetData[i][headers.indexOf('Nurse Name Ar')] || '') : '')
       };
       var rowData = headers.map(function(h, ci) {
         return updateMap[h] !== undefined ? updateMap[h] : (sheetData[i][ci] || '');

@@ -2245,6 +2245,10 @@
                             <span>إدخال يدوي (دعم خارجي أو اسم غير موجود)</span>
                         </label>
                         <input type="text" id="editNurseNameText" placeholder="أدخل اسم المسجل يدوياً" style="display:none;width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;margin-top:6px;">
+                        <div id="editNurseNameArGroup" style="display:none;margin-top:8px;">
+                            <label style="font-size:12px;color:#6b7280;margin-bottom:4px;display:block;">اسم الممرضة بالعربي (للطباعة)</label>
+                            <input type="text" id="editNurseNameAr" dir="rtl" placeholder="اسم الممرضة الخارجية بالعربي" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
+                        </div>
                     </div>
                 </div>
                 <div style="margin-top:20px;display:flex;gap:12px;">
@@ -3099,7 +3103,7 @@
                         <div class="item"><div class="label">ساعة العودة</div><div class="value">${DateTimeFormatter.formatTimeForDisplay(currentRecord['Return Time']) || '-'}</div></div>
                         <div class="item"><div class="label">الجهة المحول إليها</div><div class="value">${mapDestinationToAr(currentRecord['Destination'])}</div></div>
                         <div class="item"><div class="label">اسم المريض</div><div class="value">${(currentRecord['Patient Name'] || currentRecord['patientName'] || '').toString().trim() || '-'}</div></div>
-                        <div class="item"><div class="label">المسجّل</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
+                        <div class="item"><div class="label">المسجّل</div><div class="value">${(currentRecord['Nurse Name Ar'] || '').toString().trim() || resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                         <div class="item full"><div class="label">هل الطبيب مرافق؟</div><div class="value">${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? 'نعم' : 'لا'}</div></div>
                         ${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? `<div class="item full"><div class="label">اسم الطبيب</div><div class="value" style="font-weight:600;color:#1e40af;">${((currentRecord['Doctor Name Ar'] || '').toString().trim() || (currentRecord['Doctor Name'] || '').toString().trim() || '-')}</div></div>` : ''}
@@ -3290,13 +3294,17 @@
                     var driverAr = driverMap[(driverEn).toUpperCase()] || '';
                     var driverDisplay = driverAr || driverEn;
                     var nurseDisplay = resolveNurseArabicName(r);
+                    var nurseNameArCol = (r['Nurse Name Ar'] || '').trim();
                     var doctorNameAr = (r['Doctor Name Ar'] || '').trim();
                     var doctorNameEn = (r['Doctor Name'] || '').trim();
-                    var nurseCell = nurseDisplay || '';
-                    if (doctorNameAr) {
-                        nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">د. ' + doctorNameAr + '</span>';
-                    } else if (doctorNameEn) {
-                        nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">D. ' + doctorNameEn + '</span>';
+                    var nurseCell = nurseNameArCol || nurseDisplay || '';
+                    var docAcc = (r['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+                    if (docAcc === 'yes' || docAcc === 'نعم') {
+                        if (doctorNameAr) {
+                            nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">د. ' + doctorNameAr + '</span>';
+                        } else if (doctorNameEn) {
+                            nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">D. ' + doctorNameEn + '</span>';
+                        }
                     }
                     rowsHtml += '<tr>' +
                         '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
@@ -4547,6 +4555,11 @@
                 textEl.style.display = 'none';
                 textEl.value = '';
             }
+            const arGroup = document.getElementById('editNurseNameArGroup');
+            if (arGroup) {
+                arGroup.style.display = checked ? '' : 'none';
+                if (!checked) document.getElementById('editNurseNameAr').value = '';
+            }
         }
 
         function openEditRecordModal(record) {
@@ -4577,6 +4590,8 @@
             document.getElementById('editNurseName').style.display = '';
             document.getElementById('editNurseNameText').style.display = 'none';
             document.getElementById('editNurseNameText').value = '';
+            document.getElementById('editNurseNameArGroup').style.display = 'none';
+            document.getElementById('editNurseNameAr').value = (record['Nurse Name Ar'] || '').toString().trim();
 
             // Show original registerer name
             const nurseNameEn = (record['Nurse Name'] || '').toString().trim();
@@ -4597,6 +4612,7 @@
                 document.getElementById('editNurseName').style.display = 'none';
                 document.getElementById('editNurseNameText').style.display = '';
                 document.getElementById('editNurseNameText').value = nurseNameEn;
+                document.getElementById('editNurseNameArGroup').style.display = '';
                 // Still populate dropdown in background for easy switching
                 populateNurseDropdown('', '');
             } else {
@@ -4609,6 +4625,7 @@
                     document.getElementById('editNurseName').style.display = 'none';
                     document.getElementById('editNurseNameText').style.display = '';
                     document.getElementById('editNurseNameText').value = nurseNameEn;
+                    document.getElementById('editNurseNameArGroup').style.display = '';
                 }
             }
 
@@ -4655,6 +4672,7 @@
                 destination: document.getElementById('editDestination').value.trim(),
                 patientName: document.getElementById('editPatientName').value.trim(),
                 nurseName: nurseName,
+                nurseNameAr: isFreeText ? (document.getElementById('editNurseNameAr').value || '').trim() : '',
                 nurseStaffNumber: nurseStaffNumber,
                 extSupport: document.getElementById('editExtSupport').value || undefined,
                 doctorAccompanying: document.getElementById('editDoctorAccompanyingYes').checked ? 'yes' : 'no',
@@ -4691,7 +4709,8 @@
                             'Ext Support': payload.extSupport || r['Ext Support'] || '',
                             'Doctor Accompanying': payload.doctorAccompanying,
                             'Doctor Name': payload.doctorName,
-                            'Doctor Name Ar': payload.doctorNameAr || ''
+                            'Doctor Name Ar': payload.doctorNameAr || '',
+                            'Nurse Name Ar': payload.nurseNameAr || r['Nurse Name Ar'] || ''
                         };
                         return { ...r, ...updatedFields };
                     }
