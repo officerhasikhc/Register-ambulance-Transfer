@@ -90,7 +90,8 @@ function setupSheet(year) {
     'Nurse Staff Number',
     'Ext Support',
     'Doctor Accompanying',
-    'Doctor Name'
+    'Doctor Name',
+    'Doctor Name Ar'
   ];
   
   // Check if headers exist
@@ -146,6 +147,13 @@ function setupSheet(year) {
       const c2 = sheet.getLastColumn();
       sheet.getRange(1, c2 + 1).setValue('Doctor Name');
       sheet.getRange(1, c2 + 1).setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    // Ensure Doctor Name Ar column exists (migration)
+    const hAfterDN = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (hAfterDN.indexOf('Doctor Name Ar') === -1) {
+      const cAr = sheet.getLastColumn();
+      sheet.getRange(1, cAr + 1).setValue('Doctor Name Ar');
+      sheet.getRange(1, cAr + 1).setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
     }
   }
   
@@ -457,7 +465,10 @@ function doGet(e) {
       
       case 'getNurses':
         return getNurses();
-      
+
+      case 'getDoctors':
+        return getDoctors();
+
       case 'getVehicles':
         return getVehicles();
       
@@ -710,7 +721,8 @@ function submitCase(data) {
       'Nurse Staff Number': data.nurseStaffNumber || '',
       'Ext Support': data.extSupport || '',
       'Doctor Accompanying': data.doctorAccompanying || 'no',
-      'Doctor Name': data.doctorName || ''
+      'Doctor Name': data.doctorName || '',
+      'Doctor Name Ar': data.doctorNameAr || ''
     };
     var sheetHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var rowData = sheetHeaders.map(function(h) {
@@ -1224,7 +1236,9 @@ function updateRecord(data) {
         'Doctor Accompanying': (data.doctorAccompanying !== undefined) ? data.doctorAccompanying
           : (headers.indexOf('Doctor Accompanying') >= 0 ? (sheetData[i][headers.indexOf('Doctor Accompanying')] || 'no') : 'no'),
         'Doctor Name': (data.doctorName !== undefined) ? data.doctorName
-          : (headers.indexOf('Doctor Name') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name')] || '') : '')
+          : (headers.indexOf('Doctor Name') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name')] || '') : ''),
+        'Doctor Name Ar': (data.doctorNameAr !== undefined) ? data.doctorNameAr
+          : (headers.indexOf('Doctor Name Ar') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name Ar')] || '') : '')
       };
       var rowData = headers.map(function(h, ci) {
         return updateMap[h] !== undefined ? updateMap[h] : (sheetData[i][ci] || '');
@@ -2975,6 +2989,30 @@ function getNurses() {
   
   return ContentService
     .createTextOutput(JSON.stringify({ success: true, nurses: nurses }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Get doctors only
+ */
+function getDoctors() {
+  const sheet = setupUsersSheet();
+  const data = sheet.getDataRange().getValues();
+  const doctors = [];
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === 'doctor' && (data[i][7] === 'true' || data[i][7] === true)) {
+      doctors.push({
+        id: data[i][0],
+        nameAr: data[i][2],
+        nameEn: data[i][3],
+        staffNumber: data[i][4] || ''
+      });
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: true, doctors: doctors }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

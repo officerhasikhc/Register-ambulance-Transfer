@@ -1825,6 +1825,12 @@
                         <span class="menu-label">تصدير البيانات</span>
                     </a>
                 </li>
+                <li>
+                    <a href="#" onclick="openDoctorsModal(); closeDrawer();">
+                        <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/><path d="M12 14c-6 0-8 2-8 4v1h16v-1c0-2-2-4-8-4z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="10" y1="10" x2="14" y2="10"/></svg></span>
+                        <span class="menu-label">إدارة الأطباء</span>
+                    </a>
+                </li>
 
                 <li><div class="menu-divider"></div></li>
 
@@ -2213,9 +2219,20 @@
                         </div>
                     </div>
                     <div class="detail-item" id="editDoctorNameGroup" style="padding:12px;display:none;grid-column:1/-1;">
-                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم الطبيب (بالإنجليزي)</label>
-                        <input type="text" id="editDoctorName" placeholder="أدخل اسم الطبيب بالإنجليزي"
-                               style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:left;text-transform:uppercase;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اختر الطبيب</label>
+                        <select id="editDoctorSelect" onchange="onEditDoctorSelectChange()"
+                                style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;background:var(--white);">
+                            <option value="">— اختر طبيباً —</option>
+                            <option value="__OTHER__">طبيب آخر / Other Doctor</option>
+                        </select>
+                    </div>
+                    <div class="detail-item" id="editDoctorOtherGroup" style="padding:12px;display:none;grid-column:1/-1;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم الطبيب (English)</label>
+                        <input type="text" id="editDoctorNameEn"
+                               style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;direction:ltr;text-align:left;text-transform:uppercase;margin-bottom:10px;">
+                        <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">اسم الطبيب بالعربي</label>
+                        <input type="text" id="editDoctorNameAr"
+                               style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-family:inherit;font-size:14px;">
                     </div>
                     <div class="detail-item" style="padding:12px;">
                         <label style="font-size:12px;color:var(--text-secondary);font-weight:500;display:block;margin-bottom:6px;">المسجّل</label>
@@ -2235,6 +2252,38 @@
                     <button type="button" class="btn" style="background:var(--lighter-blue);color:var(--primary-blue);" onclick="closeEditRecordModal()">إلغاء</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Doctors Management Modal -->
+    <div id="doctorsModal" class="modal">
+        <div class="modal-content" style="max-width:560px;">
+            <div class="modal-header">
+                <h2 class="modal-title">إدارة الأطباء</h2>
+                <button class="modal-close" onclick="closeDoctorsModal()">✕</button>
+            </div>
+            <div style="padding:20px;">
+                <!-- Add Doctor Form -->
+                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px;margin-bottom:20px;">
+                    <div style="font-weight:600;font-size:14px;color:#0369a1;margin-bottom:12px;">إضافة طبيب جديد</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                        <div>
+                            <label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:4px;">الاسم بالإنجليزي</label>
+                            <input type="text" id="newDoctorEn" placeholder="DOCTOR NAME" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;direction:ltr;text-align:left;text-transform:uppercase;box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:4px;">الاسم بالعربي</label>
+                            <input type="text" id="newDoctorAr" placeholder="اسم الطبيب" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <button onclick="addDoctor()" style="background:#0369a1;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:inherit;">إضافة</button>
+                </div>
+                <!-- Doctors List -->
+                <div style="font-weight:600;font-size:13px;color:#374151;margin-bottom:8px;">الأطباء الحاليون</div>
+                <div id="doctorsListContainer" style="max-height:320px;overflow-y:auto;">
+                    <div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">جاري التحميل...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2325,6 +2374,8 @@
         // Nurse name lookup: maps staff number → Arabic name from Users sheet
         let nurseNameMap = {};
         window._allUsersData = [];
+        let doctorsList = [];
+        let doctorNameMap = {}; // nameEn.toLowerCase() → nameAr
         async function loadNurseNameMap() {
             try {
                 const _allUsersUrl = `${WEB_APP_URL}?action=getAllUsers`;
@@ -2347,6 +2398,16 @@
                     }));
                     if (driversList.length > 0) {
                         localStorage.setItem('ambulance_drivers', JSON.stringify(driversList));
+                    }
+                    // Populate doctors list and map for other pages
+                    var docsList = users.filter(u => u.type === 'doctor' && u.active !== false && u.active !== 'false').map(u => ({
+                        id: u.id || '', nameAr: u.nameAr || '', nameEn: (u.nameEn || '').toUpperCase()
+                    }));
+                    doctorsList = docsList;
+                    doctorNameMap = {};
+                    docsList.forEach(d => { if (d.nameEn) doctorNameMap[d.nameEn.toLowerCase()] = d.nameAr; });
+                    if (docsList.length > 0) {
+                        localStorage.setItem('ambulance_doctors', JSON.stringify(docsList));
                     }
                 }
             } catch(e) { console.log('Failed to load nurse name map:', e); }
@@ -3041,7 +3102,7 @@
                         <div class="item"><div class="label">المسجّل</div><div class="value">${resolveNurseArabicName(currentRecord)}</div></div>
                         <div class="item"><div class="label">تاريخ التسجيل</div><div class="value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div></div>
                         <div class="item full"><div class="label">هل الطبيب مرافق؟</div><div class="value">${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? 'نعم' : 'لا'}</div></div>
-                        ${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? `<div class="item full"><div class="label">اسم الطبيب</div><div class="value" style="font-weight:600;color:#1e40af;">${(currentRecord['Doctor Name'] || '-').toString().trim()}</div></div>` : ''}
+                        ${(currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase() === 'yes' ? `<div class="item full"><div class="label">اسم الطبيب</div><div class="value" style="font-weight:600;color:#1e40af;">${((currentRecord['Doctor Name Ar'] || '').toString().trim() || (currentRecord['Doctor Name'] || '').toString().trim() || '-')}</div></div>` : ''}
                     </div>
                     <button onclick="window.print()" style="margin-top: 30px; padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة</button>
                 </body>
@@ -3229,9 +3290,14 @@
                     var driverAr = driverMap[(driverEn).toUpperCase()] || '';
                     var driverDisplay = driverAr || driverEn;
                     var nurseDisplay = resolveNurseArabicName(r);
-                    var doctorNamePdf = (r['Doctor Name'] || '').trim();
+                    var doctorNameAr = (r['Doctor Name Ar'] || '').trim();
+                    var doctorNameEn = (r['Doctor Name'] || '').trim();
                     var nurseCell = nurseDisplay || '';
-                    if (doctorNamePdf) nurseCell += '<br><span style="font-size:9pt;color:#374151;">د. ' + doctorNamePdf + '</span>';
+                    if (doctorNameAr) {
+                        nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">د. ' + doctorNameAr + '</span>';
+                    } else if (doctorNameEn) {
+                        nurseCell += '<br><span style="font-size:9pt;color:#1c5291;">D. ' + doctorNameEn + '</span>';
+                    }
                     rowsHtml += '<tr>' +
                         '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
                         '<td>' + (r['Vehicle Number'] || '') + '</td>' +
@@ -4343,9 +4409,125 @@
 
         function toggleEditDoctorName() {
             const yes = document.getElementById('editDoctorAccompanyingYes').checked;
-            const grp = document.getElementById('editDoctorNameGroup');
-            grp.style.display = yes ? '' : 'none';
-            if (!yes) document.getElementById('editDoctorName').value = '';
+            document.getElementById('editDoctorNameGroup').style.display = yes ? '' : 'none';
+            if (!yes) {
+                document.getElementById('editDoctorSelect').value = '';
+                document.getElementById('editDoctorOtherGroup').style.display = 'none';
+                document.getElementById('editDoctorNameEn').value = '';
+                document.getElementById('editDoctorNameAr').value = '';
+            }
+        }
+
+        function onEditDoctorSelectChange() {
+            const val = document.getElementById('editDoctorSelect').value;
+            const isOther = (val === '__OTHER__');
+            document.getElementById('editDoctorOtherGroup').style.display = isOther ? '' : 'none';
+            if (!isOther) {
+                document.getElementById('editDoctorNameEn').value = '';
+                document.getElementById('editDoctorNameAr').value = '';
+            }
+        }
+
+        function populateEditDoctorSelect(selectedNameEn, currentNameAr) {
+            const sel = document.getElementById('editDoctorSelect');
+            sel.innerHTML = '<option value="">— اختر طبيباً —</option>';
+            doctorsList.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.nameEn;
+                opt.textContent = d.nameAr + ' - ' + d.nameEn;
+                sel.appendChild(opt);
+            });
+            const otherOpt = document.createElement('option');
+            otherOpt.value = '__OTHER__';
+            otherOpt.textContent = 'طبيب آخر / Other Doctor';
+            sel.appendChild(otherOpt);
+
+            const matched = selectedNameEn
+                ? doctorsList.find(d => d.nameEn.toLowerCase() === selectedNameEn.toLowerCase())
+                : null;
+            if (matched) {
+                sel.value = matched.nameEn;
+                document.getElementById('editDoctorOtherGroup').style.display = 'none';
+            } else if (selectedNameEn) {
+                sel.value = '__OTHER__';
+                document.getElementById('editDoctorOtherGroup').style.display = '';
+                document.getElementById('editDoctorNameEn').value = selectedNameEn;
+                document.getElementById('editDoctorNameAr').value = currentNameAr || '';
+            } else {
+                document.getElementById('editDoctorOtherGroup').style.display = 'none';
+            }
+        }
+
+        // Doctors management modal
+        function openDoctorsModal() {
+            document.getElementById('doctorsModal').style.display = 'flex';
+            renderDoctorsList();
+        }
+        function closeDoctorsModal() {
+            document.getElementById('doctorsModal').style.display = 'none';
+        }
+        function renderDoctorsList() {
+            const container = document.getElementById('doctorsListContainer');
+            if (!window._allUsersData || !window._allUsersData.length) {
+                container.innerHTML = '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">لا يوجد أطباء مضافون بعد</div>';
+                return;
+            }
+            const docs = window._allUsersData.filter(u => u.type === 'doctor' && u.active !== false && u.active !== 'false');
+            if (!docs.length) {
+                container.innerHTML = '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">لا يوجد أطباء مضافون بعد</div>';
+                return;
+            }
+            container.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+                '<thead><tr style="background:#f1f5f9;">' +
+                '<th style="padding:8px 10px;text-align:right;font-weight:600;color:#374151;">الاسم بالعربي</th>' +
+                '<th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;direction:ltr;">English Name</th>' +
+                '<th style="padding:8px 10px;width:60px;"></th>' +
+                '</tr></thead><tbody>' +
+                docs.map(d => '<tr style="border-top:1px solid #e5e7eb;">' +
+                    '<td style="padding:8px 10px;">' + (d.nameAr || '-') + '</td>' +
+                    '<td style="padding:8px 10px;direction:ltr;text-align:left;">' + (d.nameEn || '-') + '</td>' +
+                    '<td style="padding:8px 10px;text-align:center;">' +
+                    '<button onclick="deleteDoctor(\'' + (d.id || '') + '\')" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;">حذف</button>' +
+                    '</td></tr>').join('') +
+                '</tbody></table>';
+        }
+        async function addDoctor() {
+            const en = (document.getElementById('newDoctorEn').value || '').trim().toUpperCase();
+            const ar = (document.getElementById('newDoctorAr').value || '').trim();
+            if (!en || !ar) { showToast('يرجى إدخال الاسم بالعربي والإنجليزي', 'error'); return; }
+            try {
+                const resp = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'addUser', type: 'doctor', nameEn: en, nameAr: ar, staffNumber: '', civilId: '', vehicleNumber: '' })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    document.getElementById('newDoctorEn').value = '';
+                    document.getElementById('newDoctorAr').value = '';
+                    delete DataCache._inflight[`${WEB_APP_URL}?action=getAllUsers`];
+                    await loadNurseNameMap();
+                    renderDoctorsList();
+                    showToast('تمت إضافة الطبيب بنجاح', 'success');
+                } else {
+                    showToast('حدث خطأ أثناء الإضافة', 'error');
+                }
+            } catch(e) { showToast('حدث خطأ في الاتصال', 'error'); }
+        }
+        async function deleteDoctor(id) {
+            if (!id || !confirm('هل تريد حذف هذا الطبيب؟')) return;
+            try {
+                const resp = await fetch(`${WEB_APP_URL}?action=deleteUser&id=${encodeURIComponent(id)}`);
+                const result = await resp.json();
+                if (result.success) {
+                    delete DataCache._inflight[`${WEB_APP_URL}?action=getAllUsers`];
+                    await loadNurseNameMap();
+                    renderDoctorsList();
+                    showToast('تم حذف الطبيب', 'success');
+                } else {
+                    showToast('حدث خطأ أثناء الحذف', 'error');
+                }
+            } catch(e) { showToast('حدث خطأ في الاتصال', 'error'); }
         }
 
         // Toggle free text mode for nurse name in admin edit modal
@@ -4387,8 +4569,11 @@
             const docAcc = (record['Doctor Accompanying'] || '').toString().trim().toLowerCase();
             document.getElementById('editDoctorAccompanyingYes').checked = (docAcc === 'yes');
             document.getElementById('editDoctorAccompanyingNo').checked  = (docAcc === 'no' || docAcc === '');
-            document.getElementById('editDoctorName').value = (record['Doctor Name'] || '').toString().trim();
             document.getElementById('editDoctorNameGroup').style.display = (docAcc === 'yes') ? '' : 'none';
+            populateEditDoctorSelect(
+                (record['Doctor Name'] || '').toString().trim(),
+                (record['Doctor Name Ar'] || '').toString().trim()
+            );
 
             // Reset free text mode
             document.getElementById('editNurseFreeText').checked = false;
@@ -4476,9 +4661,18 @@
                 nurseStaffNumber: nurseStaffNumber,
                 extSupport: document.getElementById('editExtSupport').value || undefined,
                 doctorAccompanying: document.getElementById('editDoctorAccompanyingYes').checked ? 'yes' : 'no',
-                doctorName: document.getElementById('editDoctorAccompanyingYes').checked
-                    ? (document.getElementById('editDoctorName').value || '').trim().toUpperCase()
-                    : ''
+                ...(function() {
+                    if (!document.getElementById('editDoctorAccompanyingYes').checked) return { doctorName: '', doctorNameAr: '' };
+                    const selVal = document.getElementById('editDoctorSelect').value;
+                    if (selVal && selVal !== '__OTHER__') {
+                        const found = doctorsList.find(d => d.nameEn === selVal);
+                        return { doctorName: selVal, doctorNameAr: found ? found.nameAr : '' };
+                    }
+                    return {
+                        doctorName: (document.getElementById('editDoctorNameEn').value || '').trim().toUpperCase(),
+                        doctorNameAr: (document.getElementById('editDoctorNameAr').value || '').trim()
+                    };
+                })()
             };
 
             // === OPTIMISTIC LOCAL UPDATE — update records in memory instantly ===
@@ -4499,7 +4693,8 @@
                             'Nurse Staff Number': payload.nurseStaffNumber || r['Nurse Staff Number'],
                             'Ext Support': payload.extSupport || r['Ext Support'] || '',
                             'Doctor Accompanying': payload.doctorAccompanying,
-                            'Doctor Name': payload.doctorName
+                            'Doctor Name': payload.doctorName,
+                            'Doctor Name Ar': payload.doctorNameAr || ''
                         };
                         return { ...r, ...updatedFields };
                     }
