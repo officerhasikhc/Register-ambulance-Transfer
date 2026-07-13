@@ -4496,11 +4496,8 @@
             const ar = (document.getElementById('newDoctorAr').value || '').trim();
             if (!en || !ar) { showToast('يرجى إدخال الاسم بالعربي والإنجليزي', 'error'); return; }
             try {
-                const resp = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'addUser', type: 'doctor', nameEn: en, nameAr: ar, staffNumber: '', civilId: '', vehicleNumber: '' })
-                });
+                const payload = encodeURIComponent(JSON.stringify({ action: 'addUser', type: 'doctor', nameEn: en, nameAr: ar, staffNumber: '', civilId: '', vehicleNumber: '' }));
+                const resp = await fetch(`${WEB_APP_URL}?action=postViaGet&payload=${payload}`, { method: 'GET', redirect: 'follow' });
                 const result = await resp.json();
                 if (result.success) {
                     document.getElementById('newDoctorEn').value = '';
@@ -4517,7 +4514,7 @@
         async function deleteDoctor(id) {
             if (!id || !confirm('هل تريد حذف هذا الطبيب؟')) return;
             try {
-                const resp = await fetch(`${WEB_APP_URL}?action=deleteUser&id=${encodeURIComponent(id)}`);
+                const resp = await fetch(`${WEB_APP_URL}?action=deleteUser&userId=${encodeURIComponent(id)}`);
                 const result = await resp.json();
                 if (result.success) {
                     delete DataCache._inflight[`${WEB_APP_URL}?action=getAllUsers`];

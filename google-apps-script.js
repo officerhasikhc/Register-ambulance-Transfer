@@ -536,6 +536,7 @@ function doGet(e) {
           case 'saveDraftInspection': return saveDraftInspection(postData);
           case 'adminUpdateInspection': return adminUpdateInspection(postData);
           case 'reportFaultAlert': return reportFaultAlert(postData);
+          case 'addUser':          return addUser(postData);
           default:
             return ContentService.createTextOutput(JSON.stringify({
               success: false, error: 'Action not supported via GET: ' + postAction
