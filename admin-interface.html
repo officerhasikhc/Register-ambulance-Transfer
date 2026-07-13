@@ -3205,11 +3205,16 @@
                     var driverEn = (r['Driver Name'] || '').trim();
                     var driverAr = driverMap[(driverEn).toUpperCase()] || '';
                     var driverDisplay = driverAr || driverEn;
+                    var nurseDisplay = resolveNurseArabicName(r);
+                    var doctorNamePdf = (r['Doctor Name'] || '').trim();
+                    var nurseCell = nurseDisplay || '';
+                    if (doctorNamePdf) nurseCell += '<br><span style="font-size:9pt;color:#374151;">د. ' + doctorNamePdf + '</span>';
                     rowsHtml += '<tr>' +
                         '<td class="row-num">' + ARABIC_NUMS[i + 1] + '</td>' +
                         '<td>' + (r['Vehicle Number'] || '') + '</td>' +
                         '<td>' + driverDisplay + '</td>' +
                         '<td>' + resolveDriverStaffNumber(r) + '</td>' +
+                        '<td style="font-size:10.5pt;line-height:1.3;">' + nurseCell + '</td>' +
                         '<td>' + formatDateForPdf(r['Departure Date']) + '</td>' +
                         '<td>' + (r['Departure Time'] || '') + '</td>' +
                         '<td>' + formatDateForPdf(r['Return Date']) + '</td>' +
@@ -3218,7 +3223,7 @@
                 } else {
                     rowsHtml += '<tr>' +
                         '<td></td>' +
-                        '<td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+                        '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
                 }
             }
 

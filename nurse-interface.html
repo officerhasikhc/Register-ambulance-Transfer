@@ -1687,6 +1687,27 @@
                         <label data-en="Registered By" data-ar="المسجّل">Registered By</label>
                         <input type="text" id="nurseName" required>
                     </div>
+                    <!-- Doctor Accompanying -->
+                    <div class="form-group" id="doctorAccompanyingGroup">
+                        <label data-en="Is a Doctor Accompanying?" data-ar="هل الطبيب مرافق؟">Is a Doctor Accompanying?</label>
+                        <div style="display:flex;gap:24px;margin-top:10px;" id="doctorRadioGroup">
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:8px;font-size:15px;">
+                                <input type="radio" name="doctorAccompanying" value="yes" id="doctorAccompanyingYes"
+                                       onchange="toggleDoctorName()" style="width:17px;height:17px;accent-color:#2563eb;">
+                                <span data-en="Yes" data-ar="نعم">Yes</span>
+                            </label>
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:8px;font-size:15px;">
+                                <input type="radio" name="doctorAccompanying" value="no" id="doctorAccompanyingNo"
+                                       onchange="toggleDoctorName()" style="width:17px;height:17px;accent-color:#2563eb;">
+                                <span data-en="No" data-ar="لا">No</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group" id="doctorNameGroup" style="display:none;">
+                        <label data-en="Doctor Name (English)" data-ar="اسم الطبيب (بالإنجليزي)">Doctor Name (English)</label>
+                        <input type="text" id="doctorName" placeholder="Enter doctor name in English" lang="en"
+                               style="text-transform:uppercase;">
+                    </div>
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" id="submitBtn" data-en="Submit Record" data-ar="إرسال السجل" style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Submit Record</button>
@@ -3159,6 +3180,17 @@
                 }
             }
             
+            // Doctor accompanying radio must be selected
+            const docRadio = document.querySelector('input[name="doctorAccompanying"]:checked');
+            if (!docRadio) {
+                emptyFields.push({ element: document.getElementById('doctorRadioGroup'), name: 'Doctor Accompanying' });
+            } else if (docRadio.value === 'yes') {
+                const docNameEl = document.getElementById('doctorName');
+                if (!docNameEl.value || !docNameEl.value.trim()) {
+                    emptyFields.push({ element: docNameEl, name: 'Doctor Name' });
+                }
+            }
+
             if (emptyFields.length > 0) {
                 showAllFieldErrors(emptyFields);
                 return;
@@ -3208,6 +3240,7 @@
                 finalNurseName = document.getElementById('nurseName').value;
             }
 
+            const _docRadio = document.querySelector('input[name="doctorAccompanying"]:checked');
             const formData = {
                 action: isEditing ? 'updateRecord' : 'submitCase',
                 id: isEditing ? String(editingRecordId).trim() : undefined,
@@ -3225,7 +3258,11 @@
                 patientName: document.getElementById('patientName').value,
                 nurseName: finalNurseName,
                 nurseStaffNumber: finalNurseStaffNumber,
-                extSupport: extSupportValue || undefined
+                extSupport: extSupportValue || undefined,
+                doctorAccompanying: _docRadio ? _docRadio.value : 'no',
+                doctorName: (_docRadio && _docRadio.value === 'yes')
+                    ? (document.getElementById('doctorName').value || '').trim().toUpperCase()
+                    : ''
             };
 
             // Safety: ensure nurseName is a real name, not empty or an employee number (skip for external support)
@@ -3269,9 +3306,11 @@
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber,
-                    'Ext Support': formData.extSupport || ''
+                    'Ext Support': formData.extSupport || '',
+                    'Doctor Accompanying': formData.doctorAccompanying,
+                    'Doctor Name': formData.doctorName
                 };
-                
+
                 // Store in pendingEdits so server refreshes won't revert
                 pendingEdits = {}; // Clear old pending edits first
                 pendingEdits[editId] = { fields: editFields, timestamp: Date.now() };
@@ -3335,7 +3374,9 @@
                     'Patient Name': formData.patientName,
                     'Nurse Name': formData.nurseName,
                     'Nurse Staff Number': formData.nurseStaffNumber,
-                    'Ext Support': formData.extSupport || ''
+                    'Ext Support': formData.extSupport || '',
+                    'Doctor Accompanying': formData.doctorAccompanying,
+                    'Doctor Name': formData.doctorName
                 };
                 allRecords.unshift(optimisticRecord);
                 allYearRecords.unshift(optimisticRecord);
@@ -3481,6 +3522,13 @@
             if (patientNameField) {
                 patientNameField.value = '';
             }
+
+            // Reset doctor fields
+            document.querySelectorAll('input[name="doctorAccompanying"]').forEach(r => r.checked = false);
+            const doctorNameGrp = document.getElementById('doctorNameGroup');
+            if (doctorNameGrp) doctorNameGrp.style.display = 'none';
+            const doctorNameInput = document.getElementById('doctorName');
+            if (doctorNameInput) doctorNameInput.value = '';
             
             // Reset form header
             const formHeader = document.querySelector('.form-header h2');
@@ -4522,6 +4570,13 @@
                 const s = JSON.parse(localStorage.getItem('userSession') || '{}');
                 return s.type === 'admin';
             } catch(e) { return false; }
+        }
+
+        function toggleDoctorName() {
+            const yes = document.getElementById('doctorAccompanyingYes').checked;
+            const grp = document.getElementById('doctorNameGroup');
+            grp.style.display = yes ? '' : 'none';
+            if (!yes) document.getElementById('doctorName').value = '';
         }
 
         function toggleExternalSupport() {

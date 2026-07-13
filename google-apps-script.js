@@ -88,7 +88,9 @@ function setupSheet(year) {
     'Patient Name',
     'Nurse Name',
     'Nurse Staff Number',
-    'Ext Support'
+    'Ext Support',
+    'Doctor Accompanying',
+    'Doctor Name'
   ];
   
   // Check if headers exist
@@ -130,6 +132,20 @@ function setupSheet(year) {
       const lastCol2 = sheet.getLastColumn();
       sheet.getRange(1, lastCol2 + 1).setValue('Ext Support');
       sheet.getRange(1, lastCol2 + 1).setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    // Ensure Doctor Accompanying column exists (migration)
+    const hAfterExt = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (hAfterExt.indexOf('Doctor Accompanying') === -1) {
+      const c1 = sheet.getLastColumn();
+      sheet.getRange(1, c1 + 1).setValue('Doctor Accompanying');
+      sheet.getRange(1, c1 + 1).setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    // Ensure Doctor Name column exists (migration)
+    const hAfterDocAcc = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (hAfterDocAcc.indexOf('Doctor Name') === -1) {
+      const c2 = sheet.getLastColumn();
+      sheet.getRange(1, c2 + 1).setValue('Doctor Name');
+      sheet.getRange(1, c2 + 1).setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
     }
   }
   
@@ -692,7 +708,9 @@ function submitCase(data) {
       'Patient Name': data.patientName || '',
       'Nurse Name': data.nurseName || '',
       'Nurse Staff Number': data.nurseStaffNumber || '',
-      'Ext Support': data.extSupport || ''
+      'Ext Support': data.extSupport || '',
+      'Doctor Accompanying': data.doctorAccompanying || 'no',
+      'Doctor Name': data.doctorName || ''
     };
     var sheetHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var rowData = sheetHeaders.map(function(h) {
@@ -1202,7 +1220,11 @@ function updateRecord(data) {
         'Patient Name': data.patientName || '',
         'Nurse Name': nurseName,
         'Nurse Staff Number': nurseStaffNumber,
-        'Ext Support': extSupport
+        'Ext Support': extSupport,
+        'Doctor Accompanying': (data.doctorAccompanying !== undefined) ? data.doctorAccompanying
+          : (headers.indexOf('Doctor Accompanying') >= 0 ? (sheetData[i][headers.indexOf('Doctor Accompanying')] || 'no') : 'no'),
+        'Doctor Name': (data.doctorName !== undefined) ? data.doctorName
+          : (headers.indexOf('Doctor Name') >= 0 ? (sheetData[i][headers.indexOf('Doctor Name')] || '') : '')
       };
       var rowData = headers.map(function(h, ci) {
         return updateMap[h] !== undefined ? updateMap[h] : (sheetData[i][ci] || '');
