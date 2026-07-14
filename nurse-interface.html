@@ -4184,8 +4184,49 @@
                 }
             }
             
+            // ============================================
+            // STEP 4: Restore Doctor Accompanying fields
+            // ============================================
+            const _savedDocAcc = (record['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+            const _savedDocEn  = (record['Doctor Name'] || '').toString().trim();
+            const _savedDocAr  = (record['Doctor Name Ar'] || '').toString().trim();
+
+            // Reset radio buttons first
+            document.querySelectorAll('input[name="doctorAccompanying"]').forEach(r => r.checked = false);
+            document.getElementById('doctorNameGroup').style.display = 'none';
+            const _docSelEl = document.getElementById('doctorSelect');
+            if (_docSelEl) _docSelEl.value = '';
+            const _docOtherGrp = document.getElementById('doctorOtherNameGroup');
+            if (_docOtherGrp) _docOtherGrp.style.display = 'none';
+            const _docOtherInp = document.getElementById('doctorOtherName');
+            if (_docOtherInp) _docOtherInp.value = '';
+
+            if (_savedDocAcc === 'yes') {
+                document.getElementById('doctorAccompanyingYes').checked = true;
+                // Show doctor name group and init dropdown
+                initDoctorDropdown();
+                document.getElementById('doctorNameGroup').style.display = '';
+                // Try to find the doctor in the dropdown by English name
+                if (_docSelEl && _savedDocEn) {
+                    const _matchedOpt = Array.from(_docSelEl.options).find(
+                        o => o.value && o.value.trim().toUpperCase() === _savedDocEn.toUpperCase()
+                    );
+                    if (_matchedOpt) {
+                        _docSelEl.value = _matchedOpt.value;
+                        if (_docOtherGrp) _docOtherGrp.style.display = 'none';
+                    } else {
+                        // Not in list — use "Other" mode
+                        _docSelEl.value = '__OTHER__';
+                        if (_docOtherGrp) _docOtherGrp.style.display = '';
+                        if (_docOtherInp) _docOtherInp.value = _savedDocEn;
+                    }
+                }
+            } else if (_savedDocAcc === 'no') {
+                document.getElementById('doctorAccompanyingNo').checked = true;
+            }
+
             updateTimeInputs();
-            
+
             // Update submit button text
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.textContent = 'Update Record';
