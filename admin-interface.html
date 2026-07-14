@@ -4737,6 +4737,8 @@
             });
 
             invalidateAdminCaches(recordId, true);
+            // Signal nurse/driver pages in other tabs to refresh their records cache
+            DataCache.signalCacheInvalidation('admin_edit');
             // Faster refresh: 1.5s first attempt instead of 5s
             var _editHash = _displayedRecordsHash;
             setTimeout(() => {

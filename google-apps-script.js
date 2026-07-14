@@ -1233,7 +1233,9 @@ function updateRecord(data) {
       // Build update using header-based mapping (handles extra columns gracefully)
       var updateMap = {
         'ID': data.id,
-        'Timestamp': Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
+        'Timestamp': headers.indexOf('Timestamp') >= 0
+          ? sheetData[i][headers.indexOf('Timestamp')]
+          : Utilities.formatDate(new Date(), CONFIG.TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
         'Vehicle Number': data.vehicleNumber || '',
         'Driver Name': data.driverName || '',
         'Staff Number': data.staffNumber || '',

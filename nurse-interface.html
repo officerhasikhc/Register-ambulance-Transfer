@@ -4443,6 +4443,20 @@
                         </div>
                     `;
                 }
+
+                // Doctor info block for single-record print
+                const _docAcc = (rec['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+                if (_docAcc === 'yes') {
+                    const _docAr = (rec['Doctor Name Ar'] || '').toString().trim();
+                    const _docEn = (rec['Doctor Name'] || '').toString().trim();
+                    const _docDisplay = _docAr || _docEn || '-';
+                    html += `
+                        <div style="margin-top:12px;padding:10px 16px;background:#eff6ff;border-radius:8px;border-right:4px solid #1e40af;border-left:4px solid #1e40af;">
+                            <span style="font-weight:600;color:#1e40af;">الطبيب المرافق: </span>
+                            <span style="font-size:14px;">د. ${_docDisplay}</span>
+                        </div>
+                    `;
+                }
             }
 
             html += `
@@ -5198,6 +5212,13 @@
                 loadPendingTrips(false, true);
                 // v40: Reset smart poll to fast mode after cross-tab signal
                 if (typeof _resetNursePollSpeed === 'function') _resetNursePollSpeed();
+            } else if (signal.source === 'admin_edit') {
+                console.log('[Nurse] Admin edited a record — refreshing records');
+                var _aeYear = (document.getElementById('yearFilter') || {}).value || new Date().getFullYear().toString();
+                var _aeMonth = (document.getElementById('monthFilter') || {}).value || 'all';
+                DataCache.invalidate('cache_nurse_data_' + _aeYear + '_' + _aeMonth);
+                DataCache.invalidate('cache_nurse_data_' + _aeYear + '_all');
+                loadRecords(true);
             }
         });
 
