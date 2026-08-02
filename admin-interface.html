@@ -3054,6 +3054,18 @@
                         <div class="detail-label">تاريخ التسجيل</div>
                         <div class="detail-value">${currentRecord['Timestamp'] ? new Date(currentRecord['Timestamp']).toLocaleString('ar-SA') : '-'}</div>
                     </div>
+                    ${(function() {
+                        const docAcc = (currentRecord['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+                        if (docAcc !== 'yes') return '';
+                        const docAr = (currentRecord['Doctor Name Ar'] || '').toString().trim();
+                        const docEn = (currentRecord['Doctor Name'] || '').toString().trim();
+                        const resolvedAr = docAr || (docEn && doctorNameMap[docEn.toLowerCase()] ? doctorNameMap[docEn.toLowerCase()] : '');
+                        const docDisplay = resolvedAr || docEn || '-';
+                        return `<div class="detail-item" style="grid-column:1/-1;">
+                            <div class="detail-label" style="color:#1e40af;">الطبيب المرافق</div>
+                            <div class="detail-value" style="font-weight:600;color:#1e40af;">د. ${docDisplay}</div>
+                        </div>`;
+                    })()}
                 </div>
             `;
 

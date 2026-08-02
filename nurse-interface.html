@@ -4490,11 +4490,14 @@
                 if (_docAcc === 'yes') {
                     const _docAr = (rec['Doctor Name Ar'] || '').toString().trim();
                     const _docEn = (rec['Doctor Name'] || '').toString().trim();
-                    const _docDisplay = _docAr || _docEn || '-';
+                    const _isEn = currentLang === 'en';
+                    const _docDisplay = _isEn ? (_docEn || _docAr || '-') : (_docAr || _docEn || '-');
+                    const _docLabel = _isEn ? 'Accompanying Doctor: ' : 'الطبيب المرافق: ';
+                    const _docPrefix = _isEn ? 'D. ' : 'د. ';
                     html += `
                         <div style="margin-top:12px;padding:10px 16px;background:#eff6ff;border-radius:8px;border-right:4px solid #1e40af;border-left:4px solid #1e40af;">
-                            <span style="font-weight:600;color:#1e40af;">الطبيب المرافق: </span>
-                            <span style="font-size:14px;">د. ${_docDisplay}</span>
+                            <span style="font-weight:600;color:#1e40af;">${_docLabel}</span>
+                            <span style="font-size:14px;">${_docPrefix}${_docDisplay}</span>
                         </div>
                     `;
                 }
