@@ -1427,6 +1427,10 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="trip-refresh-indicator" id="tripRefreshIndicator"><span class="trip-refresh-dot"></span>تحديث</span>
                     <span id="currentMonthBadge" style="background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
+                    <select class="month-filter" id="yearFilter" style="min-width:68px;"
+                        onchange="if(currentStatusFilter==='submitted'){cachedApprovedRecords=null;_approvedFetchTs=0;loadApprovedTrips();}">
+                        <!-- Options populated by initializeYearFilter() -->
+                    </select>
                     <select class="month-filter" id="monthFilter" onchange="cachedApprovedRecords=null;_approvedFetchTs=0;currentStatusFilter==='submitted'?loadApprovedTrips():loadTripHistory()">
                         <!-- Options will be populated dynamically -->
                     </select>
@@ -1557,6 +1561,7 @@
             
             initializeDriverDropdown();
             initializeMonthFilter();
+            initializeYearFilter();
             updateClock();
             setInterval(updateClock, 1000);
             
@@ -1609,7 +1614,7 @@
                     // Also update pending trip display with server ID
                     if (serverTripId && pendingTrip) {
                         pendingTrip.tripId = serverTripId;
-                        try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify(pendingTrip)); } catch(e) {}
+                        try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify({ ...pendingTrip, _savedAt: Date.now() })); } catch(e) {}
                     }
                 }
             });
@@ -1647,6 +1652,17 @@
             }
             
             select.innerHTML = options;
+        }
+
+        function initializeYearFilter() {
+            const sel = document.getElementById('yearFilter');
+            if (!sel) return;
+            const cur = new Date().getFullYear();
+            let opts = '';
+            for (let y = cur; y >= cur - 3; y--) {
+                opts += `<option value="${y}"${y === cur ? ' selected' : ''}>${y}</option>`;
+            }
+            sel.innerHTML = opts;
         }
 
         // Load user session from login
@@ -1996,6 +2012,11 @@
             if (localPending) {
                 try {
                     const localTrip = JSON.parse(localPending);
+                    // Age gate: don't show pending card from a stale session (> 15 min old)
+                    const _tripAge = Date.now() - (localTrip._savedAt || 0);
+                    if (!localTrip._savedAt || _tripAge > DataCache.STALE_THRESHOLD) {
+                        localStorage.removeItem(pendingKey);
+                    } else {
                     // Only show if the trip hasn't been deleted on server (check DataCache)
                     const cachedServerTrips = DataCache.get(DataCache.KEYS.PENDING_TRIPS, DataCache.EXPIRY.PENDING_TRIPS * 5);
                     let serverSaysGone = false;
@@ -2022,6 +2043,7 @@
                         }
                         updateButtons();
                     }
+                    } // end else (fresh data)
                 } catch (e) {}
             }
             
@@ -2533,7 +2555,7 @@
             SyncManager.save('driverDeparture', tripData).then((result) => {
                 if (result && result.localId) {
                     pendingTrip._syncLocalId = result.localId;
-                    try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify(pendingTrip)); } catch(e) {}
+                    try { localStorage.setItem('pending_trip_' + selectedDriver.staffNumber, JSON.stringify({ ...pendingTrip, _savedAt: Date.now() })); } catch(e) {}
                 }
                 DataCache.invalidate(DataCache.KEYS.PENDING_TRIPS);
             }).catch(err => {
@@ -3208,7 +3230,7 @@
             if (now - _approvedFetchTs < 5000) return;
             _approvedFetchTs = now;
             const monthVal = document.getElementById('monthFilter') ? document.getElementById('monthFilter').value : 'all';
-            const year = new Date().getFullYear();
+            const year = document.getElementById('yearFilter') ? document.getElementById('yearFilter').value : new Date().getFullYear();
             const url = `${WEB_APP_URL}?action=getDriverRecords&staffNumber=${encodeURIComponent(selectedDriver.staffNumber)}&year=${year}&month=${encodeURIComponent(monthVal)}`;
             try {
                 const res  = await fetch(url, { redirect: 'follow' });

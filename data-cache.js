@@ -40,6 +40,9 @@ const DataCache = {
     // Max cache size (5MB per entry)
     MAX_CACHE_SIZE: 5 * 1024 * 1024,
 
+    // Stale flash threshold: cached data older than this is NOT shown instantly on page load
+    STALE_THRESHOLD: 15 * 60 * 1000,   // 15 minutes
+
     /**
      * Simple compression using JSON stringification optimization
      */
@@ -110,6 +113,16 @@ const DataCache = {
         } catch (e) {
             return null;
         }
+    },
+
+    /**
+     * Get cached data only if it hasn't exceeded STALE_THRESHOLD.
+     * Returns null when expired — prevents stale flash on page load.
+     */
+    getIfFresh(key, maxAgeMs) {
+        const result = this.get(key, maxAgeMs || this.STALE_THRESHOLD);
+        if (!result || result.isExpired) return null;
+        return result;
     },
 
     /**

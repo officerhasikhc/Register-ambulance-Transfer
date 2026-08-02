@@ -4294,7 +4294,7 @@
             else if (monthFilter !== 'all') periodLabel = mNames[parseInt(monthFilter)];
             else if (yearFilter !== 'all') periodLabel = yearFilter;
 
-            var headers = ['#','Driver Name','Vehicle No.','Staff No.','Destination','Patient Name','Departure Date','Departure Time','Return Date','Return Time','Status','Registered By'];
+            var headers = ['#','Driver Name','Vehicle No.','Staff No.','Destination','Patient Name','Departure Date','Departure Time','Return Date','Return Time','Status','Registered By','Doctor'];
 
             var aoa = [];
             aoa.push(['Ambulance Activity Records - Hasik Health Center']);
@@ -4317,15 +4317,20 @@
                     DateTimeFormatter.formatDate(r['Return Date']) || '',
                     r['Return Time'] || '',
                     hasReturn ? 'Completed' : 'Pending Return',
-                    (r['Nurse Name'] || r['nurseName'] || '').toString().trim()
+                    (r['Nurse Name'] || r['nurseName'] || '').toString().trim(),
+                    (function() {
+                        var da = (r['Doctor Accompanying'] || '').toString().trim().toLowerCase();
+                        if (da !== 'yes') return '';
+                        return (r['Doctor Name Ar'] || '').trim() || (r['Doctor Name'] || '').trim() || '';
+                    })()
                 ]);
             }
 
             var ws = XLSX.utils.aoa_to_sheet(aoa);
 
             ws['!merges'] = [
-                { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
-                { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } }
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } }
             ];
 
             ws['!cols'] = [
@@ -4340,6 +4345,7 @@
                 { wch: 14 },
                 { wch: 12 },
                 { wch: 16 },
+                { wch: 20 },
                 { wch: 20 }
             ];
 
@@ -5026,11 +5032,13 @@
         // ============================================================
 
         function _getNurseTripsSource1() {
-            // Source 1: pending_trips_for_nurse — any age
+            // Source 1: pending_trips_for_nurse — freshness-gated (max 15 min)
             try {
                 var raw = localStorage.getItem('pending_trips_for_nurse');
                 if (!raw) return null;
                 var parsed = JSON.parse(raw);
+                var ts = (parsed && parsed.timestamp) ? parsed.timestamp : 0;
+                if (!ts || (Date.now() - ts) > DataCache.STALE_THRESHOLD) return null;
                 var trips = (parsed && parsed.trips) ? parsed.trips : (Array.isArray(parsed) ? parsed : null);
                 return (trips && trips.length > 0) ? trips : null;
             } catch(e) { return null; }

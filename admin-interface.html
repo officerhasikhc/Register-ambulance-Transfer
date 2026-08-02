@@ -27,7 +27,7 @@
         // Heavy fetch: stats + records + trips (slow, 10-20s)
         window.__earlyAdminFetch = fetch(url + '?action=getAdminData&year=' + year + '&month=' + month).then(function(r) { return r.json(); }).then(function(result) {
             if (result && result.success) {
-                try { localStorage.setItem('admin_instant_data', JSON.stringify(result)); } catch(e) {}
+                try { localStorage.setItem('admin_instant_data', JSON.stringify({ ...result, _savedAt: Date.now() })); } catch(e) {}
             }
             return result;
         }).catch(function() { return null; });
@@ -2340,10 +2340,10 @@
                 if (cached && cached.data) {
                     cached.data.records = allRecords;
                     DataCache.set(DataCache.KEYS.ADMIN_DATA, cached.data);
-                    try { localStorage.setItem('admin_instant_data', JSON.stringify(cached.data)); } catch(e) {}
+                    try { localStorage.setItem('admin_instant_data', JSON.stringify({ ...cached.data, _savedAt: Date.now() })); } catch(e) {}
                 }
             } catch(e) {}
-            
+
             // 2. Save current view's records to its cache key (preserves instant display on month switch)
             var currentKey = DataCache.KEYS.RECORDS + '_' + y + '_' + m + '_';
             DataCache.set(currentKey, allRecords);
@@ -3023,6 +3023,11 @@
                         <div class="detail-label">المسجّل</div>
                         <div class="detail-value">${resolveNurseArabicName(currentRecord)}</div>
                     </div>
+                    ${(function() {
+                        const ns = (currentRecord['Nurse Staff Number'] || '').toString().trim();
+                        if (!ns || ns === 'EXT_SUPPORT') return '';
+                        return `<div class="detail-item"><div class="detail-label">رقم وظيفي المسجّل</div><div class="detail-value" style="font-family:monospace;letter-spacing:1px;">${ns}</div></div>`;
+                    })()}
                     ${(function() {
                         const extCol = (currentRecord['Ext Support'] || '').toString().trim();
                         const nn = (currentRecord['Nurse Name'] || '').toString().trim();
@@ -3743,7 +3748,13 @@
         } else {
             try {
                 var _raw = localStorage.getItem('admin_instant_data');
-                if (_raw) _instantData = JSON.parse(_raw);
+                if (_raw) {
+                    var _parsed = JSON.parse(_raw);
+                    var _rawAge = Date.now() - (_parsed._savedAt || 0);
+                    if (_parsed._savedAt && _rawAge <= DataCache.STALE_THRESHOLD) {
+                        _instantData = _parsed;
+                    }
+                }
             } catch(e) {}
         }
         
@@ -3941,7 +3952,7 @@
                     applyTrips(data.trips);
                     // Save to dedicated fallback for instant display on next load
                     if (!meta || !meta.fromCache) {
-                        try { localStorage.setItem('admin_instant_data', JSON.stringify(data)); } catch(e) {}
+                        try { localStorage.setItem('admin_instant_data', JSON.stringify({ ...data, _savedAt: Date.now() })); } catch(e) {}
                     }
                     // Save records cache using the request-time filter values (not current)
                     if (data.records) {
